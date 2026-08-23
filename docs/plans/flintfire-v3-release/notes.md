@@ -577,5 +577,80 @@ after matching tag/SHA. Do not regenerate CHANGELOG.md.
 
 ### 5.1 Stage RC2 manifest
 
+Committed separately from notes (`6595942` Trusted Publisher notes, then `eb77f02` version-only).
+`npm version 3.0.0-rc.2 --no-git-tag-version --ignore-scripts`. `check:manifest` passed. Diff was
+`package.json` + `package-lock.json` version only; CHANGELOG.md untouched.
+
+`release:verify` exit 0 (~40s): format, lint, rules:check, types, manifest, audit 0, build,
+check:package 98 files, packed-consumer Admin 14, unit 34/438 + unit gate, integration coverage +
+integration gate, check:docs, docs:build + `check-built-docs-assets: ok`.
+
+Pushed `release/3.0.0` (`30c473c..eb77f02`).
+
+### 5.2 Tag and GitHub prerelease
+
+SHA `eb77f022e8daa9c11d8466e5863502e5b38625ca`. Annotated tag `v3.0.0-rc.2` points at that commit;
+`git show v3.0.0-rc.2:package.json` → `flintfire@3.0.0-rc.2`. Tag pushed. GitHub prerelease:
+
+https://github.com/reggieofarrell/flintfire/releases/tag/v3.0.0-rc.2
+
+`--prerelease --latest=false --verify-tag`. Notes file `/tmp/flintfire-v3.0.0-rc.2-notes.md`.
+
+### 5.3 Publish workflow — success (OIDC)
+
+Run id `32661741479`. `headSha` `eb77f022e8daa9c11d8466e5863502e5b38625ca` matches RC2. `event=release`.
+Maintainer approved Environment `npm`. Conclusion **success** (~3m24s).
+
+https://github.com/reggieofarrell/flintfire/actions/runs/32661741479
+
+Checked out tag `v3.0.0-rc.2` at `eb77f02`. `release:verify`, Admin 12/13/14 packed-consumer, and
+Admin 12 + Firestore 7.9/7.10 floor all passed. Publish step env: `NPM_DIST_TAG: next`. No
+`NPM_TOKEN` / `NODE_AUTH_TOKEN` in the publish step. One publish:
+
+```text
+npm notice version: 3.0.0-rc.2
+npm notice filename: flintfire-3.0.0-rc.2.tgz
+npm notice package size: 292.5 kB
+npm notice shasum: 6d8973bfa53e8b5beb221bd75cd639d3de21bc80
+npm notice integrity: sha512-p9Sx2aNSgnk4N[...]xI4aVeDC7RmuA==
+npm notice total files: 98
+npm notice Publishing to https://registry.npmjs.org/ with tag next and public access
+npm notice publish Provenance statement published to transparency log: https://search.sigstore.dev/?logIndex=2575529854
+```
+
+Did not rerun publish.
+
+### 5.4 Registry verification + consumer smoke
+
+| Check | Result |
+| --- | --- |
+| `flintfire@3.0.0-rc.2` | published; `gitHead` = RC2 SHA |
+| repository | `git+https://github.com/reggieofarrell/flintfire.git` |
+| `dist.integrity` | `sha512-p9Sx2aNSgnk4NQVCMM840qNVI8gcKuux7oupDJnA+3776Aa6+ImUgqI5zt8qAyew4LSG1UzNZxI4aVeDC7RmuA==` |
+| `dist.shasum` | `6d8973bfa53e8b5beb221bd75cd639d3de21bc80` |
+| provenance | SLSA v1; attestations URL on registry |
+| `dist-tags.next` | `3.0.0-rc.2` |
+| `dist-tags.latest` | still `3.0.0-rc.1` (T3; acceptable until stable 3.0.0) |
+| Temp consumer | `/var/folders/sj/_znxtncn7l9_tt3mzbwm01f40000gn/T/tmp.axZQaZdwjQ` |
+| ESM `flintfire` / `flintfire/vector` / `flintfire/express` | `esm ok` |
+| CJS `require` of the same specifiers | `cjs ok` |
+| `npm audit signatures` | 274 registry signatures verified; 14 attestations verified; `invalid=[]` `missing=[]` |
+| FlintFire attestation | name `flintfire@3.0.0-rc.2`; predicateType `https://slsa.dev/provenance/v1`; also npm publish attestation `v0.1` |
+
+OIDC RC2 is proven. Do not merge PR #95. Do not publish stable until Phase 6.
+
+**HUMAN CHECKPOINT (done 2026-08-23):** npm Publishing access set to **Require two-factor
+authentication and disallow bypass 2FA tokens**. OIDC Trusted Publishing remains allowed. No
+bootstrap granular token was created for RC1 (interactive 2FA). Phase 6 is next.
+
+---
+
+## Phase 6 — Finalize and ship stable 3.0.0 (2026-08-23)
+
+Do not regenerate CHANGELOG.md. Restore the manifest to `3.0.0`, gate, mark PR #95 ready, merge,
+tag `v3.0.0`, GitHub Release (triggers npm `latest` + docs).
+
+### 6.1 Restore stable manifest
+
 In progress.
 
