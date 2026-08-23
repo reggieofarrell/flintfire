@@ -420,7 +420,14 @@ export function ty7_negativesRemainRejected() {
   explicitIdIndexRepo.query().where(new FieldPath('metadata', 'plan'), '==', 'pro');
 }
 
-// TY-8 — number-only and readonly string indexes preserve domain / modifiers (T3)
+// TY-8 — index domain, mutability, and precise value types survive reconstruction (T3 / D4)
+//
+// Homomorphic `Pick` is load-bearing. Three independent failure modes must each be observable:
+// wrapping Pick in `Readonly` (mutable→readonly), replacing it with a mutable `Record`
+// (readonly→mutable), and wiping the index value to `unknown` (precise-value→unknown). Round-1
+// B1 found that domain/readonly pins alone still let `test:types` pass under
+// `Readonly<Record<string, unknown>>` / `Record<number, unknown>`.
+
 type NumberOnlyIndexed = { id: string; name: string } & Record<number, unknown>;
 type NumberOnlyPaths = FieldPaths<OmitId<NumberOnlyIndexed>>;
 type NumberOnlyStored = OmitId<NumberOnlyIndexed>;
@@ -439,6 +446,20 @@ export function ty8_numberOnlyRejectsArbitraryStrings() {
 }
 export const _ty8_number = [_numberOnlyName, _numberOnlyDynamic];
 
+// Mutable string index — positive dynamic *write* must compile. Wrapping `StringIndex`'s Pick in
+// `Readonly` (B1's string mutable→readonly mutation) turns this assignment into a compile error.
+type MutableStringIndexed = { id: string; name: string } & Record<string, unknown>;
+type MutableStringStored = OmitId<MutableStringIndexed>;
+declare const _mutableStringStored: MutableStringStored;
+
+export function ty8_mutableIndexesAcceptWrites() {
+  // Positive writes through reconstructed mutable indexes (B1 item 1). A readonly wrap on either
+  // Pick branch fails the corresponding assignment; a value-type wipe does not, which is why
+  // precise-read pins below exist separately.
+  _mutableStringStored['dynamic'] = 1;
+  _numberOnlyStored[123] = 1;
+}
+
 type ReadonlyStringIndexed = {
   id: string;
   name: string;
@@ -452,6 +473,49 @@ export function ty8_readonlyIndexRemainsReadonly() {
   _readonlyStringStored['dynamic'] = 1;
 }
 export const _ty8_readonly = [_readonlyStringName];
+
+// Readonly number index with a precise value type (B1 item 2). The dynamic read must assign to
+// `number` (so wiping values to `unknown` fails) and the write must stay illegal (so replacing
+// Pick with a mutable Record makes the expect-error unused).
+type ReadonlyNumberIndexed = {
+  id: string;
+  name: string;
+  readonly [key: number]: number;
+};
+type ReadonlyNumberStored = OmitId<ReadonlyNumberIndexed>;
+declare const _readonlyNumberStored: ReadonlyNumberStored;
+const _readonlyNumberValue: number = _readonlyNumberStored[0];
+export function ty8_readonlyNumberIndexRemainsReadonly() {
+  // @ts-expect-error reconstructed number index preserves its readonly modifier (T3)
+  _readonlyNumberStored[0] = 1;
+}
+export const _ty8_readonlyNumber = [_readonlyNumberValue];
+
+// Precise string index (B1 item 3) — dynamic read assigns to `string`, not `unknown`. Replacing
+// `Pick<T, string>` with a `Record<string, unknown>` (or a homomorphic `{ [K in keyof P]: unknown }`)
+// makes this initialization fail.
+type PreciseStringIndexed = { id: string; name: string } & Record<string, string>;
+type PreciseStringStored = OmitId<PreciseStringIndexed>;
+declare const _preciseStringStored: PreciseStringStored;
+const _preciseStringValue: string = _preciseStringStored['dynamic'];
+export function ty8_preciseStringIndexAcceptsStringWrite() {
+  // Mutable precise string index still accepts a string write. The readonly wrap that B1 used on
+  // StringIndex would reject this; the unknown-value wipe would still accept it (the read pin
+  // above is what catches that).
+  _preciseStringStored['dynamic'] = 'ok';
+}
+export const _ty8_preciseString = [_preciseStringValue];
+
+// Precise number index (B1 item 4) — dynamic read assigns to `number`. `Record<number, unknown>`
+// (B1's number-side false-negative) makes this initialization fail while leaving domain pins green.
+type PreciseNumberIndexed = { id: string; name: string } & Record<number, number>;
+type PreciseNumberStored = OmitId<PreciseNumberIndexed>;
+declare const _preciseNumberStored: PreciseNumberStored;
+const _preciseNumberValue: number = _preciseNumberStored[0];
+export function ty8_preciseNumberIndexAcceptsNumberWrite() {
+  _preciseNumberStored[0] = 1;
+}
+export const _ty8_preciseNumber = [_preciseNumberValue];
 
 // TY-9 — union distribution, symbol index, special types, and #58/#54 controls retained
 type UnionWithExplicitIdIndex =

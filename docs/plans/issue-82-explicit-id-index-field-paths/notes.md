@@ -9,10 +9,11 @@ new branch — recorded as Deviation 1) · **Plan:**
 
 ## Status
 
-Done-pending-review. Applied `prototype.patch`, added the prescribed JSDoc, replaced the U58-6
-limitation pin with TY-1–TY-9 in the existing type-test file, amended ADR-0028 historically, and
-updated the four Starlight pages. Independent refute-first review found F1–F3; all three fixed.
-Gate re-run after remediation. Plan directory left in place for external review.
+**Remediating external review (round 1).** Implementation of D1–D5 landed on this plan branch via
+#91 (cloud agent PR into the plan branch, not `main`). External `review.md` verdict was **BLOCKED**
+on B1; N1–N3 also required. Round-1 findings B1/N1/N2/N3 are disposed below. Plan directory still
+present. A PR from this branch to `main` is the remaining promotion step; issue #82 was reopened
+because the fix is not on `main`.
 
 ## Ambiguities resolved
 
@@ -41,12 +42,17 @@ Gate re-run after remediation. Plan directory left in place for external review.
 | File | Change | Plan reference |
 | ---- | ------ | -------------- |
 | `src/utils/pathTypes.ts` | `StringIndex` / `NumberIndex` / `IndexOnly` + refined `OmitId` + JSDoc | §6.1–§6.2 |
-| `src/tests/types/union-model-paths.type-test.ts` | Replace U58-6 pin with TY-1–TY-9 (+ F1/F2 guards) | §8 |
+| `src/tests/types/union-model-paths.type-test.ts` | Replace U58-6 pin with TY-1–TY-9 (+ F1/F2 guards; B1 TY-8) | §8 |
+| `src/tests/types/query-paths.type-test.ts` | Predicate example uses `OmitId`, not built-in `Omit` (N4-R2) | round-2 nit |
 | `docs/adr/0028-distributive-omit-id.md` | Related/References + historical #82 amendment | §9.2 |
 | `website/.../reference/types.md` | FieldPaths / OmitId / path-vs-value `id` wording | §9.3 / F3 |
 | `website/.../reference/query-builder.md` | Indexed models with synthetic `id` recover declared paths | §9.3 |
 | `website/.../guides/working-with-data/dot-notation.md` | `FieldPaths<OmitId<S>>` + explicit-`id` siblings | §9.3 / F3 |
 | `website/.../guides/working-with-data/queries.md` | Reusable predicate / StoredDataOf path vs value | §9.3 |
+| `website/.../guides/migration-v2-to-v3.md` | `FieldPaths<OmitId<S>>` (N1) | round-1 N1 |
+| `src/core/QueryBuilder.ts` | Factory JSDoc drops built-in `Omit` (N2) | round-1 N2 |
+| `src/core/FirestoreRepository.ts` | `DataOf` / `StoredDataOf` JSDoc names `OmitId` (N2) | round-1 N2 |
+| `docs/plans/.../review.md` | External round-1 review (committed as-is) | skill |
 | `docs/plans/.../notes.md` | This file | §0 / skill |
 
 ## Edge cases / traps handled
@@ -76,7 +82,7 @@ Gate re-run after remediation. Plan directory left in place for external review.
 | TY-5 | type | Collection-group inherited/override/factory | T5, T6 |
 | TY-6 | type | Vector where/select/factory + KeysOf findNearest | T5, T6, T10 |
 | TY-7 | type | `id`/typos/dynamic/undeclared/nonnumeric rejected; FieldPath escape | T4, T7 |
-| TY-8 | type | Number-only domain (paths + string-key value); readonly index | T3 |
+| TY-8 | type | Number-only domain; mutable writes; readonly string/number; precise string/number values | T3 / B1 |
 | TY-9 | type | Union, symbol, `ExpectEqual` never/unknown/any, no-id control | T1, T3, T4, T10 |
 
 ## Mutation checks
@@ -85,7 +91,14 @@ Gate re-run after remediation. Plan directory left in place for external review.
 | ---- | -------- | ------ |
 | TY-1–TY-9 positives | `OmitId` explicit-id branch → `Omit<S, 'id'>`; restore via `/tmp/pathTypes.fixed.ts` | **Fails** — 35 `tsc` diagnostics across aliases, precision, Core/repo/group/vector, union |
 | TY-8 number-domain (F1) | `NumberIndex` → `Record<string, unknown>` | **Fails** — unused `@ts-expect-error` on string-key value access (and readonly string-key directive) |
-| TY-9 specials (F2) | `OmitId<S>` forced to `{}` | **Fails** — `ExpectEqual` → `false` does not satisfy `true` at never/unknown/any pins (lines 487–489) |
+| TY-9 specials (F2) | `OmitId<S>` forced to `{}` | **Fails** — `ExpectEqual` → `false` does not satisfy `true` at never/unknown/any pins |
+| TY-8 B1 string mutable→readonly | `StringIndex` → `Readonly<Pick<T, string>>` | **Fails** — TS2542 on `_mutableStringStored['dynamic'] = 1` and precise-string write |
+| TY-8 B1 number mutable→readonly | `NumberIndex` → `Readonly<Pick<T, number>>` | **Fails** — TS2542 on `_numberOnlyStored[123] = 1` and precise-number write |
+| TY-8 B1 string readonly→mutable | `StringIndex` → `Record<string, T[string]>` | **Fails** — unused `@ts-expect-error` on `_readonlyStringStored['dynamic'] = 1` |
+| TY-8 B1 number readonly→mutable | `NumberIndex` → `Record<number, T[number]>` | **Fails** — unused `@ts-expect-error` on `_readonlyNumberStored[0] = 1` |
+| TY-8 B1 string precise→unknown | `StringIndex` → `{ [K in keyof Pick<T, string>]: unknown }` | **Fails** — `unknown` ↛ `string` at `_preciseStringValue` |
+| TY-8 B1 number precise→unknown | `NumberIndex` → `{ [K in keyof Pick<T, number>]: unknown }` | **Fails** — `unknown` ↛ `number` at readonly-number and precise-number reads |
+| TY-8 B1 combined false-negative | `Readonly<Record<string, unknown>>` / `Record<number, unknown>` | **Fails** — writes, precise reads, and unused readonly-number directive (the mutation that previously passed) |
 
 ## Gate results
 
@@ -192,3 +205,80 @@ npm run docs:build                         ✓; no leaked `:::`
 ## Gate re-run after fixes
 
 Completed — see Independent adversarial review → Gate re-run after fixes.
+
+## Could not verify
+
+Restored for N3 (round-1 external review). These bounds are unchanged from PLAN §5; they were
+dropped from this file in `99fdaa2` while the local `^14` consumer leg remained labeled local.
+
+- **Peer-major matrix** — local `check:consumer` covers `firebase-admin@^14.0.0` only. CI still owes
+  `^12` / `^13` / `^14` and pinned-firestore legs; those are not claimed from the local result.
+- **Schema-constructor reachability** — `withSchema` requires `ZodObject`; explicit intersection
+  stored models reach this surface through the directly typed constructor. No runtime schema
+  fixture exists for this exact shape.
+- **Exotic index combinations** — TY-8/TY-9 and the probe cover string, number-only, readonly
+  string, readonly number, precise string/number, symbol, unions, nested intersections, `never`,
+  `unknown`, and `any`. They do not exhaust every branded or mixed index-signature construction.
+
+## External review (round 1) dispositions
+
+**Reviewer:** Codex (GPT-5), `docs/plans/issue-82-explicit-id-index-field-paths/review.md` ·
+**Reviewed:** `99fdaa2` · **Verdict:** BLOCKED · **Remediation:** this notes section + the
+follow-up commit on `issue-82-explicit-id-index-field-paths`.
+
+Ids kept stable. Every finding is in exactly one bucket.
+
+### Fixed
+
+- **B1** — TY-8 now has (1) positive writes through mutable string and mutable number indexes,
+  (2) a readonly-number fixture whose dynamic read assigns to `number` and whose write is
+  `@ts-expect-error`, (3) a precise string-index read assigning to `string`, and (4) a precise
+  number-index read assigning to `number`. Six independent mutations plus the original combined
+  false-negative each fail `test:types`; restore was identical to the pre-mutation file. Evidence:
+  `src/tests/types/union-model-paths.type-test.ts` TY-8 block; mutation table above.
+- **N1** — migration guide now documents `FieldPaths<OmitId<S>> | FieldPath` and the
+  declared-sibling vs arbitrary-key distinction. Evidence:
+  `website/src/content/docs/guides/migration-v2-to-v3.md` (Query field paths bullet).
+- **N2** — `QueryFilterFactoryBase` no longer offers built-in `Omit<Stored, 'id'>`; it names
+  `OmitId` and the #82 collapse. `DataOf` / `StoredDataOf` JSDoc name `OmitId` and the path vs
+  index-domain `id` distinction. Evidence: `src/core/QueryBuilder.ts` factory comment;
+  `src/core/FirestoreRepository.ts` extractor comments.
+- **N3** — “Could not verify” restored above, pointing at PLAN §5 peer-major / schema /
+  exotic-index bounds.
+- **N4-R2** (round-2 nit from remediation review) — `query-paths.type-test.ts` no longer comments
+  that `StoredDataOf` “is already `Omit<S, 'id'>`” and the spelled-out factory uses `OmitId<Doc>`.
+  Evidence: `src/tests/types/query-paths.type-test.ts` `reusableFilterPredicate`.
+
+### Not a defect
+
+- None of B1/N1/N2/N3.
+
+### Deferred
+
+- None.
+
+### Gate re-run after round-1 remediation
+
+Third full §10 run (post B1/N1–N3 + N4-R2). Exact 14-leg chain; Node 24.
+
+```
+npm run test:types                         ✓
+npm run lint                               ✓
+npm run check:format                       ✓ (query-paths re-checked after N4-R2 prettier)
+npm run test:unit                          32 suites / 426 tests  (unchanged)
+npm run test:integration:emulator          36 suites / 544 tests  (unchanged)
+npm run test:unit:coverage + gate:unit     ✓ 87.14% / 89.05% / 76.20%; path gates green
+npm run test:integration:coverage + gate   ✓ 94.22% / 88.80% / 84.22%; path gates green
+npm run build                              ✓
+npm run check:package                      ✓
+npm run check:consumer                     ✓ firebase-admin@^14.0.0 local leg
+npm run check:docs                         ✓ 189 doc files
+npm run docs:build                         ✓; grepped built HTML — no leaked `:::`
+```
+
+N4-R2 was a type-test comment/annotation only; `test:types` + lint + prettier re-run after it.
+Jest legs were not re-run after that nit (no runtime change). Probe P6–P25 re-run; selected
+aliases still match §3.
+
+Independent remediation review (fresh subagent, not given notes.md): **APPROVE WITH FIXES**
+on B1/N1/N2 holding; N4-R2 fixed as above.
