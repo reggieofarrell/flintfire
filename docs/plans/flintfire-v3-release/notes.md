@@ -693,5 +693,125 @@ quick starts.
 
 ### 6.2 PR ready / merge
 
-In progress.
+Pushed `release/3.0.0`. Marked [PR #95](https://github.com/reggieofarrell/flintfire/pull/95) ready.
+All required Tests workflow jobs green (unit/integration coverage gates, lint, types, package,
+docs, website, Admin 12/13/14 consumers, Firestore 7.9/7.10 floor, Node 22 unit, audit).
+
+Squash-merged 2026-08-23T19:56:52Z. Merge SHA `1f070ea951bc3bdee218b6aa17c4e5e5fca168aa`
+(`chore(release): FlintFire 3.0.0 (#95)`). Manifest on that commit: `flintfire@3.0.0`. CHANGELOG
+3.0.0 section unchanged from the pre-RC generation.
+
+### 6.3 Prove main
+
+`origin/main` = `1f070ea`. No `flintfire@3.0.0` on npm yet at this step (404). Tag created next.
+
+### 6.4 Tag + GitHub Release
+
+Annotated `v3.0.0` at `1f070ea`. `git show v3.0.0:package.json` → `flintfire@3.0.0`.
+`--verify-tag --latest`. Release URL:
+https://github.com/reggieofarrell/flintfire/releases/tag/v3.0.0 (not draft, not prerelease).
+
+### 6.5 Workflows
+
+Publish run [32662886466](https://github.com/reggieofarrell/flintfire/actions/runs/32662886466)
+`headSha=1f070ea`, Environment `npm` approved, `NPM_DIST_TAG: latest`, OIDC (no `NPM_TOKEN`),
+one publish, provenance logIndex `2575746374`.
+
+Docs run [32662886478](https://github.com/reggieofarrell/flintfire/actions/runs/32662886478):
+**first attempt failed** — Environment `github-pages` allowed only branch `main`, but the workflow
+deploys from tag `v3.0.0`. Added tag policy `v*` (kept `main`). Rerun succeeded. Live site serves
+`/flintfire/` CSS and paired favicons.
+
+---
+
+## Phase 7 — External verification (2026-08-23)
+
+| Check | Result |
+| --- | --- |
+| Tag peeled commit | `1f070ea951bc3bdee218b6aa17c4e5e5fca168aa` = merge SHA |
+| GitHub Release | published, stable, latest |
+| `flintfire@3.0.0` | `gitHead` = merge SHA |
+| `dist.integrity` | `sha512-88KvCbKW914a+YAO+mMSnrvEArQ3XyKlMBwMS1D64BeEh3IcDrv1Nx/4TXY1IUDYlnGCuXGdcvJwwntix4FNEg==` |
+| `dist.shasum` | `0a893e9352639d7975840eedd1370f931c259344` |
+| Provenance | SLSA v1; npm publish attestation v0.1 |
+| Dist-tags after verify | `latest=3.0.0`; `next` still RC2 until 7.5 |
+| Packed README | `<!-- npm-readme -->`; install `flintfire` |
+| Registry consumer | ESM+CJS `flintfire` / `flintfire/vector` / `flintfire/express` ok |
+| `npm audit signatures` | FlintFire 3.0.0 attestation verified; invalid=[] missing=[] |
+| Pages | home / getting-started / migration / `2.0/` HTTP 200; CSS under `/flintfire/` |
+
+**7.5 `next` dist-tag:** maintainer removed it (2FA). `npm dist-tag ls flintfire` → `latest: 3.0.0`
+only. RC tarballs remain on the registry.
+
+**7.6 Soak:** waived by maintainer (requested 2.x deprecation the same day). npm deprecation is
+reversible. Timestamp: 2026-08-23.
+
+**Could-not-verify:** live browser OS-preference favicon + Starlight theme-picker hero at desktop
+and mobile. Built HTML assertions passed.
+
+---
+
+## Phase 8 — Deprecate `@reggieofarrell/firestore-orm@2.x` (2026-08-23)
+
+Replacement healthy: `flintfire@3.0.0`, `latest` only. Old package still five versions, `latest=2.2.1`.
+
+Dry-run listed all five versions with the playbook message. Live `npm deprecate` required maintainer
+2FA. Message (exact, all five):
+
+`Renamed to flintfire. Install flintfire@^3. Migration guide: https://reggieofarrell.github.io/flintfire/guides/migration-v2-to-v3/`
+
+Fresh `npm install @reggieofarrell/firestore-orm@2.2.1` emitted that warning. No version unpublished.
+`@reggieofarrell/firestore-orm@3.0.0` remains 404.
+
+---
+
+## Phase 9 — Closeout (2026-08-23)
+
+### Preservation
+
+| Ref | Still present |
+| --- | --- |
+| `origin/v2.x` | `1226e9e9c74987c865d2abe66d422d9117566304` |
+| tags `v2.0.0`–`v2.2.1` | yes (annotated where historically annotated) |
+| npm 2.0.0–2.2.1 | yes, deprecated in place |
+| `@reggieofarrell/firestore-orm@3` | not published |
+
+### Durable docs
+
+ADR-0039 status → `Accepted (released in 3.0.0)` with PR/release/npm links.
+`docs/development/releasing.md` first-package sequence marked completed (historical bootstrap).
+
+Plan directory **not** deleted in this commit (PLAN 9.7: separate cleanup PR after review).
+
+### Independent §4 trap walk (against shipped result)
+
+| Trap | Outcome |
+| --- | --- |
+| T1 Pages base | Live `/flintfire/` assets; old `/firestore-orm/` Pages URL does not redirect (accepted). |
+| T2 OIDC bootstrap | RC1 manual; RC2+stable OIDC. |
+| T3 `latest` on first publish | npm forced `latest` onto RC1 (could not `dist-tag rm`); stable 3.0.0 took `latest`. |
+| T4 tag/manifest/SHA | `v3.0.0` = `flintfire@3.0.0` = `1f070ea`. |
+| T5 changelog range | 3.0.0 changelog generated before any v3 tag; not regenerated. |
+| T6 changelog quality | Generated entry shipped; no hand-edit of CHANGELOG. |
+| T7 immutable versions | No republish of RC1/RC2/3.0.0. |
+| T8 dual README | Packed tarball is npm README. |
+| T9 generated agent config | `rules:check` green on release commits. |
+| T10 v2 archive imports | Frozen 2.0 docs keep old package name; site prefix `/flintfire/2.0/`. |
+| T11 deprecate after verify | Deprecation ran after registry+Pages+provenance proof. |
+| T12 workflows on default branch | `publish.yml` / `deploy-docs.yml` were on `main` before RC2. |
+| T16 no direct `main` push | Release via PR #95. |
+| T17 brand assets | Built checker + xmllint; **browser picker not re-verified**. |
+| T18 consumer specifiers | `flintfire` / `flintfire/vector` / `flintfire/express`. |
+| T19 `--file` not `--workflow` | Trusted Publisher uses `publish.yml`. |
+
+**Deviation:** `github-pages` Environment needed a `v*` tag rule (only `main` was allowed). Added
+during stable docs deploy. `npm` Environment already allowed `v*`.
+
+### Follow-ups (non-blocking)
+
+- Custom domain for Pages (ADR-0039; not a 3.0.0 dependency).
+- Manual browser light/dark favicon + hero verification.
+- Optional announcement.
+
+Do not delete `docs/plans/flintfire-v3-release/` until this closeout is reviewed.
 
