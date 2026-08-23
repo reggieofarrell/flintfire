@@ -652,5 +652,46 @@ tag `v3.0.0`, GitHub Release (triggers npm `latest` + docs).
 
 ### 6.1 Restore stable manifest
 
+Notes commit `d48a290` first (RC2 evidence + 2FA lock), then version-only `c3e15cf`.
+`npm version 3.0.0 --no-git-tag-version --ignore-scripts`. `check:manifest` passed. Diff was
+`package.json` + `package-lock.json` version only (`3.0.0-rc.2` → `3.0.0`); CHANGELOG.md untouched.
+`git show c3e15cf:package.json` → `flintfire@3.0.0`.
+
+### 6.2 Local §10 + release:verify + rename audit (2026-08-23, Node v24.18.0)
+
+Fourteen §10 legs, all exit 0:
+
+| # | Command | Result |
+| --- | --- | --- |
+| 1 | `test:types` | pass |
+| 2 | `lint` | pass |
+| 3 | `check:format` | pass |
+| 4 | `test:unit` | 34 suites / 438 tests |
+| 5 | `test:integration:emulator` | 36 suites / 545 tests |
+| 6 | `test:unit:coverage` | 34/438; lines 87.14% |
+| 7 | `test:coverage:gate:unit` | all unit gates passed |
+| 8 | `test:integration:coverage` | 36/545; lines 94.24% |
+| 9 | `test:coverage:gate:integration` | all integration gates passed |
+| 10 | `build` | pass |
+| 11 | `check:package` | 98 files |
+| 12 | `check:consumer` | Admin 14 packed consumer pass |
+| 13 | `check:docs` | 189 doc files |
+| 14 | `docs:build` | `check-built-docs-assets: ok` |
+
+`release:verify` exit 0 (includes `rules:check`, `check:manifest`, `check:audit` 0 vulns).
+
+Compat: Admin `^12` / `^13` / `^14` packed-consumer pass. Admin 12 + Firestore `7.9.0` / `7.10.0`
+object-form floor probes pass.
+
+Brand: xmllint 8 SVGs; no executable/external hits; eight paired built assets; no unsuffixed
+`favicon.svg`; hero `dark:sl-hidden` / `light:sl-hidden`. Browser theme picking not re-verified.
+
+Rename audit residuals only in allowed classes (CHANGELOG 2.x history, ADRs, v2 archive
+`website/src/content/docs/2.0/**`, migration guide old-side examples, plan/notes, NOTICE lineage,
+README v2→v3 pointer). No old package import in current source, package metadata, or current
+quick starts.
+
+### 6.2 PR ready / merge
+
 In progress.
 
