@@ -1,13 +1,14 @@
 # FlintFire 3.0.0 — execution notes
 
-**Implementer:** Cursor Grok 4.6 · **Branch:** `release/flintfire-prep` · **Plan:**
+**Implementer:** Cursor Grok 4.6 · **Branch:** `release/3.0.0` · **Plan:**
 `docs/plans/flintfire-v3-release/PLAN.md` · **Baseline:** `main` @ `dc625b6480408dcfdca2d901ba875981338e9fb2`
 
 ## Status
 
-Phase 0 preflight passed 2026-08-23. Local Phase 1 work is **gate-green and ready to commit** (no
-push/PR until asked). No remote mutations have been executed. Pause before every **REMOTE MUTATION /
-HUMAN CHECKPOINT**.
+Phase 0–3 in progress as of 2026-08-23. Prep PR #94 is merged. GitHub repository is
+`reggieofarrell/flintfire`. Environment `npm` exists. Branch `release/3.0.0` has
+`chore(release): 3.0.0` plus `chore(release): stage 3.0.0-rc.1`. **Do not tag, publish, merge the
+release PR, or create a GitHub Release yet.**
 
 ## Ambiguities resolved
 
@@ -282,8 +283,191 @@ attribution elsewhere.
 - ESLint ignores `.versionrc.cjs` and `**/*.astro` (no Astro parser in this config; CJS Node globals
   would trip `no-undef` the same way `scripts/**` already is ignored).
 
-### STOP
+Phase 1.10 completed via PR #94 merge (see Phase 2). Local `main` is at the merge commit.
 
-Phase 1.10 remote mutation (push / PR / merge) is **not** done. Local gates are green. No v3 tag.
-No npm publish. Commit only when the maintainer asks.
+---
+
+## Phase 2 — Rename GitHub repository (2026-08-23)
+
+**REMOTE MUTATION executed** after explicit maintainer approval. No v3 tag. No npm publish.
+
+### Preflight (same shell)
+
+| Check | Result |
+| --- | --- |
+| `gh` login | `reggieofarrell` (keyring; scopes `gist`, `read:org`, `repo`, `workflow`) |
+| `gh api user` | login `reggieofarrell`, id `18563006` |
+| `npm whoami` | `reggieofarrell` |
+| `gh repo view reggieofarrell/flintfire` | GraphQL repository-not-found (name free) |
+| `npm view flintfire` | E404 — still unclaimed |
+| PR #94 | **MERGED** 2026-08-23T18:44:09Z; merge SHA `208dee6b6aee2eda1f4e6815d29d2a34fa5810e8` |
+| `publish.yml` Environment | `npm` (job already requires it) |
+
+### 2.1 Rename
+
+```text
+gh repo rename flintfire --repo reggieofarrell/firestore-orm --yes
+```
+
+Succeeded. Canonical name is now `reggieofarrell/flintfire` (public, default branch `main`).
+Did **not** create a new empty `firestore-orm` repository.
+
+### 2.2 Redirect proof
+
+| Probe | Result |
+| --- | --- |
+| `git remote set-url origin` | `git@github.com:reggieofarrell/flintfire.git` |
+| `git ls-remote …/firestore-orm.git HEAD` | `208dee6b6aee2eda1f4e6815d29d2a34fa5810e8` |
+| `git ls-remote …/flintfire.git HEAD` | `208dee6b6aee2eda1f4e6815d29d2a34fa5810e8` |
+| `origin/main` after fetch | `208dee6` (`feat!: rename the npm package and project to FlintFire (#94)`) |
+
+Both GitHub URLs resolve to the same HEAD during the redirect window. Local `main` fast-forwarded
+`dc625b6..208dee6`. Remote branch `origin/release/flintfire-prep` was deleted by GitHub after merge.
+
+### 2.3 Settings vs Phase 0.4 snapshot
+
+| Surface | After rename | Drift vs 0.4? |
+| --- | --- | --- |
+| Default branch | `main` | none |
+| Branches | `main`, `v2.x`, `feat/issue-33-conditional-writes`, `issue-40-distinct-values-semantic-equality-backup`, `plan/issue-69-collection-recursive-delete` — all `protected=false` | none disappeared |
+| Ruleset | `default branch protections`, `enforcement=disabled` | none |
+| Classic `main` protection | HTTP 404 “Branch not protected” | none (expected) |
+| Actions | enabled, `allowed_actions=all`; default workflow token `read` | none |
+| Workflows | `Deploy docs` (`deploy-docs.yml`), `Publish Package` (`publish.yml`), `Tests` (`tests.yml`) — all `active` | filenames differ from PLAN 2.3’s `publish.yml` / `deploy-docs.yml` / `tests.yml`; **actual on-disk names survived and are active** |
+| Pages | `build_type=workflow`; `html_url=https://reggieofarrell.github.io/flintfire/`; `cname=null`; HTTPS enforced | URL base moved with the repo name; old `/firestore-orm/` Pages URL will not redirect (T1) |
+| Immutable releases | `enabled=false`, `enforced_by_owner=false` | none |
+| v2 Releases | `v2.2.1` (Latest), `v2.2.0`, `v2.0.0` | none |
+| v2 tags | `v2.0.0`, `v2.0.1`, `v2.1.0`, `v2.2.0`, `v2.2.1`; no `v3*` | none |
+| Merge settings | merge+squash on; rebase off; delete-branch-on-merge on | none |
+| About | description/homepage/topics set (intended empty→FlintFire change) | intended |
+
+About metadata applied:
+
+- description: `A type-safe, schema-aware Firestore data-access library for Node.js, built for the Firebase Admin SDK.`
+- homepage: `https://reggieofarrell.github.io/flintfire/`
+- topics: `flintfire`, `firestore`, `firebase-admin`, `typescript`
+
+### Environment `npm`
+
+| Field | Observed |
+| --- | --- |
+| Name | `npm` |
+| Required reviewer | User `reggieofarrell` (`18563006`) |
+| `prevent_self_review` | `false` |
+| Custom branch/tag policies | enabled (`protected_branches=false`, `custom_branch_policies=true`) |
+| Tag policy | exactly one: `type=tag`, `name=v*` |
+| Secrets | `total_count=0` (no npm token) |
+| Other environments | `github-pages` still present |
+
+### Phase 2 deviations
+
+- PLAN 2.3 listed workflow files `publish.yml`, `deploy-docs.yml`, `tests.yml`. The merged tree and
+  Actions API use `publish.yml`, `deploy-docs.yml`, `tests.yml`. Verified the files that actually
+  exist; all three are `active`. Later Trusted Publisher configuration must use `--file publish.yml`
+  (matches `docs/development/releasing.md` and the workflow comment), not `publish.yml`.
+- `notes.md` Phase 2 record was a local working-tree edit on `main` and was **not** pushed to `main`
+  (T16). It was stashed, `release/3.0.0` was cut from a clean tree, then the stash was restored onto
+  this branch after the 3.0.0 changelog commit so it cannot pollute generated release notes.
+
+### STOP after Phase 2
+
+Phase 2 complete. Phase 3 started 2026-08-23 (see below).
+
+---
+
+## Phase 3 — Changelog + RC1 manifest (2026-08-23)
+
+**No v3 tag. No npm publish. No GitHub Release.**
+
+### 3.1 Branch
+
+| Check | Result |
+| --- | --- |
+| `main` / `origin/main` | `208dee6b6aee2eda1f4e6815d29d2a34fa5810e8` |
+| `v3*` tags | none |
+| Dirty tree on `main` | only this `notes.md` (stashed before branch create) |
+| Branch | `release/3.0.0` from that SHA |
+
+### 3.2 Stable 3.0.0 changelog/version (before any RC tag)
+
+Dry-run and real bump: `npm run release:bump -- --release-as 3.0.0` (actual CLI flag; PLAN says
+`--release-as`).
+
+| Check | Result |
+| --- | --- |
+| Commit | `f025a6a chore(release): 3.0.0` |
+| Manifest after bump | `flintfire@3.0.0` |
+| Tag created? | **no** (`--skip.tag`; `git tag --list 'v3*'` empty) |
+| Compare range | `v2.2.1...v3.0.0` |
+| New links | `github.com/reggieofarrell/flintfire` |
+| Historical 2.x links | still `github.com/reggieofarrell/firestore-orm` |
+| `Co-Authored-By` / nested `docs(website): archive v2 docs` | **absent** |
+| Sections | BREAKING CHANGES, Added, Fixed, Changed, Documentation |
+
+Do **not** regenerate CHANGELOG.md after this point.
+
+### 3.3 RC1 manifest only
+
+```text
+npm version 3.0.0-rc.1 --no-git-tag-version --ignore-scripts
+```
+
+| Check | Result |
+| --- | --- |
+| Diff | `package.json` + `package-lock.json` version only; CHANGELOG.md untouched |
+| `check:manifest` | pass |
+| Commit | `64b9500 chore(release): stage 3.0.0-rc.1` |
+| Current version | `3.0.0-rc.1` |
+| `v3*` tags | still none |
+
+### 3.4 Gate
+
+Fourteen §10.1 legs + `release:verify` + brand-asset probes + five compatibility consumer legs.
+All passed 2026-08-23 on Node v24.18.0. Log: `/tmp/flintfire-phase3-gate.log` and
+`/tmp/flintfire-phase3-compat.log`.
+
+| Leg | Command | Result |
+| --- | --- | --- |
+| 1 | `test:types` | pass (1s) |
+| 2 | `lint` | pass (1s) |
+| 3 | `check:format` | pass (2s) |
+| 4 | `test:unit` | **34 suites, 438 tests** pass |
+| 5 | `test:integration:emulator` | **36 suites, 545 tests** pass |
+| 6 | `test:unit:coverage` | pass |
+| 7 | `test:coverage:gate:unit` | pass |
+| 8 | `test:integration:coverage` | pass |
+| 9 | `test:coverage:gate:integration` | pass |
+| 10 | `build` | pass |
+| 11 | `check:package` | pass (98 files; npm README staging restored) |
+| 12 | `check:consumer` | pass (`firebase-admin@^14` default) |
+| 13 | `check:docs` | pass (189 files) |
+| 14 | `docs:build` | pass; `check-built-docs-assets: ok` |
+| 15 | `release:verify` | pass (36s; includes `rules:check`) |
+
+Compat (`FLINTFIRE_ADMIN_VERSION` / `FLINTFIRE_FIRESTORE_VERSION`): admin ^12 / ^13 / ^14 and
+admin ^12 + Firestore 7.9.0 / 7.10.0 — all pass.
+
+Brand probes: `xmllint --noout` on eight public SVGs; payload grep clean; built
+`/flintfire/favicon-{light,dark}.svg` (not concatenated `/flintfirefavicon-`); unsuffixed
+`favicon.svg` absent; hero uses `flint-fire-icon-{light,dark}.svg` with `dark:sl-hidden` /
+`light:sl-hidden`.
+
+**Could not verify:** live browser light/dark desktop+mobile favicon/hero picking after a Pages
+deploy. Static HTML assertions cannot prove the OS/browser theme picker. Live Pages still serves
+the pre-rename artifact until the stable 3.0.0 docs deploy (or a manual **Deploy docs** dispatch).
+
+### Phase 3 deviations
+
+- PLAN 3.2 writes `--release-as 3.0.0`; the installed `commit-and-tag-version` flag is
+  `--release-as`. Used the real CLI flag.
+- PLAN §10 brand paths still say `favicon-light.svg` / `flint-fire-icon-light.svg` /
+  `website/dist`. This tree uses `favicon-light.svg` / `flint-fire-icon-light.svg` /
+  `website/dist`. Probed the files that exist.
+- `notes.md` Phase 2+3 record is committed on `release/3.0.0` only (not `main`).
+
+### STOP after Phase 3
+
+No `v3*` tag. No GitHub Release. No `npm publish`. Do not merge while the manifest is `3.0.0-rc.1`.
+Next is Phase 4 (manual RC1 npm publish with `--tag next`) after the draft PR exists and the
+maintainer approves that remote mutation.
 
