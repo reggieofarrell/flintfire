@@ -14,6 +14,7 @@ import { FirestoreRepository } from '../../index.js';
 import type {
   DeepPartial,
   FieldPaths,
+  OmitId,
   PathValue,
   QueryFilterFactory,
   StoredDataOf,
@@ -220,12 +221,12 @@ export function compositeFilterPathPositives() {
 }
 
 // A filter group extracted into a reusable predicate stays typed via the exported factory type.
-// `StoredDataOf<typeof repo>` is the ergonomic way to name the shape (it is already `Omit<S, 'id'>`).
+// `StoredDataOf<typeof repo>` is the ergonomic spelling (`OmitId<S>`, not built-in `Omit<S, 'id'>` —
+// built-in Omit collapses explicit-id + index intersections; see issue #82).
 export function reusableFilterPredicate(uid: string) {
   const mine = (f: QueryFilterFactory<StoredDataOf<typeof repo>>) =>
     f.or(f.where('name', '==', uid), f.whereId('==', uid));
-  const spelledOut = (f: QueryFilterFactory<Omit<Doc, 'id'>>) =>
-    f.where('address.city', '==', 'LA');
+  const spelledOut = (f: QueryFilterFactory<OmitId<Doc>>) => f.where('address.city', '==', 'LA');
   return Promise.all([
     repo.query().whereFilter(mine).get(),
     repo.query().whereFilter(spelledOut).get(),

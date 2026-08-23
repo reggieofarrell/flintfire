@@ -178,8 +178,12 @@ export type AggregationResult<Spec extends AggregationSpec<any>> = {
  *   (Verified: property syntax is bivariant here too, so this is not the usual method-parameter
  *   bivariance; a control factory parameterized by a plain string union IS measured contravariantly.)
  *   Invariance requires the annotated shape to match the repository's stored shape exactly, so use
- *   `StoredDataOf<typeof repo>` (or `Omit<Stored, 'id'>`) rather than the raw model. Variance
- *   annotations require TypeScript 4.7+; the documented floor is 5.5+ (ADR-0016).
+ *   `StoredDataOf<typeof repo>` (or `OmitId<Stored>`) rather than the raw model. Do **not**
+ *   substitute built-in `Omit<Stored, 'id'>`: that spelling flattens an explicit-`id` + string-index
+ *   intersection and drops declared siblings from typed paths (issue #82). {@link OmitId} omits
+ *   declared `id` from the path-facing key set while reconstructing original index signatures, so
+ *   value-position dynamic access survives. Variance annotations require TypeScript 4.7+; the
+ *   documented floor is 5.5+ (ADR-0016).
  */
 export interface QueryFilterFactoryBase<in out S extends object> {
   /**

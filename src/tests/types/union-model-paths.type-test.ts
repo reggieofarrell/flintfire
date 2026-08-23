@@ -1,15 +1,17 @@
 /**
- * Type-level tests for distributive `OmitId` over union stored/read models (issue #54, ADR-0028)
- * and for literal keys beside index signatures (issue #58), checked by `npm run test:types` via
- * tsc (NOT jest). Uses the directly-typed constructor because `withSchema` cannot express a union
- * stored model (`ZodObject` only) and because intersection fixtures likewise need an explicit `S`.
+ * Type-level tests for distributive `OmitId` over union stored/read models (issue #54, ADR-0028),
+ * literal keys beside index signatures (issue #58), and explicit-`id` + index preservation
+ * (issue #82), checked by `npm run test:types` via tsc (NOT jest). Uses the directly-typed
+ * constructor because `withSchema` cannot express a union stored model (`ZodObject` only) and
+ * because intersection fixtures likewise need an explicit `S`.
  *
  * Each `@ts-expect-error` FAILS the type-check if the line below it stops being an error; every
  * un-annotated call must type-check. Union fixtures use branch-specific **top-level** keys so the
  * collapse defect is observable — unions whose branches share all top-level key names do not
  * reproduce the bug. Intersection fixtures route through `OmitId` and real builders so a root-only
  * `FieldPaths<IndexIntersect>` assertion cannot falsely pass while `FieldPaths<OmitId<…>>` remains
- * `never` (T1).
+ * `never` (T1). Explicit-`id` indexed fixtures additionally prove that declared siblings survive
+ * the `Omit` branch when index signatures are reconstructed (issue #82 / T1–T10).
  */
 import { FieldPath, Filter } from 'firebase-admin/firestore';
 import { FirestoreRepository } from '../../index.js';
@@ -274,16 +276,288 @@ const _unionIndexedName: UnionIntersectPaths = 'indexedName';
 const _unionPlainName: UnionIntersectPaths = 'plainName';
 export const _u58_unionIntersect = [_unionKind, _unionIndexedName, _unionPlainName];
 
-// U58-6 — explicit `id` + string index remains unsupported (D4 / T9 / #82)
-// Do not remove this pin without an owner decision; expanding #58 to cover it requires the
-// D1-rejected path-only helper across value and path surfaces.
-type ExplicitIdIndex = { id: string; name: string } & Record<string, unknown>;
+// ── TY / U82: explicit `id` + index signature recovers declared paths (issue #82) ───────────────
+// Built-in `Omit` flattens `{ id; name } & Record<string, unknown>` to the index alone. The
+// refined `OmitId` omits declared `id` from `LiteralOnly` and reattaches index signatures, so
+// every public path-consumer family inherits the fix without signature edits (D1 / T5).
+type ExplicitIdIndex = {
+  id: string;
+  name: string;
+  score: number;
+  nested: { label: string; count: number } & Record<string, unknown>;
+  embedding: number[];
+} & Record<string, unknown>;
+
+const explicitIdIndexRepo = new FirestoreRepository<
+  ExplicitIdIndex,
+  ExplicitIdIndex,
+  ExplicitIdIndex,
+  ExplicitIdIndex
+>(db, 'explicit-id-index');
+
+// TY-1 — direct aliases recover top-level and nested declared paths; numerics reach score/count
 type ExplicitIdIndexPaths = FieldPaths<OmitId<ExplicitIdIndex>>;
-export function u58_6_explicitIdIndexStillUnsupported() {
-  // @ts-expect-error D4 (#82): explicit id + string index still collapses typed paths
-  const _name: ExplicitIdIndexPaths = 'name';
-  void _name;
+type ExplicitIdIndexNumeric = NumericFieldPaths<OmitId<ExplicitIdIndex>>;
+const _eiiName: ExplicitIdIndexPaths = 'name';
+const _eiiScore: ExplicitIdIndexPaths = 'score';
+const _eiiNested: ExplicitIdIndexPaths = 'nested';
+const _eiiNestedLabel: ExplicitIdIndexPaths = 'nested.label';
+const _eiiNestedCount: ExplicitIdIndexPaths = 'nested.count';
+const _eiiNumericScore: ExplicitIdIndexNumeric = 'score';
+const _eiiNumericNestedCount: ExplicitIdIndexNumeric = 'nested.count';
+export const _ty1 = [
+  _eiiName,
+  _eiiScore,
+  _eiiNested,
+  _eiiNestedLabel,
+  _eiiNestedCount,
+  _eiiNumericScore,
+  _eiiNumericNestedCount,
+];
+
+// TY-2 — StoredDataOf / PathValue keep declared precision AND the string index (T2, T4, T8)
+// Observation direction is unknown→string: assigning a string INTO PathValue/`name` would pass
+// when the alias is still `unknown` and would guard nothing.
+type ExplicitIdIndexStored = StoredDataOf<typeof explicitIdIndexRepo>;
+declare const _eiiStored: ExplicitIdIndexStored;
+const _eiiStoredName: string = _eiiStored.name;
+// Positive: dynamic index access compiles (index signature retained — path-only leak rejects this).
+const _eiiStoredDynamic: unknown = _eiiStored['arbitrary'];
+// D3 / T4: value-position `id` remains the index value (`unknown`), not absent / never.
+const _eiiStoredIdValue: unknown = _eiiStored['id'];
+export function ty2_dynamicIndexIsUnknown() {
+  // @ts-expect-error dynamic index access is `unknown`, not `string`
+  const _asString: string = _eiiStored['arbitrary'];
+  void _asString;
+  // @ts-expect-error value-position `id` is the index value (`unknown`), not `string`
+  const _idAsString: string = _eiiStored['id'];
+  void _idAsString;
 }
+declare const _eiiPathValueName: PathValue<OmitId<ExplicitIdIndex>, 'name'>;
+const _eiiPathName: string = _eiiPathValueName;
+export const _ty2 = [_eiiStoredName, _eiiStoredDynamic, _eiiStoredIdValue, _eiiPathName];
+
+// TY-3 — Core clauses / factories / aggregations / reusable predicate accept declared paths
+export async function ty3_coreSurfaces() {
+  explicitIdIndexRepo.query().where('name', '==', 'x');
+  explicitIdIndexRepo.query().where('nested.label', '==', 'x');
+  explicitIdIndexRepo.query().orderBy('score');
+  explicitIdIndexRepo.query().orderBy('nested.count', 'desc');
+  explicitIdIndexRepo.query().select('name', 'nested.label');
+  explicitIdIndexRepo.query().whereFilter(f => f.where('name', '==', 'x'));
+  explicitIdIndexRepo
+    .query()
+    .whereFilter(f => Filter.or(f.where('name', '==', 'x'), f.where('score', '==', 1)));
+  // Exact public reusable-predicate spelling (D2 / T9) — not merely an inferred inline factory.
+  const mine = (f: QueryFilterFactory<StoredDataOf<typeof explicitIdIndexRepo>>) =>
+    f.where('name', '==', 'x');
+  explicitIdIndexRepo.query().whereFilter(mine);
+  await explicitIdIndexRepo.query().sum('score');
+  await explicitIdIndexRepo.query().average('nested.count');
+  await explicitIdIndexRepo.query().aggregate({
+    total: { kind: 'sum', field: 'score' },
+    n: { kind: 'count' },
+  });
+}
+
+// TY-4 — repository helpers and both field-mask routes accept declared/nested paths
+export async function ty4_repositorySurfaces() {
+  await explicitIdIndexRepo.findByField('name', 'x');
+  await explicitIdIndexRepo.getOneByField('nested.label', 'x');
+  await explicitIdIndexRepo.getOneByFieldOrThrow('name', 'x');
+  await explicitIdIndexRepo.getMany(['doc-1'], { fieldMask: ['name', 'nested.label'] });
+  await explicitIdIndexRepo.getManyInTransaction(tx, ['doc-1'], {
+    fieldMask: ['name', 'score'],
+  });
+}
+
+// TY-5 — collection-group inherited clauses, override select, and group factory
+export function ty5_collectionGroupSurfaces() {
+  const group = explicitIdIndexRepo.collectionGroup();
+  group.query().where('name', '==', 'x');
+  group.query().orderBy('score');
+  group.query().select('name', 'nested.label');
+  group.query().whereFilter(f => f.where('nested.count', '==', 1));
+}
+
+// TY-6 — vector prefilter / projection / factory; findNearest KeysOf control remains wide (T10)
+const explicitIdIndexVecRepo = withVectorSearch(explicitIdIndexRepo);
+export function ty6_vectorSurfaces() {
+  explicitIdIndexVecRepo.vectorQuery().where('name', '==', 'x');
+  explicitIdIndexVecRepo.vectorQuery().select('score', 'nested.label');
+  explicitIdIndexVecRepo.vectorQuery().whereFilter(f => f.where('name', '==', 'x'));
+  // KeysOf consumer: declared embedding AND an arbitrary index key remain accepted (N5 / T10).
+  explicitIdIndexVecRepo.vectorQuery().findNearest({
+    vectorField: 'embedding',
+    queryVector: [1, 2, 3],
+    limit: 5,
+    distanceMeasure: 'COSINE',
+  });
+  explicitIdIndexVecRepo.vectorQuery().findNearest({
+    vectorField: 'arbitraryVectorKey',
+    queryVector: [1, 2, 3],
+    limit: 5,
+    distanceMeasure: 'COSINE',
+  });
+}
+
+// TY-7 — `id`, arbitrary/dynamic keys, typos, undeclared nested, nonnumeric sum stay rejected
+export function ty7_negativesRemainRejected() {
+  // @ts-expect-error synthetic / declared `id` is not a typed stored field path (T4)
+  const _idPath: ExplicitIdIndexPaths = 'id';
+  void _idPath;
+  // @ts-expect-error `id` is not a typed path on the builder either
+  explicitIdIndexRepo.query().where('id', '==', 'x');
+  // @ts-expect-error typo — not a declared literal beside the index
+  explicitIdIndexRepo.query().where('nombre', '==', 'x');
+  // @ts-expect-error undeclared nested key under the nested intersection
+  explicitIdIndexRepo.query().where('nested.missing', '==', 'x');
+  // @ts-expect-error arbitrary dynamic strings still rejected (T7)
+  explicitIdIndexRepo.query().where('some' + 'field', '==', 1);
+  // @ts-expect-error non-numeric field rejected by sum
+  explicitIdIndexRepo.query().sum('name');
+  // SDK FieldPath escape hatch for arbitrary map keys still compiles
+  explicitIdIndexRepo.query().where(new FieldPath('metadata', 'plan'), '==', 'pro');
+}
+
+// TY-8 — index domain, mutability, and precise value types survive reconstruction (T3 / D4)
+//
+// Homomorphic `Pick` is load-bearing. Three independent failure modes must each be observable:
+// wrapping Pick in `Readonly` (mutable→readonly), replacing it with a mutable `Record`
+// (readonly→mutable), and wiping the index value to `unknown` (precise-value→unknown). Round-1
+// B1 found that domain/readonly pins alone still let `test:types` pass under
+// `Readonly<Record<string, unknown>>` / `Record<number, unknown>`.
+
+type NumberOnlyIndexed = { id: string; name: string } & Record<number, unknown>;
+type NumberOnlyPaths = FieldPaths<OmitId<NumberOnlyIndexed>>;
+type NumberOnlyStored = OmitId<NumberOnlyIndexed>;
+const _numberOnlyName: NumberOnlyPaths = 'name';
+declare const _numberOnlyStored: NumberOnlyStored;
+const _numberOnlyDynamic: unknown = _numberOnlyStored[123];
+export function ty8_numberOnlyRejectsArbitraryStrings() {
+  // @ts-expect-error number-only index does not invent arbitrary string paths
+  const _arbitrary: NumberOnlyPaths = 'arbitrary';
+  void _arbitrary;
+  // Domain preservation (T3): string key value-access must stay illegal — widening the number
+  // index to a string index would make this compile and would leave the matrix cell unguarded.
+  // @ts-expect-error number-only stored shape rejects string-key indexing
+  const _stringKeyAccess = _numberOnlyStored['arbitrary'];
+  void _stringKeyAccess;
+}
+export const _ty8_number = [_numberOnlyName, _numberOnlyDynamic];
+
+// Mutable string index — positive dynamic *write* must compile. Wrapping `StringIndex`'s Pick in
+// `Readonly` (B1's string mutable→readonly mutation) turns this assignment into a compile error.
+type MutableStringIndexed = { id: string; name: string } & Record<string, unknown>;
+type MutableStringStored = OmitId<MutableStringIndexed>;
+declare const _mutableStringStored: MutableStringStored;
+
+export function ty8_mutableIndexesAcceptWrites() {
+  // Positive writes through reconstructed mutable indexes (B1 item 1). A readonly wrap on either
+  // Pick branch fails the corresponding assignment; a value-type wipe does not, which is why
+  // precise-read pins below exist separately.
+  _mutableStringStored['dynamic'] = 1;
+  _numberOnlyStored[123] = 1;
+}
+
+type ReadonlyStringIndexed = {
+  id: string;
+  name: string;
+  readonly [key: string]: unknown;
+};
+type ReadonlyStringStored = OmitId<ReadonlyStringIndexed>;
+declare const _readonlyStringStored: ReadonlyStringStored;
+const _readonlyStringName: string = _readonlyStringStored.name;
+export function ty8_readonlyIndexRemainsReadonly() {
+  // @ts-expect-error reconstructed string index preserves its readonly modifier (T3 / P23)
+  _readonlyStringStored['dynamic'] = 1;
+}
+export const _ty8_readonly = [_readonlyStringName];
+
+// Readonly number index with a precise value type (B1 item 2). The dynamic read must assign to
+// `number` (so wiping values to `unknown` fails) and the write must stay illegal (so replacing
+// Pick with a mutable Record makes the expect-error unused).
+type ReadonlyNumberIndexed = {
+  id: string;
+  name: string;
+  readonly [key: number]: number;
+};
+type ReadonlyNumberStored = OmitId<ReadonlyNumberIndexed>;
+declare const _readonlyNumberStored: ReadonlyNumberStored;
+const _readonlyNumberValue: number = _readonlyNumberStored[0];
+export function ty8_readonlyNumberIndexRemainsReadonly() {
+  // @ts-expect-error reconstructed number index preserves its readonly modifier (T3)
+  _readonlyNumberStored[0] = 1;
+}
+export const _ty8_readonlyNumber = [_readonlyNumberValue];
+
+// Precise string index (B1 item 3) — dynamic read assigns to `string`, not `unknown`. Replacing
+// `Pick<T, string>` with a `Record<string, unknown>` (or a homomorphic `{ [K in keyof P]: unknown }`)
+// makes this initialization fail.
+type PreciseStringIndexed = { id: string; name: string } & Record<string, string>;
+type PreciseStringStored = OmitId<PreciseStringIndexed>;
+declare const _preciseStringStored: PreciseStringStored;
+const _preciseStringValue: string = _preciseStringStored['dynamic'];
+export function ty8_preciseStringIndexAcceptsStringWrite() {
+  // Mutable precise string index still accepts a string write. The readonly wrap that B1 used on
+  // StringIndex would reject this; the unknown-value wipe would still accept it (the read pin
+  // above is what catches that).
+  _preciseStringStored['dynamic'] = 'ok';
+}
+export const _ty8_preciseString = [_preciseStringValue];
+
+// Precise number index (B1 item 4) — dynamic read assigns to `number`. `Record<number, unknown>`
+// (B1's number-side false-negative) makes this initialization fail while leaving domain pins green.
+type PreciseNumberIndexed = { id: string; name: string } & Record<number, number>;
+type PreciseNumberStored = OmitId<PreciseNumberIndexed>;
+declare const _preciseNumberStored: PreciseNumberStored;
+const _preciseNumberValue: number = _preciseNumberStored[0];
+export function ty8_preciseNumberIndexAcceptsNumberWrite() {
+  _preciseNumberStored[0] = 1;
+}
+export const _ty8_preciseNumber = [_preciseNumberValue];
+
+// TY-9 — union distribution, symbol index, special types, and #58/#54 controls retained
+type UnionWithExplicitIdIndex =
+  | ({ id: string; kind: 'indexed'; indexedName: string } & Record<string, unknown>)
+  | { id: string; kind: 'plain'; plainName: string };
+type UnionExplicitIdIndexPaths = FieldPaths<OmitId<UnionWithExplicitIdIndex>>;
+const _ueiKind: UnionExplicitIdIndexPaths = 'kind';
+const _ueiIndexedName: UnionExplicitIdIndexPaths = 'indexedName';
+const _ueiPlainName: UnionExplicitIdIndexPaths = 'plainName';
+export const _ty9_union = [_ueiKind, _ueiIndexedName, _ueiPlainName];
+
+type SymbolIndexed = {
+  id: string;
+  name: string;
+  [key: symbol]: unknown;
+};
+type SymbolIndexedPaths = FieldPaths<OmitId<SymbolIndexed>>;
+type SymbolIndexedStored = OmitId<SymbolIndexed>;
+const _symbolName: SymbolIndexedPaths = 'name';
+declare const _symbolStored: SymbolIndexedStored;
+const _symbolValue: unknown = _symbolStored[Symbol.for('x')];
+export const _ty9_symbol = [_symbolName, _symbolValue];
+
+// Special-type identity: never / unknown / any must not be rewritten into an empty object.
+// Bare `declare const` + array placement is vacuous (assignable from `{}`); use bidirectional
+// equality so a regression that maps these to `{}` fails `test:types`.
+type AssertTrue<T extends true> = T;
+type ExpectEqual<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type NeverOmit = OmitId<never>;
+type UnknownOmit = OmitId<unknown>;
+type AnyOmit = OmitId<any>;
+type _ty9_neverIsNever = AssertTrue<ExpectEqual<NeverOmit, never>>;
+type _ty9_unknownIsUnknown = AssertTrue<ExpectEqual<UnknownOmit, unknown>>;
+type _ty9_anyIsAny = AssertTrue<ExpectEqual<AnyOmit, any>>;
+export type _ty9_special = [_ty9_neverIsNever, _ty9_unknownIsUnknown, _ty9_anyIsAny];
+
+// No-id indexed, pure-record, and ordinary explicit-id controls remain (cross-checked above too)
+type NoIdIndexControl = { name: string } & Record<string, unknown>;
+type NoIdIndexPaths = FieldPaths<OmitId<NoIdIndexControl>>;
+const _noIdIndexName: NoIdIndexPaths = 'name';
+export const _ty9_noIdIndex = [_noIdIndexName];
 
 // ── U-8: non-union model unchanged (P14) ────────────────────────────────────────────────────────
 // Routed through `OmitId` and through the real builder — asserting `FieldPaths<PlainModel>`

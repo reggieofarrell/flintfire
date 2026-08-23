@@ -101,11 +101,15 @@ no change — you can **delete the `as any` casts** you previously used on neste
 contracts tightened:
 
 - **Query field paths are typed** from the stored shape. `where`, `orderBy`, `select` (and the
-  vector builder's `where` / `select`) accept `FieldPaths<Omit<S, 'id'>> | FieldPath` instead of an
-  arbitrary `string`. Typos and unknown paths are now compile errors, and nested paths
-  (`orderBy('address.city')`) are supported. For a genuinely dynamic field name, pass a `FieldPath`
-  (`where(new FieldPath(name), '==', v)`) instead of a computed string. Querying the document id
-  uses `whereId` / `orderById` (see section 1).
+  vector builder's `where` / `select`) accept `FieldPaths<OmitId<S>> | FieldPath` instead of an
+  arbitrary `string`. Use the exported `OmitId` helper — not built-in `Omit<S, 'id'>` — because
+  `Omit` flattens `{ id: string; name: string } & Record<string, unknown>` to the index signature
+  and loses `name` as a typed path. `OmitId` omits declared `id` from the path-facing key set while
+  reconstructing original index signatures, so declared siblings stay typed paths and arbitrary
+  map keys still require an SDK `FieldPath`. Typos and unknown paths are now compile errors, and
+  nested paths (`orderBy('address.city')`) are supported. For a genuinely dynamic field name, pass
+  a `FieldPath` (`where(new FieldPath(name), '==', v)`) instead of a computed string. Querying the
+  document id uses `whereId` / `orderById` (see section 1).
 - **`id` is no longer a writable update key**, and **`create`/`upsert` reject dot-notation keys** (a
   compile error, and a runtime error if forced with a cast — Firestore would create a field whose
   name literally contains a dot). Use a nested object on create.

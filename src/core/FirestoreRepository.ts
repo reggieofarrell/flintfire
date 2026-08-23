@@ -4532,15 +4532,24 @@ export class FirestoreRepository<
 
 /**
  * Extracts a repository's **read data** type (`T`) — the application/read shape, with the synthetic
- * top-level `id` removed (review R5). `Omit<'id'>` normalizes a legacy/raw repository whose generic
- * argument still carries `id`; it is a no-op for validated (schema-inferred) repositories.
+ * top-level `id` removed (review R5). Normalization is {@link OmitId}, not built-in `Omit<'id'>`:
+ * `Omit` flattens an explicit-`id` + string-index intersection and loses declared siblings as typed
+ * paths (issue #82). {@link OmitId} omits declared `id` from the path-facing key set while
+ * reconstructing original index signatures, so a legacy/raw repository whose generic still carries
+ * `id` is normalized without dropping value-position dynamic access. It is a no-op for validated
+ * (schema-inferred) repositories that never declared `id`. A string index still makes value access
+ * at `id` legal at the index value type — TypeScript cannot subtract one literal from a string
+ * index domain — even though `id` is not a typed field path.
  */
 export type DataOf<R> = R extends FirestoreRepository<infer T, any, any, any> ? OmitId<T> : never;
 
 /**
  * Extracts a repository's **stored data** type (`S`) — the at-rest Firestore shape that query field
- * paths derive from, with the synthetic top-level `id` removed (review R5). `Omit<'id'>` normalizes a
- * legacy/raw repository whose generic argument still carries `id`; it is a no-op for validated repos.
+ * paths derive from, with the synthetic top-level `id` removed (review R5). Same {@link OmitId}
+ * contract as {@link DataOf}: declared `id` is stripped from typed paths, original string/number
+ * indexes are reconstructed for value-position access, and a string index still types `['id']` as
+ * the index value rather than `never`. A no-op for validated repos whose stored generic never
+ * declared `id`.
  */
 export type StoredDataOf<R> =
   R extends FirestoreRepository<any, any, infer S, any> ? OmitId<S> : never;
