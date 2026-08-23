@@ -467,7 +467,115 @@ the pre-rename artifact until the stable 3.0.0 docs deploy (or a manual **Deploy
 
 ### STOP after Phase 3
 
-No `v3*` tag. No GitHub Release. No `npm publish`. Do not merge while the manifest is `3.0.0-rc.1`.
-Next is Phase 4 (manual RC1 npm publish with `--tag next`) after the draft PR exists and the
-maintainer approves that remote mutation.
+Phase 3 complete (draft PR #95). Phase 4 started 2026-08-23; see below.
+
+---
+
+## Phase 4 — Manual RC1 npm bootstrap (2026-08-23)
+
+**No GitHub Release for RC1** (would fire OIDC against an immutable version).
+
+### 4.1 Preflight
+
+| Check | Result |
+| --- | --- |
+| Branch | `release/3.0.0` @ `30c473c` (`docs(plan): record FlintFire 3.0.0 Phase 2–3 execution`) |
+| Identity | `flintfire@3.0.0-rc.1`; repo `https://github.com/reggieofarrell/flintfire`; homepage Pages `/flintfire/` |
+| `npm whoami` | `reggieofarrell` |
+| `npm view flintfire` | E404 (unclaimed) |
+| Node / npm | v24.18.0 / 11.19.0 |
+| `release:verify` | pass (unit 34/438, integration 36/545; package 98 files) |
+| `npm pack --dry-run` | `flintfire-3.0.0-rc.1.tgz`, 98 files, 292.5 kB |
+| Tree after pack | clean; GitHub README restored |
+
+### 4.2 Reproducibility tag
+
+```text
+git tag -a v3.0.0-rc.1 30c473c -m "FlintFire 3.0.0-rc.1"
+git push origin v3.0.0-rc.1
+```
+
+| Check | Result |
+| --- | --- |
+| Tagged `package.json` | `flintfire@3.0.0-rc.1` |
+| Remote | `origin` has `v3.0.0-rc.1` (annotated) |
+| GitHub Releases | still only v2.0.0 / v2.2.0 / v2.2.1; **no RC1 Release** |
+
+### 4.3 Manual publish — succeeded after maintainer 2FA
+
+Maintainer completed interactive npm auth and published. Registry now has `flintfire@3.0.0-rc.1`.
+Did **not** republish (version is immutable).
+
+Integrity `sha512-xlYaqsGEZmH/JoUJuT7FwgxAL3Z1vAtcQkkMdkYN1jUJ2F+1AFovX0/uwJz3SV67I7M5mL7x9PcvZpMCBz8jIQ==`
+matches the local pack dry-run. Tarball 98 files, 292.5 kB.
+
+### 4.4 Registry verification + consumer smoke
+
+| Check | Result |
+| --- | --- |
+| `name` / versions | `flintfire` / `["3.0.0-rc.1"]` |
+| `dist-tags.next` | `3.0.0-rc.1` |
+| `dist-tags.latest` | **also `3.0.0-rc.1`** — npm sets `latest` on the first publish even with `--tag next` (T3) |
+| repository / homepage | `reggieofarrell/flintfire` / `https://reggieofarrell.github.io/flintfire/` |
+| engines | `node >=22.0.0` |
+| peers | `firebase-admin ^12 \|\| ^13 \|\| ^14`, `zod ^4`, optional `express ^4 \|\| ^5` |
+| `npm pack flintfire@3.0.0-rc.1 --dry-run` | 98 files, shasum `3eb483652c7152f2ff0669a36723f9db88c66031` |
+| Temp consumer | `/var/folders/sj/_znxtncn7l9_tt3mzbwm01f40000gn/T/tmp.SL85UJkrue` |
+| ESM `flintfire` / `flintfire/vector` / `flintfire/express` | `esm ok` |
+| CJS `require` of the same specifiers | `cjs ok` |
+
+`npm dist-tag rm flintfire latest` was attempted from this session and **EOTP**’d. `latest` still
+points at the RC. Maintainer must run that command interactively so `npm install flintfire` does
+not resolve a prerelease.
+
+### 4.5 Trusted Publisher — configured
+
+Dry-run (no mutation):
+
+```text
+package: flintfire
+file: publish.yml
+repository: reggieofarrell/flintfire
+environment: npm
+permissions: publish
+```
+
+`--workflow` was not used (T19). `--allow-stage-publish` was not passed.
+
+Maintainer applied Trusted Publisher interactively. `npm trust list flintfire` (plain):
+
+```text
+type: github
+file: publish.yml
+repository: reggieofarrell/flintfire
+environment: npm
+permissions: publish
+```
+
+JSON lists the same relationship with `permissions: ["createPackage"]` — npm's API enum for
+`--allow-publish` / `npm publish`, not “create a new package name only.”
+
+### Dist-tag `latest` (T3 — cannot remove)
+
+`npm dist-tag rm flintfire latest` authenticated successfully, then registry returned
+**400 Bad Request**. npm requires a `latest` tag on every package; this is the first version, so
+`latest` cannot be deleted and cannot be retargeted. Do **not** publish a dummy version to move it.
+Stable `3.0.0` in Phase 6 takes `latest`. Until then, prefer `flintfire@next` or
+`flintfire@3.0.0-rc.1`; bare `npm install flintfire` installs the RC.
+
+### STOP after Phase 4
+
+Package exists. Tag `v3.0.0-rc.1` exists. Trusted Publisher is configured. No GitHub Release for
+RC1. Do not merge PR #95. Do not republish `3.0.0-rc.1`. Phase 5 (RC2 OIDC) is next.
+
+---
+
+## Phase 5 — RC2 via OIDC (2026-08-23)
+
+**GitHub prerelease `v3.0.0-rc.2` triggers `publish.yml`.** Approve Environment `npm` in Actions
+after matching tag/SHA. Do not regenerate CHANGELOG.md.
+
+### 5.1 Stage RC2 manifest
+
+In progress.
 
