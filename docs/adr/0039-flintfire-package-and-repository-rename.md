@@ -1,11 +1,15 @@
 # ADR-0039: Rename the package and GitHub repository to FlintFire
 
-- **Status:** Accepted (3.0.0, pending release)
+- **Status:** Accepted (released in 3.0.0)
 - **Date:** 2026-08-23
 - **Deciders:** Reggie O'Farrell
 - **Related:** ADR-0001 (fork and 2.0.0 re-architecture), ADR-0006 (Starlight site and major-version
   archives), [`docs/plans/flintfire-v3-release/PLAN.md`](../plans/flintfire-v3-release/PLAN.md),
-  `CHANGELOG.md` (generated 3.0.0 entry)
+  `CHANGELOG.md` (generated 3.0.0 entry),
+  [PR #94](https://github.com/reggieofarrell/flintfire/pull/94) (prep),
+  [PR #95](https://github.com/reggieofarrell/flintfire/pull/95) (release),
+  [GitHub Release v3.0.0](https://github.com/reggieofarrell/flintfire/releases/tag/v3.0.0),
+  [npm flintfire@3.0.0](https://www.npmjs.com/package/flintfire/v/3.0.0)
 
 ## Context
 
@@ -102,6 +106,16 @@ the 3.0.0 changelog after RC tags exist.
   old-package redirect.
 - **Rename public class names** (`FirestoreRepository` → something FlintFire-specific). Rejected:
   that adds unrelated API migration on top of an already large major.
+
+## Release (2026-08-23)
+
+Shipped as `flintfire@3.0.0` from `reggieofarrell/flintfire` at merge SHA
+`1f070ea951bc3bdee218b6aa17c4e5e5fca168aa` (annotated tag `v3.0.0`). Prep landed in PR #94; the
+release PR was #95. npm `latest` is `3.0.0` with Trusted Publishing provenance.
+`@reggieofarrell/firestore-orm@2.x` is deprecated in place (all five 2.x versions); no old-name v3
+was published. Execution evidence:
+[`docs/plans/flintfire-v3-release/notes.md`](../plans/flintfire-v3-release/notes.md) until that
+directory is removed in a later cleanup PR.
 
 ## References
 

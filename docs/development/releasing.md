@@ -124,16 +124,17 @@ The publish workflow then:
    [Trusted Publishing (OIDC)](https://docs.npmjs.com/trusted-publishers/) — no long-lived
    `NPM_TOKEN`.
 
-### FlintFire first-package sequence (3.0.0)
+### FlintFire first-package sequence (3.0.0) — completed 2026-08-23
 
-`flintfire` has never been published. Trusted Publishing (OIDC) cannot create a package, so the
-first tarball is a **manual** publish. Dist-tag must be explicit: a bare `npm publish` would claim
-`latest` with an RC.
+`flintfire@3.0.0` is on npm (`latest`). Trusted Publishing (OIDC) cannot **create** a package, so
+the first tarball was a **manual** publish. Dist-tag had to be explicit: a bare `npm publish` would
+have claimed `latest` with an RC. This sequence is the historical bootstrap, not a recurring
+procedure:
 
-1. **RC1 (manual, `--tag next`).** After the repo is renamed to `reggieofarrell/flintfire` and
-   Environment `npm` exists, from the RC1 commit: `npm publish --access public --tag next`. Never
-   omit `--tag next`.
-2. **Trusted Publisher.** Once `flintfire` exists on the registry:
+1. **RC1 (manual, `--tag next`).** After the repo was renamed to `reggieofarrell/flintfire` and
+   Environment `npm` existed, from the RC1 commit: `npm publish --access public --tag next`. Never
+   omit `--tag next` on a first-package RC.
+2. **Trusted Publisher.** Once `flintfire` existed on the registry:
    ```bash
    npm trust github \
      --repository reggieofarrell/flintfire \
@@ -143,10 +144,13 @@ first tarball is a **manual** publish. Dist-tag must be explicit: a bare `npm pu
    ```
    Use `--file`, not `--workflow` (T19). Fields: repository `reggieofarrell/flintfire`, workflow
    file `publish.yml`, Environment `npm`.
-3. **RC2 (OIDC proof).** GitHub prerelease `v3.0.0-rc.2` → `publish.yml` publishes `--tag next`
-   after Environment `npm` approval. Confirm provenance on the registry.
+3. **RC2 (OIDC proof).** GitHub prerelease `v3.0.0-rc.2` → `publish.yml` published `--tag next`
+   after Environment `npm` approval. Provenance confirmed on the registry.
 4. **Stable 3.0.0.** GitHub Release `v3.0.0` (not a prerelease) → `--tag latest`.
-5. After OIDC is proven: **Publishing access** → require 2FA and **disallow tokens**.
+5. After OIDC was proven: **Publishing access** → require 2FA and **disallow tokens**.
+
+Later FlintFire versions publish only through a GitHub Release + OIDC (`publish.yml`). Do not repeat
+the manual bootstrap unless creating an unrelated new package name.
 
 Recovery: if a workflow looks failed, `npm view flintfire versions --json` before retrying. npm
 versions are immutable; a successful publish that GitHub marked failed must not be retried. A bad RC
