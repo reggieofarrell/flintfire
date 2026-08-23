@@ -1,0 +1,26 @@
+---
+/**
+ * Starlight `Head` override that keeps the default tag list and then appends paired SVG favicons.
+ *
+ * Why override: Starlight's `favicon` option accepts only one path, so it cannot express a
+ * light/dark pair. We still set that option to `/favicon-light.svg` as the no-media fallback, then
+ * this component adds `prefers-color-scheme` links so browsers that honor media-qualified icons
+ * pick the matching asset. Delegating to the default Head first preserves title, canonical, OG,
+ * and other generated tags (replacing Head wholesale would drop them).
+ *
+ * Join with an explicit slash rather than assuming BASE_URL's trailing slash.
+ * Astro usually emits `/flintfire/`, but a missing slash would produce
+ * `/flintfirefavicon-light.svg` (404) while substring asset checks still pass.
+ */
+import Default from '@astrojs/starlight/components/Head.astro';
+
+const base = import.meta.env.BASE_URL.endsWith('/')
+  ? import.meta.env.BASE_URL
+  : `${import.meta.env.BASE_URL}/`;
+const lightHref = `${base}favicon-light.svg`;
+const darkHref = `${base}favicon-dark.svg`;
+---
+
+<Default {...Astro.props} />
+<link rel="icon" href={lightHref} type="image/svg+xml" media="(prefers-color-scheme: light)" />
+<link rel="icon" href={darkHref} type="image/svg+xml" media="(prefers-color-scheme: dark)" />

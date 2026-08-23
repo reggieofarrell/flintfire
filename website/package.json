@@ -1,13 +1,13 @@
 {
-  "name": "@reggieofarrell/firestore-orm-docs",
+  "name": "flintfire-docs",
   "type": "module",
   "version": "0.0.1",
   "private": true,
-  "description": "Starlight usage docs site for @reggieofarrell/firestore-orm (GitHub Pages).",
+  "description": "Starlight usage docs site for FlintFire (GitHub Pages).",
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "NODE_ENV=production astro build",
+    "build": "NODE_ENV=production astro build && node ../scripts/check-built-docs-assets.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },

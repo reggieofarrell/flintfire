@@ -5,7 +5,7 @@ description:
   the id overlay.'
 ---
 
-FirestoreORM supports custom **read** deserialization (e.g. `Timestamp -> number` / `Date`) through
+FlintFire supports custom **read** deserialization (e.g. `Timestamp -> number` / `Date`) through
 an optional **`readConverter`**. This page is the canonical reference for the converter contract —
 other guides link here rather than restating it.
 
@@ -20,12 +20,12 @@ never even expressible, let alone invoked.
 This removes a long-standing footgun: the Admin SDK already skipped `toFirestore` on `update()`, so
 relying on it was unreliable. For write-time normalization, use a `before*` hook (hooks run before
 validation on all write paths) — see
-[Lifecycle Hooks](/firestore-orm/guides/concepts/lifecycle-hooks/).
+[Lifecycle Hooks](/flintfire/guides/concepts/lifecycle-hooks/).
 
 ```typescript
 import { z } from 'zod';
 import { Timestamp } from 'firebase-admin/firestore';
-import { FirestoreRepository, ReadConverter } from '@reggieofarrell/firestore-orm';
+import { FirestoreRepository, ReadConverter } from 'flintfire';
 
 // Runs on every read: map the stored Timestamp back to a Date. Return data WITHOUT `id` — the
 // repository overlays the document id after the mapper returns.
@@ -58,13 +58,13 @@ Because the mapper receives only the stored document body, it must return data *
 field; the repository reads the snapshot's document id and overlays it onto the result afterward.
 This is why reads resolve to `FirestoreDocument<T>` (`Omit<T, 'id'> & { readonly id: ID }`) even
 though the mapper never sets `id` itself — see
-[Document Identity](/firestore-orm/guides/concepts/document-identity/). A raw snapshot from a
+[Document Identity](/flintfire/guides/concepts/document-identity/). A raw snapshot from a
 trigger cloud function is **not** converter-applied and has no `id`; use
-[`fromSnapshot`](/firestore-orm/guides/integrations/cloud-functions/) to reconstruct the read shape
+[`fromSnapshot`](/flintfire/guides/integrations/cloud-functions/) to reconstruct the read shape
 there.
 
 For the common `Timestamp -> number` case, the built-in
-[`createMillisTimestampConverter`](/firestore-orm/guides/concepts/timestamps/) returns exactly this
+[`createMillisTimestampConverter`](/flintfire/guides/concepts/timestamps/) returns exactly this
 mapper (recursive read conversion), ready to pass as `readConverter`.
 
 ## Converters are instance-local
@@ -74,7 +74,7 @@ Converter behavior is instance-local by design:
 - Parent repositories and subcollections do not share converters automatically.
 - Pass a converter explicitly via `subcollection(..., { readConverter })` for each subcollection
   that needs converter behavior — see
-  [Subcollections](/firestore-orm/guides/working-with-data/subcollections/).
+  [Subcollections](/flintfire/guides/working-with-data/subcollections/).
 
 ## Field masks and converters
 
@@ -101,5 +101,5 @@ this is documented rather than suppressed.
 
 Because a `readConverter` runs on every read, it is also the seam for coercing documents written
 under an older schema into the current shape — without a data migration. See
-[Schema Evolution](/firestore-orm/guides/designing/schema-evolution/) for that pattern. The
-`ReadConverter<T>` type is listed under [Exported Types](/firestore-orm/reference/types/).
+[Schema Evolution](/flintfire/guides/designing/schema-evolution/) for that pattern. The
+`ReadConverter<T>` type is listed under [Exported Types](/flintfire/reference/types/).

@@ -1,14 +1,18 @@
 ---
 title: Migrating from v2 to v3
 description:
-  Breaking changes and step-by-step migration from @reggieofarrell/firestore-orm 2.x to 3.x.
+  Breaking changes and step-by-step migration from @reggieofarrell/firestore-orm 2.x to flintfire 3.x.
 ---
 
-Upgrade guide for moving from `@reggieofarrell/firestore-orm` **2.x** to **3.x**.
+Upgrade guide for moving from `@reggieofarrell/firestore-orm` **2.x** to **flintfire 3.x**.
+
+v3 is published only as the unscoped package `flintfire`. There is no
+`@reggieofarrell/firestore-orm@3`. Change the package name and every import specifier first, then
+apply the API-level breaking changes below.
 
 This page covers only the v2 → v3 contract. If you are still on the older upstream package
 (`@spacelabstech/firestoreorm` / 1.x), migrate to 2.x first — see the project
-[CHANGELOG](https://github.com/reggieofarrell/firestore-orm/blob/main/CHANGELOG.md) entry for
+[CHANGELOG](https://github.com/reggieofarrell/flintfire/blob/main/CHANGELOG.md) entry for
 `2.0.0`.
 
 Use the version switcher in the docs header to compare against the archived **v2** docs while you
@@ -134,15 +138,15 @@ Outcome-sensitive failures (hook throw, partial fixed batch after prior success,
 `{ returnDoc: true }` read-back) now surface as `WriteOutcomeError` with a discriminated `outcome`
 and the original error as `cause`. Ordinary validation / conflict / precondition errors remain
 top-level when no write committed and no hook is the failed phase. See
-[Error Handling](/firestore-orm/reference/errors/) and
-[Lifecycle Hooks](/firestore-orm/guides/concepts/lifecycle-hooks/).
+[Error Handling](/flintfire/reference/errors/) and
+[Lifecycle Hooks](/flintfire/guides/concepts/lifecycle-hooks/).
 
 New type helpers `FieldPaths<T>` and `PathValue<T, P>` are exported from the package root.
 
 ### 5. `zod` peer floor raised to `^4.0.0`
 
 The `zod` peer range is now `^4.0.0` (was `^3.25.0 || ^4.0.0`). If you are still on zod 3, upgrade
-to zod 4 — see the [zod v4 migration guide](https://zod.dev/v4/changelog). No firestore-orm API
+to zod 4 — see the [zod v4 migration guide](https://zod.dev/v4/changelog). No FlintFire API
 changes accompany this bump; the validator internals now target the v4 schema shapes only.
 
 ### 6. `create` / `bulkCreate` / `createInTransaction` return `{ id }` by default
@@ -170,7 +174,7 @@ sentinels a field's schema permits pass (declare them with the write combinators
 `zArrayWrite` / `zDateWrite` / `withDelete` / `zSentinel`), and the parsed Zod output is always
 returned. Pass `{ sentinelPolicy: 'permissive' }` to `withSchema`/`subcollection` to keep the old
 behavior as a migration shim. See
-[Field-value sentinels](/firestore-orm/guides/concepts/field-value-sentinels/).
+[Field-value sentinels](/flintfire/guides/concepts/field-value-sentinels/).
 
 ### 8. `FieldValue.delete()` is rejected on create / set / upsert
 
@@ -190,16 +194,16 @@ or `patch()` to clear a field. The other sentinels (`increment`, `arrayUnion`, `
   `0`. `sum(field)` still returns `number` (`0` on no match).
 - **`aggregate(spec)`** is new in 3.0.0: multiple aliased `count` / `sum` / `average` values in one
   round trip (typed aliases; backend max 5). See
-  [Aggregations](/firestore-orm/guides/working-with-data/queries/#aggregations).
+  [Aggregations](/flintfire/guides/working-with-data/queries/#aggregations).
 - **`explain(options?)`** is new in 3.0.0 for Core and vector queries (after `findNearest`): returns
   `{ metrics, documents }` (`documents` is `null` plan-only, `[]` when analyzed empty). The
   emulator throws `No explain results` — real metrics need production Firestore. See
-  [Query Explain](/firestore-orm/guides/working-with-data/queries/#query-explain).
+  [Query Explain](/flintfire/guides/working-with-data/queries/#query-explain).
 - **`explainStream(options?)`** is new in 3.0.0 for **Core** queries only (collection +
   collection-group): streams mapped document chunks and optional metrics. No vector equivalent.
   Locally rejects `limitToLast` (use `explain()`). The emulator streams documents without metrics —
   do not treat that as production diagnostics. See
-  [Query Explain](/firestore-orm/guides/working-with-data/queries/#query-explain).
+  [Query Explain](/flintfire/guides/working-with-data/queries/#query-explain).
 - `distinctValues(field)` now drops only `undefined` and preserves a stored `null` as a distinct
   value, and dedupes structured/reference values by Firestore-aware semantic equality (maps/arrays
   structural, key order irrelevant; `Timestamp`/`GeoPoint`/`DocumentReference`/`Bytes`/`VectorValue`
@@ -213,10 +217,10 @@ the write and reported success — so a missing document looked "updated". `upda
 `ValidationError` for an empty patch. Provide at least one field, or use `delete()` to remove a
 document. (A mixed payload still filters `undefined` leaves and writes the rest.)
 
-### 11. `errorHandler` moved to the `firestore-orm/express` subpath
+### 11. `errorHandler` moved to the `flintfire/express` subpath
 
 The Express middleware is no longer exported from the package root; import it from the optional
-`@reggieofarrell/firestore-orm/express` subpath and install `express` (now an optional peer). This
+`flintfire/express` subpath and install `express` (now an optional peer). This
 keeps `express` out of the core type graph so consumers who never use the adapter can type-check
 without `@types/express`. The `FirestoreIndexError` response is now `503` (was `404`), and its body
 **no longer includes the Firestore index-console URL** — that URL can disclose project/database and
@@ -225,7 +229,7 @@ index structure, so it is kept server-side on the caught error's `indexUrl` for 
 ```typescript
 // v2: import { errorHandler } from '@reggieofarrell/firestore-orm';
 // v3:
-import { errorHandler } from '@reggieofarrell/firestore-orm/express';
+import { errorHandler } from 'flintfire/express';
 ```
 
 ### 12. Node 22+ and Firebase Admin 14
@@ -246,7 +250,7 @@ Migrate `.query().findNearest(…)` to `.vectorQuery().findNearest(…)`. The ob
 requires `@google-cloud/firestore >= 7.10` (guaranteed by `firebase-admin >= 13`), and
 `vectorEmbeddingSchema` now enforces finite / exact / maximum dimensions on native
 `FieldValue.vector()` values too. See
-[Vector search](/firestore-orm/guides/advanced/vector-search/).
+[Vector search](/flintfire/guides/advanced/vector-search/).
 
 ### 14. Type-only tightening (projection, aggregation)
 
@@ -274,7 +278,7 @@ rename as
 
 v3 also adds transaction options (`runInTransaction(fn, options?)` with `maxAttempts` /
 `{ readOnly: true, readTime? }`) and `runReadOnlyAt(readTime, fn)`. See
-[Transactions](/firestore-orm/guides/working-with-data/transactions/).
+[Transactions](/flintfire/guides/working-with-data/transactions/).
 
 Smaller hardening you are unlikely to hit: pagination inputs must be positive finite integers, bulk
 operations reject duplicate ids, cursors are bound to their collection, and vector validation
@@ -297,8 +301,8 @@ If your application caught a raw Firestore `Error` and inspected `.code` after a
 operation (not only the new conditional-write surfaces), switch those branches to
 `instanceof ConflictError` / `instanceof PreconditionFailedError`. The new create-only /
 `lastUpdateTime` APIs (`createWithId`, `getByIdWithUpdateTime`, …) are additive — see
-[Conditional writes](/firestore-orm/guides/working-with-data/crud-operations/#conditional-writes)
-and [Errors](/firestore-orm/reference/errors/).
+[Conditional writes](/flintfire/guides/working-with-data/crud-operations/#conditional-writes)
+and [Errors](/flintfire/reference/errors/).
 
 ### Behavior fix: Zod defaults are no longer injected on a partial `update()`
 
@@ -311,7 +315,7 @@ In v2, a partial `update()` on a schema-validated repository re-applied every fi
 **overwrote the stored `prefs` map** — data loss for a field the caller never touched. (This bit any
 field with a default, and is especially easy to hit with the read-side `.default(...)` backfill
 pattern recommended in
-[Core Concepts](/firestore-orm/guides/designing/schema-evolution/#normalizing-across-schema-changes).)
+[Core Concepts](/flintfire/guides/designing/schema-evolution/#normalizing-across-schema-changes).)
 
 In v3, a partial update writes only the keys you actually provide, at every nesting level;
 `update(id, { config: {} })` writes `{}` rather than re-injecting a nested `count` default. Defaults
@@ -350,6 +354,47 @@ A few smaller behavior changes you are unlikely to hit unless you use these patt
   appears in the result type.
 
 ## Migration steps
+
+### Rename the package and import specifiers
+
+v3 does not publish under the old scoped name. Uninstall 2.x, install FlintFire, then change every
+package import **before** addressing API-level breaking changes. Do not write `./vector` or
+`./express` — those are `package.json` `"exports"` keys, not consumer specifiers (T18).
+
+```bash
+npm uninstall @reggieofarrell/firestore-orm
+npm install flintfire@^3 firebase-admin zod
+```
+
+```bash
+yarn remove @reggieofarrell/firestore-orm
+yarn add flintfire@^3 firebase-admin zod
+```
+
+```bash
+pnpm remove @reggieofarrell/firestore-orm
+pnpm add flintfire@^3 firebase-admin zod
+```
+
+Then update import specifiers:
+
+| v2 | v3 |
+| -- | -- |
+| `@reggieofarrell/firestore-orm` | `flintfire` |
+| `@reggieofarrell/firestore-orm/vector` | `flintfire/vector` |
+| `@reggieofarrell/firestore-orm/express` | `flintfire/express` |
+
+```typescript
+// v2
+import { FirestoreRepository } from '@reggieofarrell/firestore-orm';
+import { withVectorSearch } from '@reggieofarrell/firestore-orm/vector';
+import { errorHandler } from '@reggieofarrell/firestore-orm/express';
+
+// v3
+import { FirestoreRepository } from 'flintfire';
+import { withVectorSearch } from 'flintfire/vector';
+import { errorHandler } from 'flintfire/express';
+```
 
 ### Drop curry and explicit `<T>` on factories
 
@@ -411,7 +456,7 @@ FirestoreRepository.withSchema<User>(db, 'users', userSchema, undefined, {
 **After (v3):**
 
 ```typescript
-import type { ReadConverter } from '@reggieofarrell/firestore-orm';
+import type { ReadConverter } from 'flintfire';
 
 const userReadConverter: ReadConverter<User> = snap => ({ ...snap.data() }) as User;
 
@@ -463,7 +508,7 @@ userRepo.on('beforeUpdate', async data => {
 ```
 
 `createMillisTimestampConverter()` is still a drop-in for `readConverter` — only its return type
-narrowed. See [Timestamps ↔ Millis](/firestore-orm/guides/concepts/timestamps/).
+narrowed. See [Timestamps ↔ Millis](/flintfire/guides/concepts/timestamps/).
 
 ### Fix untyped subcollections
 
@@ -505,8 +550,8 @@ const user = repo.validate(mapped); // ValidationError on mismatch
 const results = repo.safeValidate(docs); // SafeResult<T>[] — filter failures
 ```
 
-Details: [Schema Validation](/firestore-orm/guides/concepts/schema-validation/) and
-[Firestore Triggers](/firestore-orm/guides/integrations/cloud-functions/).
+Details: [Schema Validation](/flintfire/guides/concepts/schema-validation/) and
+[Firestore Triggers](/flintfire/guides/integrations/cloud-functions/).
 
 ## Checklist
 
@@ -545,16 +590,16 @@ Details: [Schema Validation](/firestore-orm/guides/concepts/schema-validation/) 
 
 ## Further reading
 
-- [Core Concepts](/firestore-orm/guides/concepts/core-concepts/) — `readConverter`, repository
+- [Core Concepts](/flintfire/guides/concepts/core-concepts/) — `readConverter`, repository
   construction
-- [Schema Validation](/firestore-orm/guides/concepts/schema-validation/) — `writeSchema`, `validate`
+- [Schema Validation](/flintfire/guides/concepts/schema-validation/) — `writeSchema`, `validate`
   / `safeValidate`
-- [Lifecycle Hooks](/firestore-orm/guides/concepts/lifecycle-hooks/) — write-time transforms
-- [Subcollections](/firestore-orm/guides/working-with-data/subcollections/)
+- [Lifecycle Hooks](/flintfire/guides/concepts/lifecycle-hooks/) — write-time transforms
+- [Subcollections](/flintfire/guides/working-with-data/subcollections/)
 - Design records (in-repo):
-  [ADR-0007](https://github.com/reggieofarrell/firestore-orm/blob/main/docs/adr/0007-retire-curried-schema-factories.md)
+  [ADR-0007](https://github.com/reggieofarrell/flintfire/blob/main/docs/adr/0007-retire-curried-schema-factories.md)
   (factories),
-  [ADR-0008](https://github.com/reggieofarrell/firestore-orm/blob/main/docs/adr/0008-read-only-converters.md)
+  [ADR-0008](https://github.com/reggieofarrell/flintfire/blob/main/docs/adr/0008-read-only-converters.md)
   (read-only converters),
-  [ADR-0009](https://github.com/reggieofarrell/firestore-orm/blob/main/docs/adr/0009-explicit-read-validators.md)
+  [ADR-0009](https://github.com/reggieofarrell/flintfire/blob/main/docs/adr/0009-explicit-read-validators.md)
   (explicit validators)

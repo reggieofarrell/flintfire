@@ -4,7 +4,7 @@ description: Create or update an Architecture Decision Record (ADR) in docs/adr/
 targets:
   - '*'
 ---
-# Architecture Decision Records (firestore-orm)
+# Architecture Decision Records (FlintFire)
 
 Capture the _why_ behind a significant decision — the context that forced it and its consequences —
 in a durable, reviewable record. Commit messages and the `CHANGELOG` list _what_ changed; ADRs

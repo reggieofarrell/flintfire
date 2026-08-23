@@ -5,7 +5,7 @@ targets:
   - '*'
 ---
 
-# Plan Execution (firestore-orm)
+# Plan Execution (FlintFire)
 
 You have been handed a plan under `docs/plans/issue-NN-<slug>/`. It is a **contract**, and it was
 written from executed evidence — treat it as authoritative over the issue body it came from.

@@ -124,17 +124,34 @@ The publish workflow then:
    [Trusted Publishing (OIDC)](https://docs.npmjs.com/trusted-publishers/) — no long-lived
    `NPM_TOKEN`.
 
-### First-time npm setup
+### FlintFire first-package sequence (3.0.0)
 
-Trusted Publishing only works after the package exists on the registry. Bootstrap once:
+`flintfire` has never been published. Trusted Publishing (OIDC) cannot create a package, so the
+first tarball is a **manual** publish. Dist-tag must be explicit: a bare `npm publish` would claim
+`latest` with an RC.
 
-1. Publish the first version manually (`npm login` then `npm publish --access public`), **or** use a
-   one-time granular token and revoke it afterward.
-2. On npmjs.com → package **Settings → Trusted Publisher**, choose GitHub Actions and set:
-   - Organization or user / repository: `reggieofarrell` / `firestore-orm`
-   - Workflow filename: `publish.yml` (must match exactly)
-   - Allowed action: `npm publish`
-3. After a successful OIDC publish: **Publishing access** → require 2FA and **disallow tokens**.
+1. **RC1 (manual, `--tag next`).** After the repo is renamed to `reggieofarrell/flintfire` and
+   Environment `npm` exists, from the RC1 commit: `npm publish --access public --tag next`. Never
+   omit `--tag next`.
+2. **Trusted Publisher.** Once `flintfire` exists on the registry:
+   ```bash
+   npm trust github \
+     --repository reggieofarrell/flintfire \
+     --file publish.yml \
+     --environment npm \
+     --allow-publish
+   ```
+   Use `--file`, not `--workflow` (T19). Fields: repository `reggieofarrell/flintfire`, workflow
+   file `publish.yml`, Environment `npm`.
+3. **RC2 (OIDC proof).** GitHub prerelease `v3.0.0-rc.2` → `publish.yml` publishes `--tag next`
+   after Environment `npm` approval. Confirm provenance on the registry.
+4. **Stable 3.0.0.** GitHub Release `v3.0.0` (not a prerelease) → `--tag latest`.
+5. After OIDC is proven: **Publishing access** → require 2FA and **disallow tokens**.
+
+Recovery: if a workflow looks failed, `npm view flintfire versions --json` before retrying. npm
+versions are immutable; a successful publish that GitHub marked failed must not be retried. A bad RC
+advances to the next RC number. A bad stable is a later patch and/or deprecation, never an overwrite
+of `3.0.0`.
 
 ## Dual README (GitHub vs npm)
 
@@ -190,9 +207,11 @@ After that, every `npm run release:bump` diffs from the most recent `vx.y.z` tag
 
 ## Configuration
 
-- [`.versionrc.json`](../../.versionrc.json) — changelog section mapping, commit/compare URL
-  formats, and the `postchangelog` Prettier hook.
+- [`.versionrc.cjs`](../../.versionrc.cjs) — changelog section mapping, FlintFire commit/compare URL
+  formats, the wrapping conventionalcommits preset (P14 note normalization), and the `postchangelog`
+  Prettier hook.
 - [`commitlint.config.js`](../../commitlint.config.js) — extends `@commitlint/config-conventional`.
 - [`.husky/commit-msg`](../../.husky/commit-msg) — runs commitlint on each commit message.
 - [`.github/workflows/publish.yml`](../../.github/workflows/publish.yml) — release-triggered npm
-  publish with coverage gates and OIDC Trusted Publishing.
+  publish: GitHub prereleases → npm tag `next`, stable releases → `latest`, Environment `npm`,
+  coverage gates, and OIDC Trusted Publishing.

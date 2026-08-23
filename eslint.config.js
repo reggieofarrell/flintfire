@@ -23,6 +23,13 @@ export default [
       '**/*.spec.ts',
       '**/benchmarks/**',
       'scripts/**',
+      // Root CJS changelog config: same Node `module`/`require` globals as scripts/**
+      // (ignored above). ESLint's default env is ESM/browser and flags those as undef.
+      '.versionrc.cjs',
+      // Astro/Starlight UI: no Astro parser is wired into this ESLint config, so the
+      // default JS parser dies on frontmatter. Component correctness is checked by
+      // `astro check` / the docs build, not eslint.
+      '**/*.astro',
       // Scratch notes/plans/probes/reviews (gitignored) — must not fail lint the way a
       // relative-looking link in tmp/ used to fail check:docs (issue #34 review O2).
       'tmp/**',

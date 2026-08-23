@@ -1,14 +1,14 @@
 ---
 title: 'NestJS'
 description:
-  'Integrate FirestoreORM into a NestJS module/service/controller stack with a shared Zod schema,
+  'Integrate FlintFire into a NestJS module/service/controller stack with a shared Zod schema,
   DI, and an exception filter.'
 ---
 
 Integrate the repository into a NestJS module/service/controller stack, letting a single Zod schema
 drive both the DTOs and the repository's runtime validation. For the Express integration, see
-[Express](/firestore-orm/guides/integrations/express/); for the error classes, see
-[Error Handling](/firestore-orm/reference/errors/).
+[Express](/flintfire/guides/integrations/express/); for the error classes, see
+[Error Handling](/flintfire/reference/errors/).
 
 NestJS users often work with DTOs for request validation. Here's how to integrate with the ORM's Zod
 schemas so a single schema drives both the DTOs and the repository's runtime validation.
@@ -16,7 +16,7 @@ schemas so a single schema drives both the DTOs and the repository's runtime val
 ## Shared schema strategy
 
 Define one Zod schema — which must **not** declare a top-level `id` (the document name is the sole
-source of `id`, see [Document Identity](/firestore-orm/guides/concepts/document-identity/)) — then
+source of `id`, see [Document Identity](/flintfire/guides/concepts/document-identity/)) — then
 derive the create/update DTOs from it with `.omit()` and `.partial()`:
 
 ```typescript
@@ -79,7 +79,7 @@ validates every write against the schema) and register any lifecycle hooks in th
 // modules/user/user.repository.ts
 import { Injectable, Inject } from '@nestjs/common';
 import { Firestore } from 'firebase-admin/firestore';
-import { FirestoreRepository } from '@reggieofarrell/firestore-orm';
+import { FirestoreRepository } from 'flintfire';
 import { User, userSchema } from '../../schemas/user.schema';
 
 @Injectable()
@@ -136,7 +136,7 @@ export class UserRepository {
 ```
 
 The `afterCreate` hook receives the freshly created document (including its generated `id`). See
-[Lifecycle hooks](/firestore-orm/guides/concepts/lifecycle-hooks/) for the full event list and
+[Lifecycle hooks](/flintfire/guides/concepts/lifecycle-hooks/) for the full event list and
 payload shapes.
 
 ## Service layer
@@ -149,7 +149,7 @@ framework-native behavior:
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { UserRepository } from './user.repository';
 import { CreateUserDto, UpdateUserDto } from '../../schemas/user.schema';
-import { NotFoundError } from '@reggieofarrell/firestore-orm';
+import { NotFoundError } from 'flintfire';
 
 @Injectable()
 export class UserService {
@@ -277,7 +277,7 @@ import {
   NotFoundError,
   ConflictError,
   PreconditionFailedError,
-} from '@reggieofarrell/firestore-orm';
+} from 'flintfire';
 
 @Catch(ValidationError, NotFoundError, ConflictError, PreconditionFailedError)
 export class FirestoreExceptionFilter implements ExceptionFilter {
@@ -334,11 +334,11 @@ bootstrap();
 
 ## See also
 
-- [Express](/firestore-orm/guides/integrations/express/) — thin route handlers and the
+- [Express](/flintfire/guides/integrations/express/) — thin route handlers and the
   `errorHandler` middleware
-- [Error Handling](/firestore-orm/reference/errors/) — the error classes and `parseFirestoreError`
-- [Schema Validation](/firestore-orm/guides/concepts/schema-validation/) — deriving DTOs and the
+- [Error Handling](/flintfire/reference/errors/) — the error classes and `parseFirestoreError`
+- [Schema Validation](/flintfire/guides/concepts/schema-validation/) — deriving DTOs and the
   no-top-level-`id` rule
-- [Lifecycle hooks](/firestore-orm/guides/concepts/lifecycle-hooks/) — the `afterCreate` and related
+- [Lifecycle hooks](/flintfire/guides/concepts/lifecycle-hooks/) — the `afterCreate` and related
   events
-- [Queries](/firestore-orm/guides/working-with-data/queries/) — pagination and the query builder
+- [Queries](/flintfire/guides/working-with-data/queries/) — pagination and the query builder

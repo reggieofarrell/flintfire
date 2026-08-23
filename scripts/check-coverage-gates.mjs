@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* eslint-env node */
 /**
- * Enforce dual coverage gates tailored to firestore-orm's test pyramid.
+ * Enforce dual coverage gates tailored to FlintFire's test pyramid.
  *
  * Unit and integration suites are complementary — merging LCOV inflates confidence
  * because a line hit in either suite counts as covered. Instead:

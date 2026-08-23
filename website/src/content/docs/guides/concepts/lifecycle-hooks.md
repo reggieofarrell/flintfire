@@ -42,13 +42,13 @@ One-argument callbacks remain source-compatible (TypeScript allows fewer paramet
   effects by a business / write identity stored atomically with the data — not by `attempt`.
 - `after*` hooks are **postcommit**, in-process, and **not durable** across process crash. Prefer
   idempotent side effects, or a durable outbox when available (tracked separately as
-  [#80](https://github.com/reggieofarrell/firestore-orm/issues/80)).
+  [#80](https://github.com/reggieofarrell/flintfire/issues/80)).
 
 When an outcome-sensitive failure occurs (before-hook, after-hook, partial fixed batch, or
 postcommit `{ returnDoc: true }` read-back), the repository throws `WriteOutcomeError` with a
 discriminated `outcome` and the original failure as `cause`. Ordinary validation / conflict /
 precondition errors remain top-level when no write committed and no hook is the failed phase. See
-[Error Handling](/firestore-orm/reference/errors/).
+[Error Handling](/flintfire/reference/errors/).
 
 ## Hook execution order
 
@@ -60,7 +60,7 @@ precondition errors remain top-level when no write committed and no hook is the 
 
 Because `before*` runs before validation, it is the correct place to fill in defaults, coerce
 values, or reject a write early. See
-[CRUD operations](/firestore-orm/guides/working-with-data/crud-operations/) for the write methods
+[CRUD operations](/flintfire/guides/working-with-data/crud-operations/) for the write methods
 these hooks wrap.
 
 ## Available hooks
@@ -167,7 +167,7 @@ bulk-delete hooks receive `{ ids, documents }`. The per-document `before/afterUp
 when you need those. Separately, `bulkWrite`, `recursiveDelete`, and `recursiveDeleteCollection` run
 **no** hooks at all (see
 [above](#operations-that-run-no-hooks)). See
-[Queries](/firestore-orm/guides/working-with-data/queries/).
+[Queries](/flintfire/guides/working-with-data/queries/).
 
 ## When hooks do not run
 
@@ -179,4 +179,4 @@ standard flow:
   `patchInTransaction`, `deleteInTransaction`) **do** run their `before*` hooks (before validation
   and the staged write). Their `after*` hooks do **not** run — the transaction has not committed
   while the callback executes, so post-commit side effects belong after `runInTransaction` resolves.
-  See [Transactions](/firestore-orm/guides/working-with-data/transactions/).
+  See [Transactions](/flintfire/guides/working-with-data/transactions/).

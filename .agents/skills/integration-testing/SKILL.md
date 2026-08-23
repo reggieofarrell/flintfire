@@ -1,12 +1,12 @@
 ---
 name: integration-testing
 description: >-
-  Write Jest integration tests against the Firestore emulator for firestore-orm
+  Write Jest integration tests against the Firestore emulator for FlintFire
   repository and query builder behavior. Use for CRUD, hooks, transactions,
   sentinels, pagination, and subcollections. NOT for pure utils — see
   unit-testing skill.
 ---
-# Integration Testing (firestore-orm)
+# Integration Testing (FlintFire)
 
 ## Scope
 

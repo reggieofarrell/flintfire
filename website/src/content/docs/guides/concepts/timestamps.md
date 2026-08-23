@@ -17,7 +17,7 @@ import {
   FirestoreRepository,
   zDateWrite,
   createMillisTimestampConverter,
-} from '@reggieofarrell/firestore-orm';
+} from 'flintfire';
 import { z } from 'zod';
 
 // Base schema = the read shape. `happenedAt` reads as an ms number. This is zod-only, so its
@@ -87,7 +87,7 @@ Notes:
   type (`happenedAt: number`), so `zDateWrite()` only widens _runtime_ validation — a `FieldValue`
   such as `serverTimestamp()` is still accepted without a cast (`WithFieldValue` widens every field
   to `| FieldValue`), but a `Date` needs one. See
-  [Per-Field Sentinel Approval](/firestore-orm/guides/concepts/field-value-sentinels/) for the full
+  [Per-Field Sentinel Approval](/flintfire/guides/concepts/field-value-sentinels/) for the full
   contract.
 
 ## Converter helpers
@@ -120,7 +120,7 @@ It is equivalent to hand-writing the read mapper you pass as `readConverter`:
 
 ```typescript
 import { Timestamp } from 'firebase-admin/firestore';
-import { ReadConverter } from '@reggieofarrell/firestore-orm';
+import { ReadConverter } from 'flintfire';
 
 const eventReadConverter: ReadConverter<EventDoc> = snap => {
   const data = snap.data();

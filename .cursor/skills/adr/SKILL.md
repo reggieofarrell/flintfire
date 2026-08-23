@@ -1,14 +1,8 @@
 ---
 name: adr
-description:
-  Create or update an Architecture Decision Record (ADR) in docs/adr/ for this repo. Use when the
-  user asks to record/write/add an ADR or an architecture decision, or when a change makes a
-  significant architectural or contract-level decision (public API/return-contract changes, write or
-  validation semantics, dependency/runtime floors, removing a subsystem, a new opt-in module). NOT
-  for routine bug fixes, refactors, docs, or test-only changes.
+description: Create or update an Architecture Decision Record (ADR) in docs/adr/ for this repo. Use when the user asks to record/write/add an ADR or an architecture decision, or when a change makes a significant architectural or contract-level decision (public API/return-contract changes, write or validation semantics, dependency/runtime floors, removing a subsystem, a new opt-in module). NOT for routine bug fixes, refactors, docs, or test-only changes.
 ---
-
-# Architecture Decision Records (firestore-orm)
+# Architecture Decision Records (FlintFire)
 
 Capture the _why_ behind a significant decision — the context that forced it and its consequences —
 in a durable, reviewable record. Commit messages and the `CHANGELOG` list _what_ changed; ADRs

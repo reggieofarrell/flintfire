@@ -13,13 +13,13 @@ things make a bare `snapshot.data() as User` cast unsafe:
 1. **The converter is not applied.** The Admin SDK only runs a `FirestoreDataConverter`'s
    `fromFirestore` for references built with `withConverter(...)`. A trigger snapshot is not one of
    those, so converter-transformed fields are still their raw stored type — e.g. a field that
-   [`createMillisTimestampConverter`](/firestore-orm/guides/concepts/timestamps/) exposes as a
+   [`createMillisTimestampConverter`](/flintfire/guides/concepts/timestamps/) exposes as a
    `number` is still a Firestore `Timestamp` on the trigger snapshot.
 2. **There is no `id`.** `snapshot.data()` never contains the document id; it lives on
    `snapshot.id`.
 
 A cast silently mislabels both. See
-[Core Concepts → Firestore Converters](/firestore-orm/guides/concepts/read-converters/) for the
+[Core Concepts → Firestore Converters](/flintfire/guides/concepts/read-converters/) for the
 underlying read semantics.
 
 ## `repo.fromSnapshot(snapshot)`
@@ -84,4 +84,4 @@ if (!result.success) {
 
 Both methods require a schema-configured repository (`withSchema`). Failures are normalized to
 `ValidationError` — the same type write paths throw. See
-[Schema Validation](/firestore-orm/guides/concepts/schema-validation/).
+[Schema Validation](/flintfire/guides/concepts/schema-validation/).

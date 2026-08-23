@@ -7,15 +7,15 @@ root: true
 targets:
   - agentsmd
   - codexcli
-description: firestore-orm project overview, working mode, project rules, and environment/tooling notes
+description: FlintFire project overview, working mode, project rules, and environment/tooling notes
 ---
 
-# firestore-orm — project instructions
+# FlintFire — project instructions
 
 Canonical, always-loaded project memory. Authored once in `.rulesync/rules/overview.md` and
 generated to the root `AGENTS.md`, which Cursor and Codex read natively. **Claude Code does not read
 `AGENTS.md`**, so `CLAUDE.md` is a symlink to `AGENTS.md` at the repo root — one content file, read by
-every tool. `@reggieofarrell/firestore-orm` is a **TypeScript library** (published to npm) — a
+every tool. `flintfire` is a **TypeScript library** (published to npm) — a
 type-safe Firestore ORM for the Firebase Admin SDK. There is no long-running application server;
 "running it" means building the library and exercising it against the local **Firestore emulator**.
 See also `README.md` and `docs/development/testing.md`.

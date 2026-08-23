@@ -1,8 +1,8 @@
 # Transactional outbox design
 
 Status: **Draft for future implementation**  
-Tracking issue: [#80](https://github.com/reggieofarrell/firestore-orm/issues/80)  
-Related issue: [#46](https://github.com/reggieofarrell/firestore-orm/issues/46)
+Tracking issue: [#80](https://github.com/reggieofarrell/flintfire/issues/80)  
+Related issue: [#46](https://github.com/reggieofarrell/flintfire/issues/46)
 
 ## Summary
 
@@ -11,9 +11,9 @@ Instead of calling an external system directly from an `after*` hook, an applica
 stores a serializable event alongside its domain write. A separate worker later delivers that event
 and records the result.
 
-The proposed feature is an opt-in `@reggieofarrell/firestore-orm/outbox` module. Its first version
-should expose an explicit transaction enqueue primitive and a lease-based worker. It should not
-automatically replace lifecycle hooks or claim exactly-once delivery.
+The proposed feature is an opt-in `flintfire/outbox` module. Its first version should expose an
+explicit transaction enqueue primitive and a lease-based worker. It should not automatically replace
+lifecycle hooks or claim exactly-once delivery.
 
 The central invariant is:
 
@@ -142,7 +142,7 @@ outbox records before commit; they are not delayed execution of `after*` hook fu
 Publish the feature from an optional subpath:
 
 ```ts
-import { createFirestoreOutbox, defineOutboxEvents } from '@reggieofarrell/firestore-orm/outbox';
+import { createFirestoreOutbox, defineOutboxEvents } from 'flintfire/outbox';
 ```
 
 Keeping it outside the root entry point makes the additional operational concepts opt-in and allows

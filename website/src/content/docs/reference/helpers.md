@@ -7,15 +7,15 @@ description:
 
 The package root exports the runtime helpers the ORM uses internally so you can reuse them in your
 own code. They fall into three families. For the narrative guides that use them, see
-[Per-Field Sentinel Approval](/firestore-orm/guides/concepts/field-value-sentinels/),
-[Timestamps ↔ Millis](/firestore-orm/guides/concepts/timestamps/), and
-[Dot Notation](/firestore-orm/guides/working-with-data/dot-notation/).
+[Per-Field Sentinel Approval](/flintfire/guides/concepts/field-value-sentinels/),
+[Timestamps ↔ Millis](/flintfire/guides/concepts/timestamps/), and
+[Dot Notation](/flintfire/guides/working-with-data/dot-notation/).
 
 ## Validation combinators
 
 Per-field **write combinators** let each field accept only its declared type or an explicitly
 approved `FieldValue` sentinel. Build a `writeSchema` overlay from them — see
-[Per-Field Sentinel Approval](/firestore-orm/guides/concepts/field-value-sentinels/).
+[Per-Field Sentinel Approval](/flintfire/guides/concepts/field-value-sentinels/).
 
 | Combinator            | Field accepts                                                 |
 | --------------------- | ------------------------------------------------------------- |
@@ -54,7 +54,7 @@ Recursively collect every object path at which a `FieldValue` sentinel appears i
 ## Timestamp utilities
 
 Store Firestore `Timestamp`s on write and read them as milliseconds-since-epoch `number`s. See
-[Timestamps ↔ Millis](/firestore-orm/guides/concepts/timestamps/).
+[Timestamps ↔ Millis](/flintfire/guides/concepts/timestamps/).
 
 | Export                                       | Purpose                                                                             |
 | -------------------------------------------- | ----------------------------------------------------------------------------------- |
@@ -70,7 +70,7 @@ Store Firestore `Timestamp`s on write and read them as milliseconds-since-epoch 
 ## Dot-notation utilities
 
 Build and inspect dot-notation payloads. See
-[Dot Notation](/firestore-orm/guides/working-with-data/dot-notation/).
+[Dot Notation](/flintfire/guides/working-with-data/dot-notation/).
 
 ```typescript
 import {
@@ -82,7 +82,7 @@ import {
   validateDotNotationPath,
   getRootFields,
   getDotNotationDepth,
-} from '@reggieofarrell/firestore-orm';
+} from 'flintfire';
 ```
 
 | Utility                                     | Signature                                                                              | Behavior                                                                                                                                          |

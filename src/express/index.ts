@@ -15,7 +15,7 @@ import {
  * FirestoreIndexError (503), ConflictError (409), PreconditionFailedError (412),
  * WriteOutcomeError (500 with safe outcome metadata), and generic errors (500).
  *
- * Imported from the optional `@reggieofarrell/firestore-orm/express` subpath so `express` stays out
+ * Imported from the optional `flintfire/express` subpath so `express` stays out
  * of the core package's type graph. `express` is declared as an optional peer dependency — install
  * it only if you use this adapter.
  *
@@ -26,7 +26,7 @@ import {
  *
  * @example
  * // Register as global error handler in Express
- * import { errorHandler } from '@reggieofarrell/firestore-orm/express';
+ * import { errorHandler } from 'flintfire/express';
  *
  * app.use(errorHandler);
  *

@@ -5,7 +5,7 @@ description:
   set.'
 ---
 
-FirestoreORM exposes real-time surfaces at two levels: `listenOne` / `listenOneDetailed` for a single
+FlintFire exposes real-time surfaces at two levels: `listenOne` / `listenOneDetailed` for a single
 document, and the query builder's `onSnapshot` / `onSnapshotDetailed` for a live result set. Simple
 listeners deliver fully-typed `FirestoreDocument<T>` arrays or values; detailed listeners add mapped
 `docChanges()` semantics and snapshot provenance.
@@ -56,7 +56,7 @@ const unsubscribe = userRepo.listenOneDetailed(
 );
 ```
 
-See [FirestoreRepository](/firestore-orm/reference/repository/) for signatures.
+See [FirestoreRepository](/flintfire/reference/repository/) for signatures.
 
 ## Listen to a query
 
@@ -124,11 +124,11 @@ read time, not a deletion timestamp — Firestore does not report one.
 `onSnapshotDetailed()` **cannot** be combined with `select()`: Firestore does not allow a real-time
 listener on a field-masked query, so the builder throws locally with a clear error. Listen without
 `select()` and project inside your callback, or use `get()` / `stream()` for a one-time projected
-read. See [Queries](/firestore-orm/guides/working-with-data/queries/) for the full builder.
+read. See [Queries](/flintfire/guides/working-with-data/queries/) for the full builder.
 
 ## Cost
 
 Real-time listeners charge you for every document that matches your query on the initial snapshot,
 plus additional reads each time a matching document changes. Use narrow filters, and consider
 polling for less critical data — see
-[Performance & Cost](/firestore-orm/guides/designing/performance/).
+[Performance & Cost](/flintfire/guides/designing/performance/).

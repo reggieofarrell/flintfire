@@ -166,7 +166,7 @@ jobs:
 
   # Compiles AND runtime-loads a fresh ESM + CJS + /express consumer against the packed tarball, once
   # per DECLARED firebase-admin peer major — so the ^12 || ^13 || ^14 range is tested honestly rather
-  # than only against the dev version. check:consumer reads FIRESTORE_ORM_ADMIN_VERSION.
+  # than only against the dev version. check:consumer reads FLINTFIRE_ADMIN_VERSION.
   admin-compat:
     name: Consumer (firebase-admin ${{ matrix.admin }})
     runs-on: ubuntu-latest
@@ -189,7 +189,7 @@ jobs:
         run: npm run build
       - name: Isolated packed-consumer compile + runtime load
         env:
-          FIRESTORE_ORM_ADMIN_VERSION: ${{ matrix.admin }}
+          FLINTFIRE_ADMIN_VERSION: ${{ matrix.admin }}
         run: npm run check:consumer
 
   # Vector object-form FLOOR guard (B3): the library issues the object-form findNearest(), which needs
@@ -221,8 +221,8 @@ jobs:
         run: npm run build
       - name: Packed-consumer compile/load + object-form findNearest probe
         env:
-          FIRESTORE_ORM_ADMIN_VERSION: '^12.0.0'
-          FIRESTORE_ORM_FIRESTORE_VERSION: ${{ matrix.firestore }}
+          FLINTFIRE_ADMIN_VERSION: '^12.0.0'
+          FLINTFIRE_FIRESTORE_VERSION: ${{ matrix.firestore }}
         run: npm run check:consumer
 
   # Runtime-only dependency audit (the shipped package declares no runtime deps, so this stays clean;

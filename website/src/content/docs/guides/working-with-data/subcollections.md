@@ -1,6 +1,6 @@
 ---
 title: 'Subcollections'
-description: 'Nested collections and per-instance converter behavior with FirestoreORM.'
+description: 'Nested collections and per-instance converter behavior with FlintFire.'
 ---
 
 Navigate Firestore document hierarchies by deriving a child repository from a parent document, with
@@ -14,7 +14,7 @@ subcollection under a specific parent document. The returned repository targets 
 
 ```typescript
 import { z } from 'zod';
-import { FirestoreRepository } from '@reggieofarrell/firestore-orm';
+import { FirestoreRepository } from 'flintfire';
 
 const orderSchema = z.object({
   product: z.string(),
@@ -42,7 +42,7 @@ const fetched = await userOrders.getById(order.id);
 ### Signature
 
 `subcollection` mirrors
-[`withSchema`](/firestore-orm/guides/concepts/schema-validation/#no-top-level-id): read/write types
+[`withSchema`](/flintfire/guides/concepts/schema-validation/#no-top-level-id): read/write types
 are inferred from schema values, and a trailing options object carries `writeSchema`,
 `storedSchema`, `readConverter`, `sentinelPolicy`, and `allowLegacyDatastoreIds`. As with
 `withSchema`, `storedSchema` is required whenever a `readConverter` is set.
@@ -80,13 +80,13 @@ await userOrders.update('o1', { price: FieldValue.increment(5) }); // no cast ne
 ```
 
 `options.sentinelPolicy` defaults to `'strict'` (`'permissive'` is the opt-in, pre-v3 default). See
-[field-value sentinels](/firestore-orm/guides/concepts/field-value-sentinels/) for what strict mode
+[field-value sentinels](/flintfire/guides/concepts/field-value-sentinels/) for what strict mode
 enforces.
 
 > No schema passed to `subcollection()` may declare a top-level `id` — the document name is the sole
 > source of `id`. A top-level `id` in the `readSchema` (or any overlay) is **rejected at
 > construction**. See
-> [schema validation](/firestore-orm/guides/concepts/schema-validation/#no-top-level-id) for the
+> [schema validation](/flintfire/guides/concepts/schema-validation/#no-top-level-id) for the
 > rules on `id` handling. For an **unvalidated** subcollection, construct a repository directly
 > against the full path: `new FirestoreRepository<Order>(db, 'users/user-123/orders')`.
 
@@ -105,7 +105,7 @@ const recentOrders = await userOrders
 
 For forward opaque paging use `paginate(pageSize, cursor?)` (it requires a prior `orderBy()`). For
 typed bounds and reverse pages (`startAt` / `endAt` / `limitToLast`), see
-[queries](/firestore-orm/guides/working-with-data/queries/#query-bounds--reverse-pagination).
+[queries](/flintfire/guides/working-with-data/queries/#query-bounds--reverse-pagination).
 
 ## Querying every parent's subcollection at once
 
@@ -125,7 +125,7 @@ allOrders[0].parentPath; // 'users/user-987/orders'
 
 Group results carry the full `path` because document ids are **not** unique across a collection
 group, and the surface is read-only. See
-[collection-group queries](/firestore-orm/guides/working-with-data/queries/#collection-group-queries)
+[collection-group queries](/flintfire/guides/working-with-data/queries/#collection-group-queries)
 for the full contract, including the index requirement.
 
 ## Nested subcollections
@@ -155,7 +155,7 @@ repository. If a child collection needs converter behavior, pass the converter e
 `subcollection()`.
 
 ```typescript
-import { ReadConverter } from '@reggieofarrell/firestore-orm';
+import { ReadConverter } from 'flintfire';
 
 const userSchema = z.object({
   name: z.string(),
@@ -179,7 +179,7 @@ const userOrders = users.subcollection('user-123', 'orders', orderSchema, {
 });
 ```
 
-See [core concepts](/firestore-orm/guides/concepts/core-concepts/) for the full converter contract
+See [core concepts](/flintfire/guides/concepts/core-concepts/) for the full converter contract
 (converters are read-only — a `fromFirestore` mapper that runs on reads — and why it must omit
 `id`).
 
@@ -202,18 +202,18 @@ topLevel.isSubcollection(); // false
 `FirestoreRepository`'s constructor is
 `new FirestoreRepository(db, collectionPath, validator?, parentPath?, readConverter?, schemas?, allowLegacyDatastoreIds?)`
 — there is no options/config/logging bag. In practice, prefer `subcollection()` and the
-[`withSchema`](/firestore-orm/guides/concepts/schema-validation/#no-top-level-id) factory over
+[`withSchema`](/flintfire/guides/concepts/schema-validation/#no-top-level-id) factory over
 constructing repositories by hand.
 
 ## Related
 
-- [CRUD operations](/firestore-orm/guides/working-with-data/crud-operations/) — create, read,
+- [CRUD operations](/flintfire/guides/working-with-data/crud-operations/) — create, read,
   update, delete on the child repository
-- [Queries](/firestore-orm/guides/working-with-data/queries/) — filtering, aggregations, pagination,
+- [Queries](/flintfire/guides/working-with-data/queries/) — filtering, aggregations, pagination,
   and streaming
-- [Schema validation](/firestore-orm/guides/concepts/schema-validation/) — no top-level `id`,
+- [Schema validation](/flintfire/guides/concepts/schema-validation/) — no top-level `id`,
   derived schemas
-- [Field-value sentinels](/firestore-orm/guides/concepts/field-value-sentinels/) — `sentinelPolicy`
+- [Field-value sentinels](/flintfire/guides/concepts/field-value-sentinels/) — `sentinelPolicy`
   and strict mode
-- [Core concepts](/firestore-orm/guides/concepts/core-concepts/) — repository pattern and converter
+- [Core concepts](/flintfire/guides/concepts/core-concepts/) — repository pattern and converter
   behavior

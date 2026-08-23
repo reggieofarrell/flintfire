@@ -1,7 +1,7 @@
 ---
 title: 'Express'
 description:
-  'Wire FirestoreORM into Express.js route handlers, and map ORM errors to HTTP responses with the
+  'Wire FlintFire into Express.js route handlers, and map ORM errors to HTTP responses with the
   bundled errorHandler middleware.'
 ---
 
@@ -9,20 +9,20 @@ Wire the repository into Express.js route handlers with schema-driven validation
 typed errors to HTTP responses with the bundled `errorHandler` middleware.
 
 The ORM is framework-agnostic: a repository is just an object you construct once and share. For the
-error classes themselves, see [Error Handling](/firestore-orm/reference/errors/); for the schema
-strategy, see [Schema Validation](/firestore-orm/guides/concepts/schema-validation/); for NestJS,
-see [NestJS](/firestore-orm/guides/integrations/nestjs/).
+error classes themselves, see [Error Handling](/flintfire/reference/errors/); for the schema
+strategy, see [Schema Validation](/flintfire/guides/concepts/schema-validation/); for NestJS,
+see [NestJS](/flintfire/guides/integrations/nestjs/).
 
 ## Basic setup
 
 Construct the repository once and export it. Your schema must **not** declare a top-level `id` — it
 is rejected at construction, and the document name is the sole source of `id` (see
-[Document Identity](/firestore-orm/guides/concepts/document-identity/)). The returned repository is
+[Document Identity](/flintfire/guides/concepts/document-identity/)). The returned repository is
 fully typed and validated on every write.
 
 ```typescript
 // repositories/user.repository.ts
-import { FirestoreRepository } from '@reggieofarrell/firestore-orm';
+import { FirestoreRepository } from 'flintfire';
 import { db } from '../config/firebase';
 import { userSchema, User } from '../schemas/user.schema';
 
@@ -36,7 +36,7 @@ shared `errorHandler` middleware via `next(error)`:
 // routes/user.routes.ts
 import express from 'express';
 import { userRepo } from '../repositories/user.repository';
-import { ValidationError, NotFoundError } from '@reggieofarrell/firestore-orm';
+import { ValidationError, NotFoundError } from 'flintfire';
 
 const router = express.Router();
 
@@ -124,7 +124,7 @@ responses:
 ```typescript
 // app.ts
 import express from 'express';
-import { errorHandler } from '@reggieofarrell/firestore-orm/express';
+import { errorHandler } from 'flintfire/express';
 import userRoutes from './routes/user.routes';
 
 const app = express();
@@ -142,20 +142,20 @@ app.listen(3000, () => {
 >
 > - Request-supplied ids are validated with `userRepo.id(req.params.id)` before touching Firestore —
 >   a malformed id throws `InvalidDocumentIdError` (→ 400) rather than escaping the collection. See
->   [Document Identity](/firestore-orm/guides/concepts/document-identity/).
+>   [Document Identity](/flintfire/guides/concepts/document-identity/).
 > - Reads use `getById(id)`, which returns `FirestoreDocument<User> | null` — check for `null` (or
 >   use `getByIdOrThrow(id)` to get a `NotFoundError` instead).
 > - Offset pagination is `offsetPaginate(page, pageSize)`. Forward opaque cursor pagination is
 >   `paginate(pageSize, cursor?)` and requires a prior `orderBy()`. Typed bounds
 >   (`startAt` / `startAfter` / …) and reverse pages (`limitToLast`) are also on the query builder —
->   see [Queries](/firestore-orm/guides/working-with-data/queries/).
+>   see [Queries](/flintfire/guides/working-with-data/queries/).
 > - `update(id, data, { returnDoc: true })` returns the updated document. The `id` field is always
 >   stripped from write payloads, so spreading `...req.body` is safe.
 
 ## Error-handling middleware
 
 The ORM includes a pre-built Express middleware for consistent error responses. It is published from
-the optional **`@reggieofarrell/firestore-orm/express`** subpath (not the package root), so
+the optional **`flintfire/express`** subpath (not the package root), so
 `express` stays out of the core type graph — install `express` to use it. Register it as the
 **last** middleware, after all routes, and call `next(error)` from your route handlers (or throw and
 let an async wrapper forward it).
@@ -209,12 +209,12 @@ stack, or cause message.
 
 ## See also
 
-- [Error Handling](/firestore-orm/reference/errors/) — the error classes and `parseFirestoreError`
-- [NestJS](/firestore-orm/guides/integrations/nestjs/) — the DI-based integration with an exception
+- [Error Handling](/flintfire/reference/errors/) — the error classes and `parseFirestoreError`
+- [NestJS](/flintfire/guides/integrations/nestjs/) — the DI-based integration with an exception
   filter
-- [Schema Validation](/firestore-orm/guides/concepts/schema-validation/) — the no-top-level-`id`
+- [Schema Validation](/flintfire/guides/concepts/schema-validation/) — the no-top-level-`id`
   schema rule
-- [Queries](/firestore-orm/guides/working-with-data/queries/) — pagination (`paginate`,
+- [Queries](/flintfire/guides/working-with-data/queries/) — pagination (`paginate`,
   `offsetPaginate`)
-- [CRUD operations](/firestore-orm/guides/working-with-data/crud-operations/) — `create`, `update`,
+- [CRUD operations](/flintfire/guides/working-with-data/crud-operations/) — `create`, `update`,
   `delete`, and bulk methods

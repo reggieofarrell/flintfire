@@ -1,22 +1,22 @@
 ---
 title: 'Core Concepts'
 description:
-  'Repository pattern, the four repository generics, and delete behavior in FirestoreORM.'
+  'Repository pattern, the four repository generics, and delete behavior in FlintFire.'
 ---
 
-The foundational building blocks of FirestoreORM: the per-collection repository, its four generic
+The foundational building blocks of FlintFire: the per-collection repository, its four generic
 types, and delete semantics.
 
-FirestoreORM's core is a per-collection repository. This page covers the repository pattern and
+FlintFire's core is a per-collection repository. This page covers the repository pattern and
 delete behavior. The other foundational topics each have their own page:
-[document identity](/firestore-orm/guides/concepts/document-identity/),
-[schema validation](/firestore-orm/guides/concepts/schema-validation/),
-[read converters](/firestore-orm/guides/concepts/read-converters/),
-[field-value sentinels](/firestore-orm/guides/concepts/field-value-sentinels/),
-[timestamps](/firestore-orm/guides/concepts/timestamps/),
-[lifecycle hooks](/firestore-orm/guides/concepts/lifecycle-hooks/),
-[queries](/firestore-orm/guides/working-with-data/queries/), and
-[vector search](/firestore-orm/guides/advanced/vector-search/).
+[document identity](/flintfire/guides/concepts/document-identity/),
+[schema validation](/flintfire/guides/concepts/schema-validation/),
+[read converters](/flintfire/guides/concepts/read-converters/),
+[field-value sentinels](/flintfire/guides/concepts/field-value-sentinels/),
+[timestamps](/flintfire/guides/concepts/timestamps/),
+[lifecycle hooks](/flintfire/guides/concepts/lifecycle-hooks/),
+[queries](/flintfire/guides/working-with-data/queries/), and
+[vector search](/flintfire/guides/advanced/vector-search/).
 
 ## Repository Pattern
 
@@ -38,11 +38,11 @@ declare a top-level `id` field — the factory throws at construction if one is 
 name is the sole source of `id`, and reads resolve to `FirestoreDocument<T>`. A `writeSchema` built
 from the write combinators enables cast-free combinator writes. Construct a repository directly with
 `new FirestoreRepository<Product>(db, 'products')` when you don't need validation. See
-[schema validation](/firestore-orm/guides/concepts/schema-validation/) for the full contract.
+[schema validation](/flintfire/guides/concepts/schema-validation/) for the full contract.
 
 To add domain helpers (`findByEmail`, `deactivate`, and so on), subclass `FirestoreRepository` or
 wrap a `withSchema` instance — both are supported. See
-[Custom repository methods](/firestore-orm/guides/advanced/patterns/#custom-repository-methods) for
+[Custom repository methods](/flintfire/guides/advanced/patterns/#custom-repository-methods) for
 the constraints (`withSchema` returns a plain repository; subclasses use the public API only).
 
 The full constructor signature is
@@ -60,12 +60,12 @@ set).
 Reads can be customized with an optional **`readConverter`** — for example mapping a stored
 `Timestamp` to a `Date` or a millisecond `number` on the way out. Converters are **read-only**: the
 mapper runs on every read, the document `id` is overlaid afterward, and a `storedSchema` is required
-whenever one is set. See [Read Converters](/firestore-orm/guides/concepts/read-converters/) for the
+whenever one is set. See [Read Converters](/flintfire/guides/concepts/read-converters/) for the
 full contract.
 
 Because the converter runs on every read, it is also the seam for normalizing documents written
 under an older schema into the current shape — without a data migration. See
-[Schema Evolution](/firestore-orm/guides/designing/schema-evolution/) for that pattern.
+[Schema Evolution](/flintfire/guides/designing/schema-evolution/) for that pattern.
 
 ## Delete Behavior
 

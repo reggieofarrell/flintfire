@@ -6,7 +6,7 @@ description: 'Field-path updates, merge/patch semantics, and FieldValue sentinel
 Update individual nested fields in place — without replacing the whole parent object — using
 Firestore's dot-notation field paths.
 
-FirestoreORM supports Firestore's dot-notation syntax for updating nested fields without replacing
+FlintFire supports Firestore's dot-notation syntax for updating nested fields without replacing
 entire objects. This lets you change specific nested properties while preserving the other fields
 already stored in that object.
 
@@ -201,7 +201,7 @@ await userRepo.runInTransaction(async (tx, repo) => {
 ## FieldValue Sentinels
 
 Dot-notation paths compose with Firestore `FieldValue` sentinels across every write surface. See
-[Field Value Sentinels](/firestore-orm/guides/concepts/field-value-sentinels/) for the full sentinel
+[Field Value Sentinels](/flintfire/guides/concepts/field-value-sentinels/) for the full sentinel
 model and per-field validation.
 
 ```typescript
@@ -318,7 +318,7 @@ restricts which sentinels a field may receive: declare fields with the write com
 sentinels per field. Opt into `sentinelPolicy: 'permissive'` (the opt-in, pre-v3 default) to instead
 ignore any field assigned to a `FieldValue` sentinel during Zod validation while still validating
 all other fields in the payload — see
-[Per-Field Sentinel Approval](/firestore-orm/guides/concepts/field-value-sentinels/).
+[Per-Field Sentinel Approval](/flintfire/guides/concepts/field-value-sentinels/).
 
 ## Dot-Notation Utilities
 
@@ -335,7 +335,7 @@ import {
   validateDotNotationPath,
   getRootFields,
   getDotNotationDepth,
-} from '@reggieofarrell/firestore-orm';
+} from 'flintfire';
 ```
 
 | Utility                                     | Signature                                                                              | Behavior                                                                                                                                          |

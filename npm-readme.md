@@ -1,26 +1,25 @@
 <!-- npm-readme -->
 
-# @reggieofarrell/firestore-orm
+# FlintFire
 
-A type-safe, thoroughly tested, feature-rich Firestore ORM built for the Firebase Admin SDK.
-Designed to make backend Firestore development actually enjoyable.
+A type-safe, schema-aware Firestore data-access library for Node.js, built for the Firebase Admin
+SDK. Validation, lifecycle hooks, and a fluent query builder.
 
-[![npm version](https://img.shields.io/npm/v/@reggieofarrell/firestore-orm.svg)](https://www.npmjs.com/package/@reggieofarrell/firestore-orm)
+[![npm version](https://img.shields.io/npm/v/flintfire.svg)](https://www.npmjs.com/package/flintfire)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5+-blue.svg)](https://www.typescriptlang.org/)
-[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://reggieofarrell.github.io/firestore-orm/)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://reggieofarrell.github.io/flintfire/)
 
 ## Table of Contents
 
-- [Why FirestoreORM?](#why-firestoreorm)
+- [Why FlintFire?](#why-flintfire)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Documentation](#documentation)
-- [Migration](#migration)
 - [Support](#support)
 - [License](#license)
 
-## Why FirestoreORM?
+## Why FlintFire?
 
 ### Built for Real Production Use
 
@@ -31,9 +30,8 @@ Designed to make backend Firestore development actually enjoyable.
   logic
 - **Powerful Query Builder** - Intuitive, chainable queries with pagination, aggregation, and
   streaming
-- **Vector Search Extension** - Opt-in KNN similarity search via
-  `@reggieofarrell/firestore-orm/vector`
-  ([guide](https://reggieofarrell.github.io/firestore-orm/guides/advanced/vector-search/))
+- **Vector Search Extension** - Opt-in KNN similarity search via `flintfire/vector`
+  ([guide](https://reggieofarrell.github.io/flintfire/guides/advanced/vector-search/))
 - **Transaction Support** - ACID guarantees for critical operations
 - **Subcollection Support** - Navigate document hierarchies naturally, and query every parent's
   subcollection at once with collection groups
@@ -47,15 +45,15 @@ environment.
 ## Installation
 
 ```bash
-npm install @reggieofarrell/firestore-orm firebase-admin zod
+npm install flintfire firebase-admin zod
 ```
 
 ```bash
-yarn add @reggieofarrell/firestore-orm firebase-admin zod
+yarn add flintfire firebase-admin zod
 ```
 
 ```bash
-pnpm add @reggieofarrell/firestore-orm firebase-admin zod
+pnpm add flintfire firebase-admin zod
 ```
 
 ### Peer Dependencies
@@ -66,11 +64,10 @@ pnpm add @reggieofarrell/firestore-orm firebase-admin zod
   requires `@google-cloud/firestore >= 7.10`, guaranteed by `firebase-admin >= 13`; on admin 12 only
   when the resolved firestore is >= 7.10)
 - `zod`: ^4.0.0
-- `express`: ^4.0.0 || ^5.0.0 (optional — only needed for the
-  `@reggieofarrell/firestore-orm/express` middleware)
+- `express`: ^4.0.0 || ^5.0.0 (optional — only needed for the `flintfire/express` middleware)
 
-> **v3** is the current major line. Upgrading from 2.x? See the
-> [migration guide](https://reggieofarrell.github.io/firestore-orm/guides/migration-v2-to-v3/).
+> **v3** is the current major line. Upgrading from `@reggieofarrell/firestore-orm` 2.x? See the
+> [v2 → v3 migration guide](https://reggieofarrell.github.io/flintfire/guides/migration-v2-to-v3/).
 
 ## Quick Start
 
@@ -107,7 +104,7 @@ export type User = z.infer<typeof userSchema>;
 ### 3. Create Your Repository
 
 ```typescript
-import { FirestoreRepository } from '@reggieofarrell/firestore-orm';
+import { FirestoreRepository } from 'flintfire';
 import { db } from './firebase';
 import { userSchema } from './schemas';
 
@@ -150,44 +147,33 @@ await userRepo.delete(userId);
 ## Documentation
 
 Full documentation lives at
-**[reggieofarrell.github.io/firestore-orm](https://reggieofarrell.github.io/firestore-orm/)**,
-organized into two pillars: **Guides** (learn) and **Reference** (look up).
+**[reggieofarrell.github.io/flintfire](https://reggieofarrell.github.io/flintfire/)**, organized
+into two pillars: **Guides** (learn) and **Reference** (look up).
 
-Start with [Getting Started](https://reggieofarrell.github.io/firestore-orm/getting-started/), then
+Start with [Getting Started](https://reggieofarrell.github.io/flintfire/getting-started/), then
 browse the Guides and Reference pillars in the sidebar.
 
 Source, issues, and contributing guides:
-[github.com/reggieofarrell/firestore-orm](https://github.com/reggieofarrell/firestore-orm).
-
-## Migration
-
-Migrating from
-[`@spacelabstech/firestoreorm`](https://www.npmjs.com/package/@spacelabstech/firestoreorm)? Replace
-imports with `@reggieofarrell/firestore-orm` and review the
-[API Reference](https://reggieofarrell.github.io/firestore-orm/guides/api-reference/) for current
-method contracts. Upgrading within this fork from 2.x → 3.x? See the
-[v2 → v3 migration guide](https://reggieofarrell.github.io/firestore-orm/guides/migration-v2-to-v3/).
-
-This package is a maintained fork of
-[spacelabs-firestoreorm](https://github.com/HBFLEX/spacelabs-firestoreorm) by
-[Happy Banda (HBFL3Xx)](https://github.com/HBFLEX), published under the MIT License.
+[github.com/reggieofarrell/flintfire](https://github.com/reggieofarrell/flintfire).
 
 ## Support
 
-- **Issues:** [GitHub Issues](https://github.com/reggieofarrell/firestore-orm/issues)
+- **Issues:** [GitHub Issues](https://github.com/reggieofarrell/flintfire/issues)
 - **Documentation:**
-  [https://reggieofarrell.github.io/firestore-orm/](https://reggieofarrell.github.io/firestore-orm/)
+  [https://reggieofarrell.github.io/flintfire/](https://reggieofarrell.github.io/flintfire/)
 - **Email:** reggie@blackflag.design
 
 ## License
 
-MIT. Full text: [LICENSE](https://github.com/reggieofarrell/firestore-orm/blob/main/LICENSE). Fork
-attribution: [NOTICE](https://github.com/reggieofarrell/firestore-orm/blob/main/NOTICE).
+MIT. Full text: [LICENSE](https://github.com/reggieofarrell/flintfire/blob/main/LICENSE). Required
+attribution for redistributors:
+[NOTICE](https://github.com/reggieofarrell/flintfire/blob/main/NOTICE).
 
 - Copyright (c) 2025 HBFL3Xx (original work)
-- Copyright (c) 2026 Reggie O'Farrell (fork modifications)
+- Copyright (c) 2026 Reggie O'Farrell (subsequent modifications)
 
 ---
 
-**Maintained by [Reggie O'Farrell](https://github.com/reggieofarrell)** · Forked from work by
-[HBFL3Xx](https://github.com/HBFLEX)
+**Maintained by [Reggie O'Farrell](https://github.com/reggieofarrell)** · Built on MIT-licensed work
+by [HBFL3Xx](https://github.com/HBFLEX)
+([NOTICE](https://github.com/reggieofarrell/flintfire/blob/main/NOTICE))

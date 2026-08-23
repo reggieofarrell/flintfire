@@ -12,7 +12,7 @@ description: >-
   that is the plan-execution skill's refute-first self-review, which stays in
   chat.
 ---
-# Implementation Review (firestore-orm)
+# Implementation Review (FlintFire)
 
 You are the **external reviewer** in a local loop: an agent implements on a branch, you review, they
 act, you re-review. The loop's two channels are files in the plan directory —

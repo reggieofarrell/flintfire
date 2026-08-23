@@ -39,7 +39,7 @@ Call `runInTransaction` on a repository. The callback receives two arguments:
 
 `after*` hooks do **not** run inside a transaction (the write is not committed until the callback
 returns). For non-durable side effects, return data from the callback and run them after success —
-or use a durable outbox when available ([#80](https://github.com/reggieofarrell/firestore-orm/issues/80)).
+or use a durable outbox when available ([#80](https://github.com/reggieofarrell/flintfire/issues/80)).
 
 Calling a normal `create()` / `update()` on the transaction-scoped `repo` is still a **direct**
 write (outside the transaction); its hooks report `execution: 'direct'`.
@@ -192,7 +192,7 @@ Notes:
   runs once and the whole transaction fails with `PreconditionFailedError` / `ConflictError`. Inside
   a read-write transaction the transaction's own lock is usually the better tool; a precondition is
   for a token read _outside_ the transaction. See
-  [Conditional writes](/firestore-orm/guides/working-with-data/crud-operations/#conditional-writes).
+  [Conditional writes](/flintfire/guides/working-with-data/crud-operations/#conditional-writes).
 - `getByIdWithUpdateTime` is deliberately **absent** from the transaction helpers (and from
   `ReadOnlyTransactionalRepository`): it performs non-transactional I/O and would bypass both the
   transaction and any `readTime`. Plain `getMany` is absent for the same reason — use
@@ -202,7 +202,7 @@ Notes:
 ## Hooks inside transactions
 
 Hooks fire inside a transaction **only** when writes go through the transaction-scoped `repo` passed
-into the callback. See [Lifecycle hooks](/firestore-orm/guides/concepts/lifecycle-hooks/) for the
+into the callback. See [Lifecycle hooks](/flintfire/guides/concepts/lifecycle-hooks/) for the
 full event list.
 
 ### No `after*` hooks on transaction write helpers

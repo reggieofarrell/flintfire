@@ -2,7 +2,7 @@
  * Helpers for the "store a Firestore `Timestamp`, read a milliseconds-since-epoch `number`"
  * pattern.
  *
- * firestore-orm has no read/after-find lifecycle hook (hooks are write-only), so a repository's
+ * FlintFire has no read/after-find lifecycle hook (hooks are write-only), so a repository's
  * `readConverter` (the `fromFirestore` half of a `FirestoreDataConverter`) is the single
  * read-transform seam. Repository converters are read-only — writes go through a raw ref — so the
  * recommended write path is to write native temporal values (a `Date` or

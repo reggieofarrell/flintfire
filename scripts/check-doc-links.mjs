@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /* eslint-env node */
 /**
- * Documentation link checker for @reggieofarrell/firestore-orm.
+ * Documentation link checker for flintfire.
  *
  * Fails (exit 1) when a Markdown doc contains a broken *relative* link, so docs don't silently rot
  * as the repo evolves. Three checks:
  *
  *   1. Markdown links `[text](target)` and images `![alt](target)` in every `*.md` / `*.mdc`
  *      file — a relative target (optionally with a `#anchor`) must resolve to a file or directory.
- *      Site-absolute Starlight URLs under `/firestore-orm/` (splash CTAs that include Astro `base`)
+ *      Site-absolute Starlight URLs under `/flintfire/` (splash CTAs that include Astro `base`)
  *      are resolved against `website/src/content/docs/`. A target that resolves to a declared Astro
  *      `redirects` source (in `website/astro.config.mjs`) counts as valid — Astro serves it. For
  *      relative links inside the Starlight tree, the rendered browser URL is checked too: a path
@@ -60,10 +60,10 @@ const isExternal = target => /^(https?:|mailto:|tel:|#|\/\/)/.test(target) || ta
 
 /**
  * Astro `base` for the Starlight site (must match `website/astro.config.mjs`).
- * Splash CTAs use root-absolute `/firestore-orm/...` links so they work under both
+ * Splash CTAs use root-absolute `/flintfire/...` links so they work under both
  * `astro preview` and GitHub Pages when the splash URL lacks a trailing slash.
  */
-const SITE_BASE = '/firestore-orm';
+const SITE_BASE = '/flintfire';
 const SITE_CONTENT_ROOT = join(repoRoot, 'website', 'src', 'content', 'docs');
 
 /**
@@ -104,7 +104,7 @@ const pathPart = target => {
 };
 
 /**
- * Resolve a site-absolute Starlight URL (`/firestore-orm/getting-started/`) to a content file.
+ * Resolve a site-absolute Starlight URL (`/flintfire/getting-started/`) to a content file.
  * Returns true when the slug maps to an existing page under website/src/content/docs/.
  */
 function siteBaseLinkExists(absoluteTarget) {
@@ -115,7 +115,7 @@ function siteBaseLinkExists(absoluteTarget) {
   const slug = absoluteTarget === SITE_BASE ? '' : absoluteTarget.slice(SITE_BASE.length);
   const normalized = slug.replace(/^\/+|\/+$/g, '');
   if (!normalized) {
-    // `/firestore-orm` / `/firestore-orm/` → splash index
+    // `/flintfire` / `/flintfire/` → splash index
     return existsSync(join(SITE_CONTENT_ROOT, 'index.md'));
   }
   const asFile = join(SITE_CONTENT_ROOT, `${normalized}.md`);
@@ -176,7 +176,7 @@ function checkMarkdownLinks(file, text) {
       if (isExternal(target)) continue;
       const p = pathPart(target);
       if (!p) continue; // pure anchor
-      // Site-absolute `/firestore-orm/...` links (splash CTAs) — resolve against Starlight content.
+      // Site-absolute `/flintfire/...` links (splash CTAs) — resolve against Starlight content.
       if (p.startsWith('/')) {
         if (!siteBaseLinkExists(p)) {
           problems.push({ file, line: index + 1, target, kind: 'link' });

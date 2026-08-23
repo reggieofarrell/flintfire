@@ -73,7 +73,7 @@ export const userSchema = z.object({
 export type User = z.infer<typeof userSchema>;
 ```
 
-See [Schema Validation](/firestore-orm/2.0/guides/schema-validation/) for derived create/update schemas and `id`
+See [Schema Validation](/flintfire/2.0/guides/schema-validation/) for derived create/update schemas and `id`
 handling.
 
 ## 3. Create a repository
@@ -87,7 +87,7 @@ export const userRepo = FirestoreRepository.withSchema<User>(db, 'users', userSc
 ```
 
 Prefer `withSchema` when you want runtime validation. For an unvalidated collection, construct
-`new FirestoreRepository<User>(db, 'users')` instead — see [Core Concepts](/firestore-orm/2.0/guides/core-concepts/).
+`new FirestoreRepository<User>(db, 'users')` instead — see [Core Concepts](/flintfire/2.0/guides/core-concepts/).
 
 ## 4. Create, query, update, delete
 
@@ -125,9 +125,9 @@ await userRepo.delete(user.id);
 
 | Topic                                                    | When to read it                                        |
 | -------------------------------------------------------- | ------------------------------------------------------ |
-| [Core Concepts](/firestore-orm/2.0/guides/core-concepts/)                 | Repository pattern, converters, delete behavior        |
-| [CRUD Operations](/firestore-orm/2.0/guides/crud-operations/)             | Bulk variants and return shapes                        |
-| [Queries](/firestore-orm/2.0/guides/queries/)                             | Pagination, aggregations, streaming, listeners         |
-| [Field-value sentinels](/firestore-orm/2.0/guides/field-value-sentinels/) | `serverTimestamp`, `increment`, strict sentinel policy |
-| [Framework Integration](/firestore-orm/2.0/guides/framework-integration/) | Express / NestJS wiring                                |
-| [Documentation overview](/firestore-orm/2.0/overview/)                    | Full guide index                                       |
+| [Core Concepts](/flintfire/2.0/guides/core-concepts/)                 | Repository pattern, converters, delete behavior        |
+| [CRUD Operations](/flintfire/2.0/guides/crud-operations/)             | Bulk variants and return shapes                        |
+| [Queries](/flintfire/2.0/guides/queries/)                             | Pagination, aggregations, streaming, listeners         |
+| [Field-value sentinels](/flintfire/2.0/guides/field-value-sentinels/) | `serverTimestamp`, `increment`, strict sentinel policy |
+| [Framework Integration](/flintfire/2.0/guides/framework-integration/) | Express / NestJS wiring                                |
+| [Documentation overview](/flintfire/2.0/overview/)                    | Full guide index                                       |

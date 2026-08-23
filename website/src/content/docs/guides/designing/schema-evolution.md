@@ -17,7 +17,7 @@ often unnecessary. Instead, normalize on read.
 
 ## Normalizing across schema changes
 
-The [`readConverter`](/firestore-orm/guides/concepts/read-converters/) is the seam that fixes drift:
+The [`readConverter`](/flintfire/guides/concepts/read-converters/) is the seam that fixes drift:
 it runs on **every** read, so normalize the raw body into the current schema shape there and every
 read comes back current — without a data migration.
 
@@ -48,14 +48,14 @@ const userReadConverter: ReadConverter<User> = snapshot =>
 Giving fields a `.default(...)` for read-side backfill is safe for writes: defaults are applied on
 `create` but **never** injected on a partial `update`, so a later `update(id, { … })` that omits a
 defaulted field leaves the stored value untouched (see
-[Schema Validation](/firestore-orm/guides/concepts/schema-validation/#validation-behavior)).
+[Schema Validation](/flintfire/guides/concepts/schema-validation/#validation-behavior)).
 
 ## Cost and composition
 
 Full-parse normalization is heavier than the default cast (a full Zod parse on every read), so
 reserve it for collections where drift is likely — it deliberately trades read speed for a
 self-healing read shape. It composes with the built-in
-[`createMillisTimestampConverter`](/firestore-orm/guides/concepts/timestamps/): run the timestamp
+[`createMillisTimestampConverter`](/flintfire/guides/concepts/timestamps/): run the timestamp
 mapper first, then parse. And because normalization already happened on the way out,
-[`validate()` / `safeValidate()`](/firestore-orm/guides/concepts/schema-validation/) at a trust
+[`validate()` / `safeValidate()`](/flintfire/guides/concepts/schema-validation/) at a trust
 boundary become pure assertions that pre-migration documents still pass.

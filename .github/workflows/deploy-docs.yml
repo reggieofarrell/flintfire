@@ -75,6 +75,13 @@ jobs:
           # Nested Astro app (own package.json + lockfile); not an npm workspace.
           path: website
 
+      # Explicit emitted-output guard. withastro/action may run `astro build`
+      # rather than `npm run build`, so we cannot rely on website/package.json
+      # chaining the checker. Fail this job (and therefore skip deploy) if the
+      # eight paired brand assets are missing or an unsuffixed favicon leaked.
+      - name: Verify emitted brand assets
+        run: node scripts/check-built-docs-assets.mjs
+
   deploy:
     needs: build
     runs-on: ubuntu-latest
