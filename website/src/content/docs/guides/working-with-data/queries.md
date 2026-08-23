@@ -52,7 +52,7 @@ Opaque forward paging stays on `paginate(pageSize, cursor)`; reverse pages use b
 otherwise last-wins overwrite the last-N window).
 
 **Performance note:** Firestore charges per document read. Use `limit()` and pagination to control
-costs on large collections — see [Performance](/firestore-orm/guides/designing/performance/) for the
+costs on large collections — see [Performance](/flintfire/guides/designing/performance/) for the
 full cost model.
 
 ## Filtering
@@ -123,8 +123,8 @@ Two things to know:
   into disjunctive form and evaluates each disjunct, so one `whereFilter()` may surface several
   successive `FirestoreIndexError`s — follow each link until every branch is covered. The server
   also caps a query at 30 disjunctions after normalization; see
-  [Troubleshooting](/firestore-orm/reference/troubleshooting/) and
-  [Performance & Cost](/firestore-orm/guides/designing/performance/).
+  [Troubleshooting](/flintfire/reference/troubleshooting/) and
+  [Performance & Cost](/flintfire/guides/designing/performance/).
 
 ### ⚠️ An inequality inside an OR branch excludes documents missing that field
 
@@ -188,7 +188,7 @@ supported on the directly-typed constructor path (ADR-0028); `withSchema` still 
 `ZodObject` and cannot express a union schema.
 
 ```typescript
-import type { QueryFilterFactory, StoredDataOf } from '@reggieofarrell/firestore-orm';
+import type { QueryFilterFactory, StoredDataOf } from 'flintfire';
 
 const publishedOrMine = (uid: string) => (f: QueryFilterFactory<StoredDataOf<typeof postRepo>>) =>
   f.or(f.where('status', '==', 'published'), f.where('authorId', '==', uid));
@@ -232,7 +232,7 @@ const postGroup = FirestoreRepository.withSchema(db, 'posts', postSchema).collec
 
 Document ids are only unique **within one collection**, so `users/u1/posts/p1` and
 `users/u2/posts/p1` are different documents that both report `id: 'p1'`. Group results are therefore
-[`CollectionGroupDocument`](/firestore-orm/reference/types/)s: the read data plus `id`, the full
+[`CollectionGroupDocument`](/flintfire/reference/types/)s: the read data plus `id`, the full
 `path`, and the containing collection's `parentPath` — all plain strings, so a result stays
 JSON-serializable.
 
@@ -281,7 +281,7 @@ await postGroup.query().orderByPath().paginate(20);
 
 Path operands are validated segment by segment against the same rules as any other id the ORM
 accepts, so a bare id, a `..` segment, or a reserved `__…__` segment throws
-[`InvalidDocumentIdError`](/firestore-orm/reference/errors/) before any I/O. A well-formed path that
+[`InvalidDocumentIdError`](/flintfire/reference/errors/) before any I/O. A well-formed path that
 simply isn't in the group matches nothing (Firestore reports no error for it).
 
 Inside `whereFilter(...)`, the group factory exposes `f.wherePath(...)` for the same reason:
@@ -304,7 +304,7 @@ A collection group has no `CollectionReference`, so there is **no write surface*
 `delete()` do not exist on a group builder (a compile error, not a runtime throw). Their bulk hooks
 carry `{ ids }` payloads, and ids are not unique across a group, so every registered hook would see
 ambiguous identity. For a group-wide write, drop to the Admin SDK — see
-[Scope & Capabilities](/firestore-orm/reference/scope-and-capabilities/#raw-sdk-escape-hatch).
+[Scope & Capabilities](/flintfire/reference/scope-and-capabilities/#raw-sdk-escape-hatch).
 
 ### ⚠️ Collection-group queries need their own indexes
 
@@ -312,8 +312,8 @@ Firestore's automatic single-field indexes are **collection**-scoped. A collecti
 filters or orders on a field needs an explicitly created **collection-group-scoped** index in
 production — even for a single `where(...)`. The emulator does not enforce this, so a group query
 that passes locally can fail deployed with
-[`FirestoreIndexError`](/firestore-orm/reference/errors/). See
-[Troubleshooting](/firestore-orm/reference/troubleshooting/).
+[`FirestoreIndexError`](/flintfire/reference/errors/). See
+[Troubleshooting](/flintfire/reference/troubleshooting/).
 
 ## Sorting
 
@@ -477,7 +477,7 @@ count**.
 > written documents); `query().delete()` runs `beforeBulkDelete` and `afterBulkDelete` (receiving
 > `{ ids, documents }`). The per-document `before/afterUpdate` and `before/afterDelete` hooks do not
 > run here — use the single-document methods if you need those. See
-> [Lifecycle hooks](/firestore-orm/guides/concepts/lifecycle-hooks/).
+> [Lifecycle hooks](/flintfire/guides/concepts/lifecycle-hooks/).
 
 ```typescript
 // Update all matching documents; returns the number of documents written

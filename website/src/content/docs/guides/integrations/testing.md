@@ -5,7 +5,7 @@ description:
   emulators:exec, and isolate data between tests.'
 ---
 
-Because FirestoreORM is built on the Firebase Admin SDK, you test it the same way you test any Admin
+Because FlintFire is built on the Firebase Admin SDK, you test it the same way you test any Admin
 SDK code: against the **local Firestore emulator**. The emulator is fast, free, requires no real
 credentials, and gives each test run a clean, disposable database.
 
@@ -53,7 +53,7 @@ patterns:
   whole collection in `afterAll` as a safety net.
 
 ```typescript
-import { FirestoreRepository } from '@reggieofarrell/firestore-orm';
+import { FirestoreRepository } from 'flintfire';
 import { db } from './firebase';
 import { userSchema, type User } from '../src/schemas/user.schema';
 
@@ -87,10 +87,10 @@ describe('userRepo', () => {
   expect one.
 - **Hooks fire in tests.** Register a `before*` / `after*` hook and assert its effects; inside a
   transaction only `before*` hooks run (see
-  [Lifecycle hooks](/firestore-orm/guides/concepts/lifecycle-hooks/)).
+  [Lifecycle hooks](/flintfire/guides/concepts/lifecycle-hooks/)).
 - **Prefer integration tests for repository behavior.** Reads, writes, batching, transactions, and
   hooks are best exercised against the emulator rather than mocked — the emulator reproduces
   Firestore's real semantics (index errors, batch limits, aggregation nulls).
 
-See [CRUD Operations](/firestore-orm/guides/working-with-data/crud-operations/) and
-[FirestoreRepository](/firestore-orm/reference/repository/) for the surface under test.
+See [CRUD Operations](/flintfire/guides/working-with-data/crud-operations/) and
+[FirestoreRepository](/flintfire/reference/repository/) for the surface under test.

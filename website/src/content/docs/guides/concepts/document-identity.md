@@ -49,7 +49,7 @@ The `id` is always taken from `snapshot.id` (the document name) and overlaid aft
 
 `ID` is a `string` alias. `DataOf<R>` / `DocumentOf<R>` extract a repository's read-data and
 document types without spelling the generics — see
-[Exported Types](/firestore-orm/reference/types/).
+[Exported Types](/flintfire/reference/types/).
 
 ## Generating ids
 
@@ -58,7 +58,7 @@ document types without spelling the generics — see
 - **`repo.newId(): ID`** generates a validated auto-id **without** writing. Persist under it
   explicitly with `upsert(id, …)` or a transaction `set`.
 - **`upsert(id, data)`** creates or overwrites the document at a caller-chosen id — the path for
-  deterministic/static ids (see [ID Strategies](/firestore-orm/guides/designing/id-strategies/)).
+  deterministic/static ids (see [ID Strategies](/flintfire/guides/designing/id-strategies/)).
 
 ## Validating untrusted ids at the boundary
 
@@ -85,10 +85,10 @@ app.get('/users/:id', async (req, res, next) => {
 
 `InvalidDocumentIdError` carries a machine-readable `reason` (`InvalidDocumentIdReason`) and maps to
 a `400` in the
-[Express middleware](/firestore-orm/guides/integrations/express/#error-handling-middleware). The
+[Express middleware](/flintfire/guides/integrations/express/#error-handling-middleware). The
 error class is documented under
-[Error Handling](/firestore-orm/reference/errors/#invaliddocumentiderror), and the security
-rationale under [Trust Boundary & Security](/firestore-orm/guides/designing/security-boundary/).
+[Error Handling](/flintfire/reference/errors/#invaliddocumentiderror), and the security
+rationale under [Trust Boundary & Security](/flintfire/guides/designing/security-boundary/).
 
 ## Querying by id
 
@@ -109,13 +109,13 @@ await repo.query().orderBy('createdAt', 'desc').orderById().paginate(20);
 
 `whereId(op, value)` takes a `string` for scalar operators and a `readonly string[]` for `in` /
 `not-in`; `orderById(direction?)` defaults to ascending. See
-[Queries](/firestore-orm/guides/working-with-data/queries/) and
-[FirestoreQueryBuilder](/firestore-orm/reference/query-builder/).
+[Queries](/flintfire/guides/working-with-data/queries/) and
+[FirestoreQueryBuilder](/flintfire/reference/query-builder/).
 
 ## Identity across a collection group
 
 An `id` is unique only **within one collection**. A
-[collection-group query](/firestore-orm/guides/working-with-data/queries/#collection-group-queries)
+[collection-group query](/flintfire/guides/working-with-data/queries/#collection-group-queries)
 spans every collection with the same id at any depth, so `users/u1/posts/p1` and `users/u2/posts/p1`
 are two different documents that both report `id: 'p1'`.
 

@@ -1,9 +1,9 @@
-# @reggieofarrell/firestore-orm
+# FlintFire
 
-A type-safe, thoroughly tested, feature-rich Firestore ORM built for the Firebase Admin SDK.
-Designed to make backend Firestore development actually enjoyable.
+A type-safe, schema-aware Firestore data-access library for Node.js, built for the Firebase Admin
+SDK. Validation, lifecycle hooks, and a fluent query builder.
 
-[![npm version](https://img.shields.io/npm/v/@reggieofarrell/firestore-orm.svg)](https://www.npmjs.com/package/@reggieofarrell/firestore-orm)
+[![npm version](https://img.shields.io/npm/v/flintfire.svg)](https://www.npmjs.com/package/flintfire)
 [![Coverage](https://img.shields.io/badge/coverage-dual%20gated-brightgreen.svg)](#coverage-thresholds)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5+-blue.svg)](https://www.typescriptlang.org/)
@@ -11,8 +11,7 @@ Designed to make backend Firestore development actually enjoyable.
 ## Table of Contents
 
 - [About This Project](#about-this-project)
-- [Fork & Attribution](#fork--attribution)
-- [Why FirestoreORM?](#why-firestoreorm)
+- [Why FlintFire?](#why-flintfire)
 - [Install & docs](#install--docs)
 - [Testing Strategy](#testing-strategy)
 - [Contributing](#contributing)
@@ -20,10 +19,8 @@ Designed to make backend Firestore development actually enjoyable.
 
 ## About This Project
 
-`@reggieofarrell/firestore-orm` is a maintained fork and continuation of the original
-[spacelabs-firestoreorm](https://github.com/HBFLEX/spacelabs-firestoreorm) (v1.0.0) project. It
-keeps the same core goal: make backend Firestore development in Node.js type-safe, productive, and
-production-ready.
+`flintfire` is a type-safe Firestore data-access library for Node.js and the Firebase Admin SDK. The
+goal is backend Firestore development that is type-safe, productive, and production-ready.
 
 If you've built with Firestore on the server, you probably recognize the recurring pain points:
 
@@ -37,35 +34,7 @@ This package addresses those problems with a repository pattern, Zod validation,
 chainable query builder, transaction helpers, subcollection support, dot-notation updates, and
 Firestore-native write semantics (including `FieldValue` sentinels).
 
-This fork includes a significant refactor focused on:
-
-- Firestore-native update behavior instead of client-side merge reconstruction
-- Sentinel-aware schema validation for atomic writes
-- Clearer hook contracts and write ordering (`before*` -> validation -> write -> `after*`)
-- Optional read-only Firestore converter support (`readConverter`; `fromFirestore` on reads)
-- Jest unit + emulator integration suites with **dual path-specific coverage gates** (integration
-  owns ORM core; merged LCOV is not gated)
-
-## Fork & Attribution
-
-This project is derived from work originally created by **Happy Banda
-([HBFL3Xx](https://github.com/HBFLEX))** and published as
-[`@spacelabstech/firestoreorm`](https://www.npmjs.com/package/@spacelabstech/firestoreorm) from the
-repository [HBFLEX/spacelabs-firestoreorm](https://github.com/HBFLEX/spacelabs-firestoreorm).
-
-That upstream project is licensed under the **MIT License** (Copyright (c) 2025 HBFL3Xx). This fork
-preserves that license and copyright notice, adds copyright for subsequent modifications, and
-continues development under the `@reggieofarrell/firestore-orm` package name.
-
-If you are migrating from the original package, replace `@spacelabstech/firestoreorm` imports with
-`@reggieofarrell/firestore-orm` and review the API Reference for current method contracts.
-
-Report issues for this fork at
-[reggieofarrell/firestore-orm issues](https://github.com/reggieofarrell/firestore-orm/issues).
-
-Thank you to Happy and the original contributors for the foundation this fork builds on.
-
-## Why FirestoreORM?
+## Why FlintFire?
 
 ### Built for Real Production Use
 
@@ -76,9 +45,8 @@ Thank you to Happy and the original contributors for the foundation this fork bu
   logic
 - **Powerful Query Builder** - Intuitive, chainable queries with pagination, aggregation, and
   streaming
-- **Vector Search Extension** - Opt-in KNN similarity search via
-  `@reggieofarrell/firestore-orm/vector`
-  ([guide](https://reggieofarrell.github.io/firestore-orm/guides/advanced/vector-search/))
+- **Vector Search Extension** - Opt-in KNN similarity search via `flintfire/vector`
+  ([guide](https://reggieofarrell.github.io/flintfire/guides/advanced/vector-search/))
 - **Transaction Support** - ACID guarantees for critical operations
 - **Subcollection Support** - Navigate document hierarchies naturally, and query every parent's
   subcollection at once with collection groups
@@ -99,19 +67,21 @@ Works seamlessly with:
 ## Install & docs
 
 ```bash
-npm install @reggieofarrell/firestore-orm firebase-admin zod
+npm install flintfire firebase-admin zod
 ```
 
 **Peer dependencies:** Node.js >= 22; `firebase-admin` ^12 \|\| ^13 \|\| ^14; `zod` ^4. Optional
-`express` for the `@reggieofarrell/firestore-orm/express` middleware.
+`express` for the `flintfire/express` middleware.
 
 Full install, quick start, and API walkthrough:
-**[reggieofarrell.github.io/firestore-orm](https://reggieofarrell.github.io/firestore-orm/)** —
-start with [Getting Started](https://reggieofarrell.github.io/firestore-orm/getting-started/).
+**[reggieofarrell.github.io/flintfire](https://reggieofarrell.github.io/flintfire/)** — start with
+[Getting Started](https://reggieofarrell.github.io/flintfire/getting-started/). Upgrading from
+`@reggieofarrell/firestore-orm` 2.x? See the
+[v2 → v3 migration guide](https://reggieofarrell.github.io/flintfire/guides/migration-v2-to-v3/).
 
-> The README published on [npmjs.org](https://www.npmjs.com/package/@reggieofarrell/firestore-orm)
-> is a consumer-focused variant sourced from [`npm-readme.md`](npm-readme.md) (staged at pack time).
-> Keep shared content in sync via the `readme-sync` skill.
+> The README published on [npmjs.org](https://www.npmjs.com/package/flintfire) is a consumer-focused
+> variant sourced from [`npm-readme.md`](npm-readme.md) (staged at pack time). Keep shared content
+> in sync via the `readme-sync` skill.
 
 ## Testing Strategy
 
@@ -190,8 +160,8 @@ For significant architectural or contract-level changes, record the decision as 
 ### Development Setup
 
 ```bash
-git clone https://github.com/reggieofarrell/firestore-orm.git
-cd firestore-orm
+git clone https://github.com/reggieofarrell/flintfire.git
+cd flintfire
 npm install
 npm run build
 npm test
@@ -208,55 +178,27 @@ npm test
 
 ## License
 
-This project is licensed under the **MIT License**.
-
-- Full license text: [LICENSE](https://github.com/reggieofarrell/firestore-orm/blob/main/LICENSE)
-- Fork attribution notice:
-  [NOTICE](https://github.com/reggieofarrell/firestore-orm/blob/main/NOTICE)
-- Original upstream license:
-  [HBFLEX/spacelabs-firestoreorm LICENSE](https://github.com/HBFLEX/spacelabs-firestoreorm/blob/main/LICENSE)
-
-### Derivative work notice
-
-This repository is a fork of
-[HBFLEX/spacelabs-firestoreorm](https://github.com/HBFLEX/spacelabs-firestoreorm). Under the MIT
-License, you may use, modify, and distribute this software provided that **all copies include the
-original copyright notice, permission notice, and this repository's NOTICE file** where applicable.
-
-Current copyright holders in this repository:
+MIT. Full text: [LICENSE](LICENSE). Required attribution for redistributors: [NOTICE](NOTICE).
 
 - Copyright (c) 2025 HBFL3Xx (original work)
-- Copyright (c) 2026 Reggie O'Farrell (fork modifications)
-
-No additional license restrictions are imposed beyond MIT. There are no copyleft obligations, but
-attribution to the original author must be preserved in source distributions.
+- Copyright (c) 2026 Reggie O'Farrell (subsequent modifications)
 
 ## Support
 
-- **Issues:** [GitHub Issues](https://github.com/reggieofarrell/firestore-orm/issues)
+- **Issues:** [GitHub Issues](https://github.com/reggieofarrell/flintfire/issues)
 - **Documentation:**
-  [https://reggieofarrell.github.io/firestore-orm/](https://reggieofarrell.github.io/firestore-orm/)
+  [https://reggieofarrell.github.io/flintfire/](https://reggieofarrell.github.io/flintfire/)
 - **Email:** reggie@blackflag.design
 
 ## Acknowledgments
 
-- **Original author:** [Happy Banda (HBFL3Xx)](https://github.com/HBFLEX) for creating
-  [spacelabs-firestoreorm](https://github.com/HBFLEX/spacelabs-firestoreorm) and publishing it under
-  the MIT License
+- [Happy Banda (HBFL3Xx)](https://github.com/HBFLEX) — original MIT-licensed work this repository
+  builds on (see [NOTICE](NOTICE))
 - **Firebase team** for the Admin SDK
 - **Zod team** for schema validation
-- Everyone who has contributed ideas, issues, and feedback around Firestore ORM ergonomics
-
-If this package saves you time, consider giving this repository a star and crediting the upstream
-project when sharing derivative work.
-
-## Roadmap
-
-Planned features for future releases:
-
-- Looking forward to your suggestions here
+- Everyone who has contributed ideas, issues, and feedback
 
 ---
 
-**Maintained by [Reggie O'Farrell](https://github.com/reggieofarrell)** · Forked from work by
-[HBFL3Xx](https://github.com/HBFLEX)
+**Maintained by [Reggie O'Farrell](https://github.com/reggieofarrell)** · Built on MIT-licensed work
+by [HBFL3Xx](https://github.com/HBFLEX) (see [NOTICE](NOTICE))

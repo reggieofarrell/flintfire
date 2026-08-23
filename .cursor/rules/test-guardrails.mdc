@@ -1,7 +1,7 @@
 ---
-description: Critical guardrails for firestore-orm test files
-globs: src/tests/**/*.test.ts
 alwaysApply: false
+description: Critical guardrails for FlintFire test files
+globs: src/tests/**/*.test.ts
 ---
 
 # Test Guardrails

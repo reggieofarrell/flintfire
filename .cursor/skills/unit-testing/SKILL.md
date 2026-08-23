@@ -1,12 +1,8 @@
 ---
 name: unit-testing
-description:
-  Write Jest unit tests for firestore-orm pure logic, validation, error mapping, and mocked
-  Firestore repository wiring. Use for src/utils, ErrorParser, ErrorHandler, Validation, and
-  converter/schema unit tests. NOT for emulator integration tests — see integration-testing skill.
+description: Write Jest unit tests for FlintFire pure logic, validation, error mapping, and mocked Firestore repository wiring. Use for src/utils, ErrorParser, ErrorHandler, Validation, and converter/schema unit tests. NOT for emulator integration tests — see integration-testing skill.
 ---
-
-# Unit Testing (firestore-orm)
+# Unit Testing (FlintFire)
 
 ## Scope
 

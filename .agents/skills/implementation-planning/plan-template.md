@@ -11,7 +11,7 @@ not, rather than dropping it silently).
 (`<commit subject>`) · **Branch:** `<type>/issue-NN-<slug>` — already created and pushed with this
 plan on it; check it out, do not cut a new one
 
-**Issue:** [#NN](https://github.com/reggieofarrell/firestore-orm/issues/NN) — labels `…`. [If the
+**Issue:** [#NN](https://github.com/reggieofarrell/flintfire/issues/NN) — labels `…`. [If the
 labels put it in ADR-0017's `#35–#41` parity/`v3.x` deferral set, say so — it changes the §9
 bookkeeping. If it is a plain `bug`, say that too, and that the deferral bookkeeping does **not**
 apply.]

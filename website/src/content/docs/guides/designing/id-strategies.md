@@ -6,7 +6,7 @@ description:
 ---
 
 The Firestore document name is your document's identity (see
-[Document Identity](/firestore-orm/guides/concepts/document-identity/)). Choosing how that name is
+[Document Identity](/flintfire/guides/concepts/document-identity/)). Choosing how that name is
 assigned is a modeling decision. This page covers the three common strategies and how to write each.
 
 ## Auto-generated ids (the default)
@@ -40,7 +40,7 @@ use that value as the id. Choose the write method by what a re-run should do:
   when the latest write should win (a singleton config, a mirrored external record).
 
 ```typescript
-import { ConflictError } from '@reggieofarrell/firestore-orm';
+import { ConflictError } from 'flintfire';
 
 // Claim an externally-derived id exactly once
 try {
@@ -59,9 +59,9 @@ await productRepo.upsert(`sku-${sku}`, { name, price });
 ```
 
 Validate any externally-sourced id at the boundary with `repo.id(rawKey)` before using it as a
-document name — see [Document Identity](/firestore-orm/guides/concepts/document-identity/). For the
+document name — see [Document Identity](/flintfire/guides/concepts/document-identity/). For the
 full create-only / precondition surface, see
-[Conditional writes](/firestore-orm/guides/working-with-data/crud-operations/#conditional-writes).
+[Conditional writes](/flintfire/guides/working-with-data/crud-operations/#conditional-writes).
 
 ## Shared ids across collections
 
@@ -80,5 +80,5 @@ so it lands at the shared id.
 | Singleton      | `upsert(id, data)`    | Exactly one document (config, counters)                 |
 | Shared (1:1)   | `upsert(id, data)`    | A parallel document keyed by another collection's id    |
 
-See [CRUD Operations](/firestore-orm/guides/working-with-data/crud-operations/) for the full write
-surface and [FirestoreRepository](/firestore-orm/reference/repository/) for signatures.
+See [CRUD Operations](/flintfire/guides/working-with-data/crud-operations/) for the full write
+surface and [FirestoreRepository](/flintfire/reference/repository/) for signatures.

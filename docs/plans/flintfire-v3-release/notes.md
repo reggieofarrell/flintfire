@@ -1,0 +1,289 @@
+# FlintFire 3.0.0 — execution notes
+
+**Implementer:** Cursor Grok 4.6 · **Branch:** `release/flintfire-prep` · **Plan:**
+`docs/plans/flintfire-v3-release/PLAN.md` · **Baseline:** `main` @ `dc625b6480408dcfdca2d901ba875981338e9fb2`
+
+## Status
+
+Phase 0 preflight passed 2026-08-23. Local Phase 1 work is **gate-green and ready to commit** (no
+push/PR until asked). No remote mutations have been executed. Pause before every **REMOTE MUTATION /
+HUMAN CHECKPOINT**.
+
+## Ambiguities resolved
+
+- **Prep branch name:** used `release/flintfire-prep` as specified. A leftover local branch
+  `chore/switch-to-flintfire` exists at the same SHA as `main` with no unique commits and no remote.
+  It was not used and was not deleted.
+- **Keep-version heading vs manifest:** Phase 1.3 heading says “keep version 2.2.1”; §6.2, P2, and
+  `package.json` are `2.2.1`. Followed §6.2 / the actual manifest.
+- **Playbook path aliases vs this tree:** later Phase 1 steps name some files as they exist here
+  (`website/`, `npm-readme.md`, `.rulesync/`, `docs/adr/`, `.github/workflows/publish.yml`,
+  `website/src/content/docs/guides/migration-v2-to-v3.md`). Those paths are used. Where a later
+  paragraph still says `flintfire/vector` instead of `flintfire/vector`, T18 / §6.1 wins.
+- **npm README marker:** preserve the existing `<!-- npm-readme -->` marker, not a renamed variant.
+- **Peer install line:** actual peers are `firebase-admin` and `zod` (optional `express`), not
+  `firebase-admin` / `zod`.
+- **Compat env vars:** rename `FIRESTORE_ORM_ADMIN_VERSION` / `FIRESTORE_ORM_FIRESTORE_VERSION` to
+  `FLINTFIRE_ADMIN_VERSION` / `FLINTFIRE_FIRESTORE_VERSION`. Preserve emulator project id
+  `demo-firestoreorm-test`.
+
+## Deviations from the plan
+
+1. Phase 0.1 started on leftover local branch `chore/switch-to-flintfire` (same SHA as `main`).
+   Switched to `main` before recording baseline; owner assets came along. No unique commits were
+   discarded.
+
+## Files touched and why
+
+| File | Change | Plan reference |
+| ---- | ------ | -------------- |
+| `docs/plans/flintfire-v3-release/notes.md` | Execution record | §0 step 3 |
+
+## Edge cases / traps handled
+
+| Trap | Handled by | Pinned by |
+| ---- | ---------- | --------- |
+| T1 Pages URL | `base: '/flintfire'`; no fake `/firestore-orm/` redirects | astro config + VERSIONING.md |
+| T3 dist-tag | `resolve-npm-dist-tag.cjs` emits only `next`/`latest`; workflow interpolates that literal | unit tests + `publish.yml` |
+| T8 dual READMEs | GitHub `README.md` + `npm-readme.md` (`<!-- npm-readme -->`) | readme-sync skill; pack staging |
+| T9 generated agents | `.rulesync/` then `rules:sync` | `rules:check` in release:verify |
+| T10 v2 archive | keep `@reggieofarrell/firestore-orm` (including `/vector`); only relocate site prefix | re-audit 2026-08-23; restored four hybrid `@reggieofarrell/flintfire/vector` hits |
+| T17 brand assets | eight `-light`/`-dark` pairs; unsuffixed `favicon.svg` deleted; checker requires `/flintfire/favicon-*.svg` | `check-built-docs-assets.mjs` + built `index.html` |
+| T18 export keys vs specifiers | consumer docs use `flintfire/vector`, `flintfire/express` | packed-consumer + migration guide |
+| T19 npm trust flag | comments use `--file publish.yml` | `publish.yml` header |
+
+## Tests added
+
+| Id | Suite | Asserts | Guards |
+| -- | ----- | ------- | ------ |
+| dist-tag matrix | unit | prerelease→next, stable→latest, mixed identity reject, tag≠version reject, unsafe tag reject | `src/tests/unit/resolveNpmDistTag.unit.test.ts` |
+| P14 notes | unit | raw 524b983-shaped note still contains co-author/nested subject; transform drops them and keeps breaking prose | `src/tests/unit/changelogNotes.unit.test.ts` |
+
+## Mutation checks
+
+| Test | Mutation | Result |
+| ---- | -------- | ------ |
+| `resolveNpmDistTag` next/latest mapping | swapped `return isPrerelease ? 'next' : 'latest'` | **failed** (expected `next` got `latest`, and the inverse). Restored from `/tmp` copy (not `git checkout`). Re-run: 9/9 pass |
+| `normalizeBreakingNoteText` strip | `return text.trim()` (no cut) | **failed** (`Co-authored-by` still present). Restored from `/tmp` copy. Re-run: 3/3 pass |
+
+## Gate results
+
+Fourteen-leg §10 + `release:verify` run 2026-08-23 on Node v24.18.0 (`release/flintfire-prep`).
+Log: `/tmp/flintfire-prep-gate.log`.
+
+| Leg | Command (actual `package.json` names) | Result |
+| --- | --- | --- |
+| 1 | `test:types` | pass |
+| 2 | `lint` | pass (after ignoring `.versionrc.cjs` + `**/*.astro`) |
+| 3 | `check:format` | pass (after `prettier --write` on 6 files) |
+| 4 | `test:unit` | **34 suites, 438 tests** pass |
+| 5 | `test:integration:emulator` | **36 suites, 545 tests** pass |
+| 6–7 | `test:unit:coverage` + `test:coverage:gate:unit` | pass |
+| 8–9 | `test:integration:coverage` + `test:coverage:gate:integration` | pass |
+| 10 | `build` | pass |
+| 11 | `check:package` | pass (98 files; npm README staging restored) |
+| 12 | `check:consumer` | pass (`firebase-admin@^14` default) |
+| 13 | `check:docs` | pass (189 files) |
+| 14 | `docs:build` | pass; `check-built-docs-assets: ok`; no leaked `:::` |
+| 15 | `release:verify` | pass (`rules:check` up to date) |
+
+Compat (`FLINTFIRE_ADMIN_VERSION` / `FLINTFIRE_FIRESTORE_VERSION` as implemented): admin ^12/^13/^14 and
+admin ^12 + firestore 7.9.0 / 7.10.0 — all pass.
+
+Brand probes: `xmllint --noout` on eight public SVGs; payload grep clean; built
+`/flintfire/favicon-{light,dark}.svg` (not `/flintfirefavicon-`); unsuffixed `favicon.svg` absent;
+hero uses `flint-fire-icon-{light,dark}.svg` with `dark:sl-hidden` / `light:sl-hidden`.
+
+**Could not verify:** live browser light/dark desktop+mobile favicon/hero picking. Static HTML
+assertions cannot prove the OS/browser theme picker.
+
+## Anti-instructions checklist
+
+| Anti-instruction | Confirmed |
+| ---------------- | --------- |
+| No remote mutation in Phase 0 / Phase 1 local | yes |
+| No push/PR/tag/publish | yes |
+| No credentials in notes | yes (npm email from `profile get tfa` was not copied) |
+| Did not pull/rebase over owner assets | yes |
+| Did not create a competing prep branch after choosing `release/flintfire-prep` | yes |
+
+## §11 audit
+
+Not yet. Phase 0 only.
+
+## Independent adversarial review
+
+Independent refute-first pass (fresh subagent, 2026-08-23) was handed the diff + plan + tests, not
+this file. Findings:
+
+| Id | Sev | Finding | Disposition |
+| -- | --- | ------- | ----------- |
+| F1 | blocker | Favicon href could concatenate `BASE_URL` without a slash | **fixed** — `ThemeFavicons.astro` joins with an explicit trailing slash; checker now requires `/flintfire/favicon-light.svg`. Built `index.html` contains that path |
+| F2 | blocker | v2 archive taught `@reggieofarrell/flintfire/vector` | **fixed** — restored `@reggieofarrell/firestore-orm/vector` in four sites under `website/src/content/docs/2.0/` |
+| F3 | major | Migration intro said “from flintfire 2.x” / “no flintfire@3” | **fixed** — intro now names `@reggieofarrell/firestore-orm` 2.x and “no `@reggieofarrell/firestore-orm@3`” |
+| F4 | major | Changelog unit tests pin the helper, not the preset wiring | **deferred** — dry-run 3.0.0 section is already clean of P14 junk; preset-wiring test is follow-up, not a prep-PR identity defect |
+| F5 | major | Dry-run breaking notes still quote historical `@reggieofarrell/firestore-orm/express` import from old commit footers | **not a defect** for this PR — plan forbids hand-editing generated changelog; migration guide is canonical. Changelog is generated later |
+| F6 | major | `release:publish` / `gh release create` flags for RC | **deferred** — Phase 1 does not create GitHub Releases |
+| F7 | nit | Duplicate `publishConfig` in `package.json` | **fixed** — single `publishConfig.access=public` remains |
+
+The subagent also wrote `docs/plans/flintfire-v3-release/review.md`, which is reserved for an
+**external** reviewer. That file was deleted; this table is the implementer disposition.
+
+## Could-not-verify
+
+Carried from plan §5: Trusted Publisher settings cannot be inspected until RC1 exists; `flintfire`
+availability can change after this note. Full fourteen-leg gate **has now been run** (see Gate
+results). Live browser light/dark desktop+mobile favicon/hero picking was **not** executed.
+
+## Open questions for the reviewer
+
+None from Phase 0.
+
+---
+
+## Phase 0 — Read-only preflight (2026-08-23)
+
+### 0.1 Local identity and baseline
+
+| Check | Result |
+| --- | --- |
+| Node | `v24.18.0` (`~/.nvm/versions/node/v24.18.0`) |
+| npm | `11.19.0` |
+| nvm default | `24` → `v24.18.0` |
+| HEAD | `dc625b6480408dcfdca2d901ba875981338e9fb2` (`dc625b6 test(query-builder): pin decoded vector equality (#76) (#93)`) |
+| `HEAD` vs `origin/main` | identical |
+| `v2.x` / `origin/v2.x` / `v2.2.1^{commit}` | all `1226e9e9c74987c865d2abe66d422d9117566304` |
+| `v2.2.1` ancestor of `v2.x` | yes (exit 0) |
+| `v2.x..main` | 106 commits |
+| `v3*` tags | none |
+| Permitted dirty paths | plan dir; deletion of `website/public/favicon.svg`; eight paired SVGs. No other dirty files. |
+
+`git fetch --prune --tags origin` deleted stale remote-tracking branch
+`origin/test/issue-76-decoded-vector-equality-coverage` only.
+
+### 0.2 GitHub and npm identities
+
+| Check | Result |
+| --- | --- |
+| `gh` login | `reggieofarrell` (keyring; scopes `gist`, `read:org`, `repo`, `workflow`; git protocol HTTPS) |
+| Viewer permission | `ADMIN`; `viewerCanAdminister: true` |
+| Repo | public `reggieofarrell/firestore-orm`; default branch `main` |
+| `npm whoami` | `reggieofarrell` |
+| 2FA mode | `auth-and-writes` |
+
+Origin remains SSH (`git@github.com:reggieofarrell/firestore-orm.git`). Matches P16.
+
+### 0.3 Package and release availability
+
+| Check | Result |
+| --- | --- |
+| `npm view flintfire` | E404 — name unclaimed |
+| `@reggieofarrell/firestore-orm` | versions `2.0.0`–`2.2.1`; `latest=2.2.1`; no `deprecated` field; sole maintainer `reggieofarrell` |
+| `gh repo view reggieofarrell/flintfire` | repository not found |
+| Releases | `v2.2.1` (Latest), `v2.2.0`, `v2.0.0`; no v3 |
+| Open PRs | none |
+
+### 0.4 GitHub settings snapshot (pre-rename)
+
+| Surface | Observed |
+| --- | --- |
+| Pages | `build_type=workflow`; `html_url=https://reggieofarrell.github.io/firestore-orm/`; `cname=null`; HTTPS enforced |
+| Actions | enabled, `allowed_actions=all`; default workflow token `read`; cannot approve PRs |
+| Workflows | `Deploy docs` (`deploy-docs.yml`), `Publish Package` (`publish.yml`), `Tests` (`tests.yml`) — all `active` |
+| Environments | only `github-pages` (count 1); no `npm` |
+| Ruleset | `default branch protections`, `enforcement=disabled` |
+| Branches | `main`, `v2.x`, `feat/issue-33-conditional-writes`, `issue-40-distinct-values-semantic-equality-backup`, `plan/issue-69-collection-recursive-delete` — all `protected=false` |
+| Classic `main` protection | HTTP 404 “Branch not protected” |
+| Immutable releases | `enabled=false`, `enforced_by_owner=false` |
+| About | description/homepage/topics empty; merge+squash on; rebase off; delete-branch-on-merge on |
+
+No STOP condition fired.
+
+---
+
+## Phase 1 — Preparation PR (in progress, 2026-08-23)
+
+Local work is on `release/flintfire-prep`. **No push, PR, merge, tag, or publish.** Pause here for
+maintainer review before Phase 1.10 remote mutation.
+
+### Identity landed
+
+- Package name `flintfire`, version still **2.2.1**, description per §6.2.
+- Repository / bugs / homepage URLs point at `reggieofarrell/flintfire` and
+  `https://reggieofarrell.github.io/flintfire/`.
+- Consumer specifiers: `flintfire`, `flintfire/vector`, `flintfire/express` (export keys remain
+  `.`, `./vector`, `./express`).
+- ADR-0039 recorded. Compat env vars: `FLINTFIRE_ADMIN_VERSION` / `FLINTFIRE_FIRESTORE_VERSION`.
+  Emulator project id `demo-firestoreorm-test` kept.
+
+### Docs and brand assets
+
+- Astro `base: '/flintfire'`. ThemeFavicons Head override + paired splash icons. Unsuffixed
+  `favicon.svg` deleted.
+- `scripts/check-built-docs-assets.mjs` chained from `website` build and as an explicit step in
+  `deploy-docs.yml`.
+- `npm run docs:build` (2026-08-23): **check-built-docs-assets: ok**. No leaked `:::` in
+  `website/dist`.
+- v2 archive: path/URL prefix only; `@reggieofarrell/firestore-orm` imports kept. VERSIONING.md
+  documents the one-time relocation exception.
+- Dual READMEs: FlintFire pitch; npm file keeps `<!-- npm-readme -->`. Upstream
+  `spacelabs-firestoreorm` / `@spacelabstech/firestoreorm` mentions removed from both READMEs except
+  LICENSE/NOTICE pointers and footer attribution (HBFL3Xx). v2→v3 still names
+  `@reggieofarrell/firestore-orm`.
+
+### Publish + changelog tooling
+
+- `scripts/resolve-npm-dist-tag.cjs` + unit tests. `publish.yml` uses Environment `npm`,
+  `npm publish --tag next|latest` from the script output (shell allowlist). Trusted-publisher
+  comments use `--file publish.yml` (T19).
+- `scripts/changelog-preset.cjs` wraps conventionalcommits and trims breaking notes via
+  `normalize-breaking-notes.cjs`. `.versionrc.json` replaced by `.versionrc.cjs` so the preset
+  path is `require.resolve`'d (relative names get `conventional-changelog-` prefixed).
+- Dry-run `npm run release:bump:dry -- --release-as 3.0.0`: header
+  `## [3.0.0](https://github.com/reggieofarrell/flintfire/compare/v2.2.1...v3.0.0)`. No
+  `Co-authored-by` / nested `docs(website): archive` in the generated 3.0.0 section. Working tree
+  not modified by the dry-run.
+
+### rulesync
+
+- `.rulesync` sources updated to FlintFire; `npm run rules:sync` and `rules:check` (up to date).
+
+### Tests added
+
+| Id | Suite | Asserts | Guards |
+| -- | ----- | ------- | ------ |
+| dist-tag matrix | unit | prerelease→next, stable→latest, mixed identity reject, tag≠version reject, unsafe tag reject | `src/tests/unit/resolveNpmDistTag.unit.test.ts` |
+| P14 notes | unit | raw 524b983-shaped note still contains co-author/nested subject; transform drops them and keeps breaking prose | `src/tests/unit/changelogNotes.unit.test.ts` |
+
+Unit suite after these tests: **34 suites, 438 tests**. Integration: **36 suites, 545 tests**. Full
+§10 gate + `release:verify` + five compat legs **passed** 2026-08-23 (see Gate results above).
+
+README/npm-readme re-audit: no `spacelabs` / `@spacelabstech` strings. Remaining
+`@reggieofarrell/firestore-orm` hits are the intentional v2→v3 note plus LICENSE/NOTICE/footer
+attribution elsewhere.
+
+### Rename audit residuals (valid)
+
+- `CHANGELOG.md` released 2.x history
+- Accepted ADRs 0001–0038 historical issue/repo links
+- `website/src/content/docs/2.0/**` package imports
+- Migration guide old-side `@reggieofarrell/firestore-orm` examples
+- This plan / notes / ADR-0039 deprecation instructions
+- Emulator fixture `demo-firestoreorm-test` (package.json, `.firebaserc`)
+- Checker comment citing the old `/firestore-orm/` prefix as the pre-integration failure
+
+### Deviations
+
+- Changelog config is `.versionrc.cjs` (not JSON) so the custom preset can be an absolute
+  `require.resolve` path. Types/URL formats are duplicated onto `preset` because
+  commit-and-tag-version only merges those keys into the *default* preset object.
+- Dist-tag helper is CommonJS (`.cjs`) so Jest's ts-jest CJS output can load it; `.mjs` failed to
+  parse under that suite.
+- ESLint ignores `.versionrc.cjs` and `**/*.astro` (no Astro parser in this config; CJS Node globals
+  would trip `no-undef` the same way `scripts/**` already is ignored).
+
+### STOP
+
+Phase 1.10 remote mutation (push / PR / merge) is **not** done. Local gates are green. No v3 tag.
+No npm publish. Commit only when the maintainer asks.
+

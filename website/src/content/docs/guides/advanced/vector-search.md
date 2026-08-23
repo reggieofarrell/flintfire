@@ -6,7 +6,7 @@ description: 'Optional ./vector extension and findNearest KNN similarity search.
 Opt-in KNN similarity search for Firestore, layered onto the core repository without changing its
 API.
 
-Firestore vector search ships as an **opt-in extension** at `@reggieofarrell/firestore-orm/vector`.
+Firestore vector search ships as an **opt-in extension** at `flintfire/vector`.
 The core package API is unchanged — the standard `FirestoreQueryBuilder` behaves exactly as before.
 Wrap your repository with `withVectorSearch()` only when you need nearest-neighbor similarity
 search.
@@ -36,8 +36,8 @@ native `FieldValue.vector(...)` from `firebase-admin/firestore`.
 ## Quick start
 
 ```typescript
-import { FirestoreRepository } from '@reggieofarrell/firestore-orm';
-import { withVectorSearch, vectorEmbeddingSchema } from '@reggieofarrell/firestore-orm/vector';
+import { FirestoreRepository } from 'flintfire';
+import { withVectorSearch, vectorEmbeddingSchema } from 'flintfire/vector';
 import { FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
@@ -136,7 +136,7 @@ const results = await vectorArticleRepo
 ```
 
 For a **disjunction**, use `whereFilter()` — the same composite AND/OR factory as the core builder
-(see [Queries](/firestore-orm/guides/working-with-data/queries/#composite-andor-filters)):
+(see [Queries](/flintfire/guides/working-with-data/queries/#composite-andor-filters)):
 
 ```typescript
 const results = await vectorArticleRepo
@@ -170,7 +170,7 @@ The `distanceMeasure` option accepts the string values below (or the correspondi
 
 ## API reference
 
-All vector exports come from `@reggieofarrell/firestore-orm/vector`.
+All vector exports come from `flintfire/vector`.
 
 ### `withVectorSearch(repo)`
 
@@ -234,7 +234,7 @@ of `FieldValue.vector(...)`), recognized by nominal identity rather than object 
 
 ### Other exports
 
-Also exported from `@reggieofarrell/firestore-orm/vector`:
+Also exported from `flintfire/vector`:
 
 - **`VectorValueLike`** — the structural value type accepted by `vectorEmbeddingSchema`
   (`{ toArray(): number[]; isEqual(other): boolean }`).

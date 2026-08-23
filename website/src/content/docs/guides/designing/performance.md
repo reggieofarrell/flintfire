@@ -1,9 +1,9 @@
 ---
 title: 'Performance'
-description: 'Firestore cost model, optimization tips, and benchmarks for FirestoreORM.'
+description: 'Firestore cost model, optimization tips, and benchmarks for FlintFire.'
 ---
 
-How firestore-orm operations map to Firestore billing, what each call costs under the hood,
+How FlintFire operations map to Firestore billing, what each call costs under the hood,
 cost-optimization patterns, and rough latency benchmarks.
 
 ## Understanding Performance Costs
@@ -70,7 +70,7 @@ const posts = await postRepo
 Keep the branch count small. An `in` filter with N values inside an OR branch expands to N
 disjunctions, so a handful of branches can cross the cap. When the branches are stable and known
 ahead of time, a single denormalized flag (see
-[Data Modeling](/firestore-orm/guides/designing/data-modeling/)) is cheaper to index and query than
+[Data Modeling](/flintfire/guides/designing/data-modeling/)) is cheaper to index and query than
 a wide disjunction.
 
 **Pagination**

@@ -1656,7 +1656,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
 
   /**
    * Returns the underlying Firestore query for package-internal composition.
-   * @internal Used by `@reggieofarrell/firestore-orm/vector`.
+   * @internal Used by `flintfire/vector`.
    */
   getUnderlyingQuery(): Query<any> {
     return this.query;
@@ -2291,7 +2291,7 @@ export class FirestoreQueryBuilder<
 
 /**
  * Returns the underlying Firestore Query for package-internal composition.
- * Used by the vector search extension (`@reggieofarrell/firestore-orm/vector`).
+ * Used by the vector search extension (`flintfire/vector`).
  */
 export function getQueryRef(builder: FirestoreQueryBuilder<any, any, any, any>): Query<any> {
   return builder.getUnderlyingQuery();

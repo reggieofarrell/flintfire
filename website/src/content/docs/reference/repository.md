@@ -6,9 +6,9 @@ description:
 ---
 
 Full type signatures for `FirestoreRepository`. For the query builder returned by `query()`, see
-[FirestoreQueryBuilder](/firestore-orm/reference/query-builder/); for the package's exported types,
-see [Exported Types](/firestore-orm/reference/types/); for the error classes and the Express
-middleware, see [Error Handling](/firestore-orm/reference/errors/).
+[FirestoreQueryBuilder](/flintfire/reference/query-builder/); for the package's exported types,
+see [Exported Types](/flintfire/reference/types/); for the error classes and the Express
+middleware, see [Error Handling](/flintfire/reference/errors/).
 
 ## The four generics
 
@@ -21,7 +21,7 @@ schema values:
 - **`W`** — the write-input type, `z.input<writeSchema>` (defaults to `T`) — the caller's pre-parse
   input to `create` / `update`. A `writeSchema` built from the write combinators lets those fields
   accept their native values and sentinels on writes with no cast — see
-  [Per-Field Sentinel Approval](/firestore-orm/guides/concepts/field-value-sentinels/).
+  [Per-Field Sentinel Approval](/flintfire/guides/concepts/field-value-sentinels/).
 - **`S`** — the stored-data type, `z.output<storedSchema>` (defaults to `T`) — the at-rest shape
   that query field paths derive from.
 - **`WO`** — the parsed-write type, `z.output<writeSchema>` (defaults to `W`) — what the SDK
@@ -29,7 +29,7 @@ schema values:
 
 The Firestore document name is the **sole authority** for `id`. Schemas describe the document's own
 data and **must not** declare a top-level `id` (construction throws if they do) — see
-[Document Identity](/firestore-orm/guides/concepts/document-identity/). The id is generated on
+[Document Identity](/flintfire/guides/concepts/document-identity/). The id is generated on
 `create` / `bulkCreate` / `createInTransaction`, or taken from the `id` argument on `update` /
 `patch` / `upsert` / `delete`, and is never part of a write payload.
 
@@ -38,7 +38,7 @@ methods accept **typed dot-notation field paths** (`'address.city'`) — no `as 
 / `upsert` (`CreateInput<W>` = `WithFieldValue<Omit<W, 'id'>>`) reject dotted keys. Query field
 paths are derived from the stored shape `S` (excluding the synthetic `id`) via the exported
 `FieldPaths` helper (with `PathValue` for resolving a path's value type). See the
-[Dot Notation guide](/firestore-orm/guides/working-with-data/dot-notation/).
+[Dot Notation guide](/flintfire/guides/working-with-data/dot-notation/).
 
 `class FirestoreRepository<T extends object, W extends object = T, S extends object = T, WO extends object = W>`
 
@@ -50,7 +50,7 @@ Create a schema-validated repository. The **read type** is `z.output<readSchema>
 type** is `z.input<writeSchema>` (defaults to the read type), and the **stored type** is
 `z.output<storedSchema>` (defaults to the read type). Build the overlay from the write combinators
 so those fields accept their native values / sentinels on `create` / `update` with no cast — see
-[Per-Field Sentinel Approval](/firestore-orm/guides/concepts/field-value-sentinels/) for the exact
+[Per-Field Sentinel Approval](/flintfire/guides/concepts/field-value-sentinels/) for the exact
 guarantees.
 
 Types are inferred from schema **values** — do not pass an explicit generic. The read / write /
@@ -59,7 +59,7 @@ construction throws with a remedial error — the document name is the sole `id`
 `options.sentinelPolicy` is `'strict'` (default) or `'permissive'`; strict mode enforces which
 sentinel kind each field accepts. When a `readConverter` is supplied, `storedSchema` is **required**
 (the converter changes the read shape, so query paths need an explicit at-rest schema) — see
-[Read Converters](/firestore-orm/guides/concepts/read-converters/). `allowLegacyDatastoreIds` opts
+[Read Converters](/flintfire/guides/concepts/read-converters/). `allowLegacyDatastoreIds` opts
 into accepting legacy Datastore-mode numeric ids.
 
 **`raw<T extends object, W extends object = T, S extends object = T>(db: Firestore, collection: string, options?: { readConverter?: ReadConverter<T>; allowLegacyDatastoreIds?: boolean }): FirestoreRepository<T, W, S, W>`**
@@ -109,7 +109,7 @@ configured `readConverter` applies to `doc`. For the general read-metadata shape
 fields, not just `updateTime`), use `getById(id, { withMetadata: true })` instead — this method
 remains the narrow CAS-token accessor. **Not** on `ReadOnlyTransactionalRepository` — it performs
 non-transactional I/O. See
-[Conditional writes](/firestore-orm/guides/working-with-data/crud-operations/#conditional-writes).
+[Conditional writes](/flintfire/guides/working-with-data/crud-operations/#conditional-writes).
 
 **`getMany(ids: ID[]): Promise<(FirestoreDocument<T> | null)[]>`** /
 **`getMany(ids: ID[], options: { fieldMask: … }): Promise<(FirestoreDocument<DeepPartial<T>> | null)[]>`** /
@@ -128,7 +128,7 @@ narrows to `FirestoreDocument<DeepPartial<T>>` (mirroring `select()`); `id` alwa
 With a configured `readConverter`, `fromFirestore` receives the **masked** document. A converter that
 dereferences a field the mask omitted will throw a raw `TypeError`. Either omit the mask, widen it
 to cover every field the converter reads, or make the converter defensive — see
-[Read converters](/firestore-orm/guides/concepts/read-converters/).
+[Read converters](/flintfire/guides/concepts/read-converters/).
 :::
 
 **`fromSnapshot(snapshot: DocumentSnapshot): FirestoreDocument<T> | null`**
@@ -137,7 +137,7 @@ Map a raw Firestore snapshot — e.g. the one delivered to a trigger cloud funct
 `FirestoreDocument<T>`, applying the repository's `readConverter` `fromFirestore` when configured
 and overlaying the document `id`. Does no Firestore I/O; returns the read model `T` (not `W`), and
 `null` for a non-existent snapshot. Not validated (like other reads); compose `validate` after a
-null guard — see [Cloud Functions & triggers](/firestore-orm/guides/integrations/cloud-functions/).
+null guard — see [Cloud Functions & triggers](/flintfire/guides/integrations/cloud-functions/).
 
 **`validate(data: FirestoreDocument<T>): FirestoreDocument<T>`**
 **`validate(data: FirestoreDocument<T>[]): FirestoreDocument<T>[]`**
@@ -145,7 +145,7 @@ null guard — see [Cloud Functions & triggers](/firestore-orm/guides/integratio
 Parse an already-read value through `schemas.read` and return the parsed output. Throws
 `ValidationError` on mismatch (array form is all-or-nothing). Throws a plain `Error` if the
 repository has no schema. See
-[Schema Validation](/firestore-orm/guides/concepts/schema-validation/#validating-reads-opt-in).
+[Schema Validation](/flintfire/guides/concepts/schema-validation/#validating-reads-opt-in).
 
 **`safeValidate(data: FirestoreDocument<T>): SafeResult<T>`**
 **`safeValidate(data: FirestoreDocument<T>[]): SafeResult<T>[]`**
@@ -178,7 +178,7 @@ when multiple documents match.
 **`listenOne(id: ID, callback: (item: FirestoreDocument<T>) => void, onError?: (error: Error) => void): () => void`**
 
 Subscribe to real-time updates for a single document by ID. Returns an unsubscribe function. See
-[Real-time & Listeners](/firestore-orm/guides/advanced/real-time/).
+[Real-time & Listeners](/flintfire/guides/advanced/real-time/).
 
 **`listenOneDetailed(id: ID, callback: (item: WithMetadata<FirestoreDocument<T>>) => void, onError?: (error: Error) => void): () => void`**
 
@@ -346,7 +346,7 @@ await postRepo.recursiveDeleteCollection();
 Validate an untrusted document id at the boundary and return it as an `ID`. Throws
 `InvalidDocumentIdError` when `raw` is malformed (empty, contains `/`, `.`, `..`, a `__…__` reserved
 pattern, or exceeds 1500 bytes). Use it before passing a request-supplied id to `getById`, `update`,
-etc. See [Document Identity](/firestore-orm/guides/concepts/document-identity/).
+etc. See [Document Identity](/flintfire/guides/concepts/document-identity/).
 
 **`newId(): ID`**
 
@@ -359,7 +359,7 @@ own fresh id.
 **`query(): FirestoreQueryBuilder<T, W, S>`**
 
 Create a query builder for complex queries, aggregations, streaming, and real-time listeners. See
-[FirestoreQueryBuilder](/firestore-orm/reference/query-builder/).
+[FirestoreQueryBuilder](/flintfire/reference/query-builder/).
 
 **`collectionGroup(): FirestoreCollectionGroup<T, S>`**
 
@@ -369,7 +369,7 @@ segment of this repository's collection path, and the handle inherits this repos
 stored (query-path) model, `readConverter`, and `allowLegacyDatastoreIds` policy.
 
 The handle is stateless and reusable. It exposes `collectionId`, `query()` (a fresh
-[collection-group query builder](/firestore-orm/reference/query-builder/#collection-group-query-builder)
+[collection-group query builder](/flintfire/reference/query-builder/#collection-group-query-builder)
 each call), and `fromSnapshot(snapshot)` — the group counterpart of the repository's own
 `fromSnapshot`, returning a `CollectionGroupDocument<T> | null` with full-path identity.
 
@@ -381,7 +381,7 @@ it. `fromSnapshot(snapshot)` **throws** for a snapshot outside the group (its co
 match), so an out-of-group trigger cannot produce a well-typed document carrying the wrong identity.
 Collection-group queries also need explicitly created collection-group-scoped indexes in production.
 See
-[collection-group queries](/firestore-orm/guides/working-with-data/queries/#collection-group-queries).
+[collection-group queries](/flintfire/guides/working-with-data/queries/#collection-group-queries).
 
 **`on(event: HookEvent, fn: (data, context: HookContext) => void | Promise<void>): void`**
 
@@ -409,7 +409,7 @@ receive the full persisted document as a `FirestoreDocument<T>` at runtime. `que
 `execution: 'transaction'` and an observed `attempt`, or `null` for caller-managed raw
 transactions). **`bulkWrite`, `recursiveDelete`, and `recursiveDeleteCollection` run no hooks** —
 `bulkWrite` throws when any bulk hook is registered unless `{ skipHooks: true }` is passed. See
-[Lifecycle hooks](/firestore-orm/guides/concepts/lifecycle-hooks/) for full detail.
+[Lifecycle hooks](/flintfire/guides/concepts/lifecycle-hooks/) for full detail.
 
 **`subcollection<RS extends ZodObject, WS extends ZodObject = RS, SS extends ZodObject = RS>(parentId: ID, subcollectionName: string, readSchema: RS, options?: { writeSchema?: WS; storedSchema?: SS; readConverter?: ReadConverter<z.output<RS>>; sentinelPolicy?: SentinelPolicy; allowLegacyDatastoreIds?: boolean }): FirestoreRepository<z.output<RS>, z.input<WS>, z.output<SS>, z.output<WS>>`**
 
@@ -420,7 +420,7 @@ repository. The read / write / stored schemas **must not** declare a top-level `
 throws otherwise); when a `readConverter` is supplied, `storedSchema` is required. For an
 unvalidated subcollection, construct a repository directly against the full path with
 `new FirestoreRepository<Order>(db, `${parentPath}/${parentId}/orders`)`. See
-[Subcollections](/firestore-orm/guides/working-with-data/subcollections/).
+[Subcollections](/flintfire/guides/working-with-data/subcollections/).
 
 **`getParentId(): ID | null`**
 
@@ -443,7 +443,7 @@ option types are Admin SDK types (`FirebaseFirestore.ReadOnlyTransactionOptions`
 `readOnly: true`, the callback `repo` is narrowed to `ReadOnlyTransactionalRepository` (read-safe
 members only — write helpers and non-transactional reads are absent from the type). Otherwise the
 callback receives a full transaction-scoped `repo`; use its `*InTransaction` methods so that hooks
-fire correctly. See [Transactions](/firestore-orm/guides/working-with-data/transactions/).
+fire correctly. See [Transactions](/flintfire/guides/working-with-data/transactions/).
 
 **`runReadOnlyAt<R>(readTime: Timestamp, fn): Promise<R>`**
 
@@ -469,7 +469,7 @@ which performs non-transactional I/O and is deliberately absent).
 :::caution
 With a configured `readConverter`, `fromFirestore` receives the **masked** document when `fieldMask`
 is supplied. A converter that dereferences an omitted field throws a raw `TypeError` — see
-[Read converters](/firestore-orm/guides/concepts/read-converters/).
+[Read converters](/flintfire/guides/concepts/read-converters/).
 :::
 
 **`updateInTransaction(tx: Transaction, id: ID, data: UpdateInput<W>, options?: { merge?: boolean; lastUpdateTime?: Timestamp }): Promise<void>`**

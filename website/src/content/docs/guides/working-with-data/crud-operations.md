@@ -122,7 +122,7 @@ const projected = await userRepo.getMany(['alice', 'bob'], {
   there is no `merge` option to set. `lastUpdateTime` guards the write the same way as on `update`.
 
 Both dot-notation and nested-object updates are supported; see
-[Dot-notation nested updates](/firestore-orm/guides/working-with-data/dot-notation/) for the merge
+[Dot-notation nested updates](/flintfire/guides/working-with-data/dot-notation/) for the merge
 semantics of paths like `'profile.nickname'`.
 
 ## Conditional writes
@@ -139,7 +139,7 @@ semantics: the write succeeds only if the document does **not** already exist. A
 succeed — exactly one wins.
 
 ```typescript
-import { ConflictError } from '@reggieofarrell/firestore-orm';
+import { ConflictError } from 'flintfire';
 
 try {
   await userRepo.createWithId('external-id-123', {
@@ -155,7 +155,7 @@ try {
 
 `bulkCreateWithIds([{ id, data }, …])` is the batched form (atomic at ≤ 500 ops). Prefer this over
 `upsert` when you need to **claim** an externally-derived id once; use `upsert` when re-running the
-write should overwrite. See [ID strategies](/firestore-orm/guides/designing/id-strategies/).
+write should overwrite. See [ID strategies](/flintfire/guides/designing/id-strategies/).
 
 ### Optimistic concurrency (`lastUpdateTime`)
 
@@ -165,7 +165,7 @@ changed the document in between; otherwise the repository raises `PreconditionFa
 (HTTP 412) and leaves the stored document untouched.
 
 ```typescript
-import { PreconditionFailedError } from '@reggieofarrell/firestore-orm';
+import { PreconditionFailedError } from 'flintfire';
 
 for (let attempt = 0; attempt < 3; attempt++) {
   const current = await userRepo.getByIdWithUpdateTime('user-123');
@@ -294,4 +294,4 @@ the per-document `before/afterUpdate` / `before/afterDelete` hooks. Use the sing
 if you need per-document hooks. **`bulkWrite`, `recursiveDelete`, and `recursiveDeleteCollection`
 run no hooks** — `bulkWrite` throws when bulk hooks are registered unless you pass
 `{ skipHooks: true }`. See
-[lifecycle hooks](/firestore-orm/guides/concepts/lifecycle-hooks/).
+[lifecycle hooks](/flintfire/guides/concepts/lifecycle-hooks/).

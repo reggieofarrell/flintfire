@@ -1,7 +1,7 @@
 ---
 title: Getting Started
 description:
-  Install @reggieofarrell/firestore-orm, define a Zod schema, and run your first
+  Install flintfire, define a Zod schema, and run your first
   create/query/update/delete.
 ---
 
@@ -20,15 +20,15 @@ queries. This page is the shortest path from zero to a working collection.
 ## Install
 
 ```bash
-npm install @reggieofarrell/firestore-orm firebase-admin zod
+npm install flintfire firebase-admin zod
 ```
 
 ```bash
-yarn add @reggieofarrell/firestore-orm firebase-admin zod
+yarn add flintfire firebase-admin zod
 ```
 
 ```bash
-pnpm add @reggieofarrell/firestore-orm firebase-admin zod
+pnpm add flintfire firebase-admin zod
 ```
 
 ### Peer dependencies
@@ -87,13 +87,13 @@ export const userSchema = z.object({
 export type User = z.infer<typeof userSchema>;
 ```
 
-See [Schema Validation](/firestore-orm/guides/concepts/schema-validation/) for derived create/update
+See [Schema Validation](/flintfire/guides/concepts/schema-validation/) for derived create/update
 schemas and the no-top-level-`id` rule.
 
 ## 3. Create a repository
 
 ```typescript
-import { FirestoreRepository } from '@reggieofarrell/firestore-orm';
+import { FirestoreRepository } from 'flintfire';
 import { db } from './firebase';
 import { userSchema, type User } from './schemas';
 
@@ -102,7 +102,7 @@ export const userRepo = FirestoreRepository.withSchema(db, 'users', userSchema);
 
 Prefer `withSchema` when you want runtime validation. For an unvalidated collection, construct
 `new FirestoreRepository<User>(db, 'users')` instead — see
-[Core Concepts](/firestore-orm/guides/concepts/core-concepts/).
+[Core Concepts](/flintfire/guides/concepts/core-concepts/).
 
 ## 4. Create, query, update, delete
 
@@ -140,9 +140,9 @@ await userRepo.delete(userId);
 
 | Topic                                                                          | When to read it                                        |
 | ------------------------------------------------------------------------------ | ------------------------------------------------------ |
-| [Core Concepts](/firestore-orm/guides/concepts/core-concepts/)                 | Repository pattern, converters, delete behavior        |
-| [CRUD Operations](/firestore-orm/guides/working-with-data/crud-operations/)    | Bulk variants and return shapes                        |
-| [Queries](/firestore-orm/guides/working-with-data/queries/)                    | Pagination, aggregations, streaming, listeners         |
-| [Field-value sentinels](/firestore-orm/guides/concepts/field-value-sentinels/) | `serverTimestamp`, `increment`, strict sentinel policy |
-| [Framework Integration](/firestore-orm/guides/integrations/express/)           | Express / NestJS wiring                                |
-| [Documentation overview](/firestore-orm/overview/)                             | Full guide index                                       |
+| [Core Concepts](/flintfire/guides/concepts/core-concepts/)                 | Repository pattern, converters, delete behavior        |
+| [CRUD Operations](/flintfire/guides/working-with-data/crud-operations/)    | Bulk variants and return shapes                        |
+| [Queries](/flintfire/guides/working-with-data/queries/)                    | Pagination, aggregations, streaming, listeners         |
+| [Field-value sentinels](/flintfire/guides/concepts/field-value-sentinels/) | `serverTimestamp`, `increment`, strict sentinel policy |
+| [Framework Integration](/flintfire/guides/integrations/express/)           | Express / NestJS wiring                                |
+| [Documentation overview](/flintfire/overview/)                             | Full guide index                                       |

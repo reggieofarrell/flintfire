@@ -57,8 +57,8 @@ export type { InvalidDocumentIdReason, WriteOutcome } from './core/Errors.js';
 
 export { parseFirestoreError } from './core/ErrorParser.js';
 // NOTE: `errorHandler` is intentionally NOT exported from the root — it lives in the optional
-// `@reggieofarrell/firestore-orm/express` subpath so `express` types stay out of the core type
-// graph. Import it as: `import { errorHandler } from '@reggieofarrell/firestore-orm/express'`.
+// `flintfire/express` subpath so `express` types stay out of the core type
+// graph. Import it as: `import { errorHandler } from 'flintfire/express'`.
 
 export {
   makeValidator,

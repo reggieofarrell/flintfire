@@ -104,7 +104,7 @@ type Path = PathSegment[];
  * are finite. This rejects a forged plain `{ _values: number[] }` map, which previously counted as a
  * sentinel and could bypass schema validation on the permissive escape-hatch path and be stored as
  * an ordinary map (finding B7). The precise way to model a vector field is `vectorEmbeddingSchema(dims)`
- * (from `@reggieofarrell/firestore-orm/vector`); under the v3-default `sentinelPolicy: 'strict'` the
+ * (from `flintfire/vector`); under the v3-default `sentinelPolicy: 'strict'` the
  * escape hatch never runs at all.
  */
 function isVectorWriteValue(value: unknown): boolean {
@@ -119,7 +119,7 @@ function isVectorWriteValue(value: unknown): boolean {
 /**
  * Checks whether a value is a Firestore FieldValue sentinel instance.
  *
- * firestore-orm targets the firebase-admin SDK, so detection relies on the exported
+ * FlintFire targets the firebase-admin SDK, so detection relies on the exported
  * `FieldValue` class identity (`instanceof`) plus a structural check for `VectorValue`
  * (which is a standalone class, not a `FieldValue` subclass). Web-SDK / dual-package
  * structural detection is intentionally out of scope.

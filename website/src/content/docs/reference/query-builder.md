@@ -7,8 +7,8 @@ description:
 
 Full type signatures for `FirestoreQueryBuilder`, obtained from `repo.query()`. The generics `T`
 (read data), `W` (write input), and `S` (stored data) are the repository's — see
-[FirestoreRepository](/firestore-orm/reference/repository/#the-four-generics). For the narrative
-walkthrough of these methods, see [Queries](/firestore-orm/guides/working-with-data/queries/).
+[FirestoreRepository](/flintfire/reference/repository/#the-four-generics). For the narrative
+walkthrough of these methods, see [Queries](/flintfire/guides/working-with-data/queries/).
 
 `class FirestoreQueryBuilder<T, W, S = T, R = FirestoreDocument<T>>` — obtained from `repo.query()`.
 `R` is the result shape of terminal reads (`get`, `getOne`, `stream`, `paginate`, …); it defaults to
@@ -42,7 +42,7 @@ query by id.
 
 Add a **composite** filter — nested `AND` / `OR` expressions, which chained `where()` calls (an
 implicit top-level AND) cannot express. The callback receives a schema-aware
-[`QueryFilterFactory`](/firestore-orm/reference/types/):
+[`QueryFilterFactory`](/flintfire/reference/types/):
 
 - `f.where(field, op, value)` — same typing as `where(...)` above
   (`FieldPaths<OmitId<S>> | FieldPath`, `value: unknown`) at every nesting depth, so a typo
@@ -69,7 +69,7 @@ documents that are missing that field — including documents matched by a _diff
 Firestore adds an implicit `orderBy` for every inequality field in the flattened filter tree. An OR
 query can therefore return fewer rows than one of its own disjuncts, on reads, aggregations, and the
 `update()` / `delete()` terminals alike. `f.whereId(...)` with a comparison operator is exempt. See
-[Queries](/firestore-orm/guides/working-with-data/queries/#composite-andor-filters).
+[Queries](/flintfire/guides/working-with-data/queries/#composite-andor-filters).
 
 Firestore enforces its own limits on the **server** and the ORM does not duplicate them (a local
 copy would risk rejecting a query the backend accepts, and the counts multiply across clauses the
@@ -78,7 +78,7 @@ most 30 values, at most one `array-contains` **per disjunction**, and one `!=` /
 query** — which also counts `!= null` / `!= NaN`. A `not-in` anywhere in the query is incompatible
 with any `OR`, including one from a chained `where()` outside the callback. All arrive as
 `INVALID_ARGUMENT`. A composite query can also require composite index coverage for more than one
-disjunct branch — see [Troubleshooting](/firestore-orm/reference/troubleshooting/).
+disjunct branch — see [Troubleshooting](/flintfire/reference/troubleshooting/).
 
 **`orderById(direction?: 'asc' | 'desc'): this`**
 
@@ -218,7 +218,7 @@ guide). Also available on collection-group builders (inherited from the shared r
 **`distinctValues<K extends Extract<KeysOf<OmitId<T>>, string>>(field: K): Promise<ValueAtKey<T, K>[]>`**
 
 (`KeysOf` / `ValueAtKey` are internal; `OmitId` is exported — see
-[Exported Types](/firestore-orm/reference/types/). The constraint widens to branch-specific keys on
+[Exported Types](/flintfire/reference/types/). The constraint widens to branch-specific keys on
 union read models while preserving the element type — ADR-0028.)
 
 Return the distinct values observed for a field. Drops `undefined`, but preserves a stored `null` as
@@ -267,7 +267,7 @@ Subscribe with the full mapped result set **plus** `docChanges()` semantics. The
 emission reports every match as `type: 'added'` with `oldIndex: -1`. For a `removed` change, `doc`
 and `metadata` describe the document **as it last was** — branch on `type`, not on `exists` on the
 change doc. Same `select()` rejection as `onSnapshot`. See
-[Real-time & Listeners](/firestore-orm/guides/advanced/real-time/).
+[Real-time & Listeners](/flintfire/guides/advanced/real-time/).
 
 ## Query-level writes
 
@@ -291,7 +291,7 @@ collection id, at any depth. Both builders extend the same internal read base, s
 differences below — including every `{ withMetadata: true }` terminal overload and
 `onSnapshotDetailed()`. On collection-group rows, `metadata.path` equals the row's own `path` (not a
 separate spelling). For the narrative walkthrough see
-[collection-group queries](/firestore-orm/guides/working-with-data/queries/#collection-group-queries).
+[collection-group queries](/flintfire/guides/working-with-data/queries/#collection-group-queries).
 
 | Single collection                 | Collection group             | Why                                                 |
 | --------------------------------- | ---------------------------- | --------------------------------------------------- |
@@ -336,4 +336,4 @@ snapshot reference, not from the field mask.
 **Indexes.** Firestore's automatic single-field indexes are _collection_-scoped, so a
 collection-group query that filters or orders on a field needs an explicitly created
 **collection-group-scoped** index in production — even for a single `where(...)`. The emulator does
-not enforce this. See [Troubleshooting](/firestore-orm/reference/troubleshooting/).
+not enforce this. See [Troubleshooting](/flintfire/reference/troubleshooting/).

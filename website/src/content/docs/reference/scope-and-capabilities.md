@@ -1,11 +1,11 @@
 ---
 title: 'Scope & Capabilities'
 description:
-  'What firestore-orm v3 wraps (Firestore Core operations), what it defers, and the raw-SDK escape
+  'What FlintFire v3 wraps (Firestore Core operations), what it defers, and the raw-SDK escape
   hatch.'
 ---
 
-firestore-orm v3 is a **type-safe ORM for Firestore _Core operations_** — the everyday
+FlintFire v3 is a **type-safe ORM for Firestore _Core operations_** — the everyday
 collection/document/query surface of the Firebase Admin SDK — with validation, lifecycle hooks, a
 query builder, transactions, and a vector-search extension. It intentionally does **not** attempt to
 mirror the entire server-side Firestore feature set, and it does not wrap the Firestore Enterprise
@@ -45,7 +45,7 @@ reach the raw Admin SDK for anything not yet wrapped.
 | Field transforms / sentinels                     | Strict per-field approval by default                                                                                                                                                                                                      |
 | Vector search (`vectorQuery().findNearest()`)    | Distance measures, result field, threshold, prefilters (incl. AND/OR)                                                                                                                                                                     |
 | Query Explain (`explain()` / `explainStream()`)  | `explain()`: Core + vector (after `findNearest`); returns `{ metrics, documents }` (`documents` is `null` plan-only, `[]` when analyzed empty). **Emulator throws `No explain results`**. `explainStream()`: **Core only** (collection + group); mapped document chunks + optional metrics; local `limitToLast` reject. **Emulator streams docs without metrics** — real diagnostics need production Firestore. No vector/Aggregate stream. |
-| Distinct field values (`distinctValues`)         | Client-side: downloads matching documents and dedupes in process by **Firestore-aware semantic equality** (maps/arrays structural, key order irrelevant; `Timestamp`/`GeoPoint`/`DocumentReference`/`Bytes`/`VectorValue` by value). Non-Firestore `readConverter` output falls back to identity. Server-side distinct remains [#41](https://github.com/reggieofarrell/firestore-orm/issues/41); the download-size optimization is [#75](https://github.com/reggieofarrell/firestore-orm/issues/75). |
+| Distinct field values (`distinctValues`)         | Client-side: downloads matching documents and dedupes in process by **Firestore-aware semantic equality** (maps/arrays structural, key order irrelevant; `Timestamp`/`GeoPoint`/`DocumentReference`/`Bytes`/`VectorValue` by value). Non-Firestore `readConverter` output falls back to identity. Server-side distinct remains [#41](https://github.com/reggieofarrell/flintfire/issues/41); the download-size optimization is [#75](https://github.com/reggieofarrell/flintfire/issues/75). |
 
 ## Deferred to v3.x (tracked)
 
@@ -54,14 +54,14 @@ issue labeled `parity` / `v3.x`. Until then, use the [raw-SDK escape hatch](#raw
 
 | Capability                                         | Issue                                                            |
 | -------------------------------------------------- | ---------------------------------------------------------------- |
-| Experimental Enterprise Pipeline subpath           | [#41](https://github.com/reggieofarrell/firestore-orm/issues/41) |
+| Experimental Enterprise Pipeline subpath           | [#41](https://github.com/reggieofarrell/flintfire/issues/41) |
 
 ## Collection groups are read-only
 
 `repo.collectionGroup()` wraps the read surface of a Firestore collection group — every collection
 with the same id, at any depth. Results carry the full `path` and `parentPath` because document IDs
 are **not** unique across a group. See
-[collection-group queries](/firestore-orm/guides/working-with-data/queries/#collection-group-queries).
+[collection-group queries](/flintfire/guides/working-with-data/queries/#collection-group-queries).
 
 There is deliberately no group-wide `update()` / `delete()`: the ORM's bulk hooks carry `{ ids }`
 payloads, and an `id` is ambiguous across a group, so a hook could not tell which document it was
@@ -126,7 +126,7 @@ supported getter for a repository's internal `Firestore` instance — keep your 
 - **Firestore Enterprise Pipeline operations** (expression-based queries, joins, DML, full-text /
   geo search) — a pre-GA, edition-gated query model incompatible with a builder that always returns
   `FirestoreDocument<T>`. A separate experimental subpath is tracked in
-  [#41](https://github.com/reggieofarrell/firestore-orm/issues/41).
+  [#41](https://github.com/reggieofarrell/flintfire/issues/41).
 - **Firestore with MongoDB compatibility** — a different product mode (MongoDB drivers / BSON /
   MQL); use the MongoDB driver or Mongoose instead.
 - **The database control/administration plane** — database/backup/PITR/index/IAM administration is a

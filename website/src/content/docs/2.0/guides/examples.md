@@ -9,10 +9,10 @@ Three end-to-end walkthroughs that combine schemas, hooks, transactions, queries
 listeners into production-shaped features.
 
 Each example below is a complete slice — schema, repository (with its
-[lifecycle hooks](/firestore-orm/2.0/guides/lifecycle-hooks/)), and a service class — so you can see how the
+[lifecycle hooks](/flintfire/2.0/guides/lifecycle-hooks/)), and a service class — so you can see how the
 pieces fit together in a real application. For focused explanations of any single mechanism, see
-[CRUD operations](/firestore-orm/2.0/guides/crud-operations/), the [query builder](/firestore-orm/2.0/guides/queries/),
-[transactions](/firestore-orm/2.0/guides/transactions/), and [error handling](/firestore-orm/2.0/guides/error-handling/).
+[CRUD operations](/flintfire/2.0/guides/crud-operations/), the [query builder](/flintfire/2.0/guides/queries/),
+[transactions](/flintfire/2.0/guides/transactions/), and [error handling](/flintfire/2.0/guides/error-handling/).
 
 In this guide:
 
@@ -24,8 +24,8 @@ In this guide:
 
 This example shows a full order lifecycle: validating inventory in a `beforeCreate` hook, reducing
 stock and sending confirmation email in `afterCreate`, guarding shipped orders in `beforeUpdate`,
-cancelling via a [transaction](/firestore-orm/2.0/guides/transactions/), and computing revenue with `sum()` / `average()`
-[aggregations](/firestore-orm/2.0/guides/queries/). Note that every schema declares a required top-level `id: z.string()`,
+cancelling via a [transaction](/flintfire/2.0/guides/transactions/), and computing revenue with `sum()` / `average()`
+[aggregations](/flintfire/2.0/guides/queries/). Note that every schema declares a required top-level `id: z.string()`,
 which `withSchema` requires at construction time.
 
 ```typescript
@@ -234,7 +234,7 @@ cancellation path uses `runInTransaction`, which hands you a transaction-scoped 
 ## Example 2: Multi-tenant SaaS application
 
 A tenant record enforces a unique slug via `beforeCreate`, bootstraps a default workspace and owner
-membership in `afterCreate`, and enforces seat limits with a [transaction](/firestore-orm/2.0/guides/transactions/) so
+membership in `afterCreate`, and enforces seat limits with a [transaction](/flintfire/2.0/guides/transactions/) so
 concurrent invites cannot oversell seats.
 
 ```typescript
@@ -384,7 +384,7 @@ is convenient for immediately echoing the new plan back to the caller.
 
 This feed reads a user's follow graph, then serves both a live view (via `onSnapshot`) and a
 paginated backfill (via `paginate`) of published posts from followed authors. See the
-[query builder guide](/firestore-orm/2.0/guides/queries/) for the full surface of `onSnapshot` and cursor pagination.
+[query builder guide](/flintfire/2.0/guides/queries/) for the full surface of `onSnapshot` and cursor pagination.
 
 ```typescript
 // schemas/post.schema.ts

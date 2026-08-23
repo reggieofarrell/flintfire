@@ -1,7 +1,7 @@
 # Testing Guide
 
-This document describes how `@reggieofarrell/firestore-orm` is tested, how to run suites locally,
-and conventions for adding new tests.
+This document describes how `flintfire` is tested, how to run suites locally, and conventions for
+adding new tests.
 
 ## Design decisions
 

@@ -36,14 +36,17 @@ When any of these change, update **both** files (audience-appropriate framing is
 match):
 
 - [ ] One-line package pitch / value prop
-- [ ] Install command (`npm install @reggieofarrell/firestore-orm firebase-admin zod`) and peer
+- [ ] Install command (`npm install flintfire firebase-admin zod`) and peer
       dependencies (`firebase-admin`, `zod`, optional `express`)
 - [ ] Quick-start code example — must type-check against the current public API
-- [ ] Migration note from `@spacelabstech/firestoreorm` (and v2→v3 when relevant)
+- [ ] v2→v3 migration note when that upgrade path is relevant (do not document migration from
+      the original upstream npm package in the READMEs; LICENSE, NOTICE, and readme footers carry
+      attribution)
 - [ ] Documentation site URL and “start here” link
-      (`https://reggieofarrell.github.io/firestore-orm/`)
+      (`https://reggieofarrell.github.io/flintfire/`)
 - [ ] Support / issues / email links
-- [ ] Short fork attribution (full history stays GitHub-only)
+- [ ] Footer attribution only (LICENSE / NOTICE / readme license+acknowledgments); do not put
+      the upstream package name in the pitch, install, or migration sections
 
 ## File-specific content (do not duplicate)
 

@@ -2,18 +2,18 @@
 title: 'Advanced Patterns'
 description:
   'Custom repository methods, audit logging, caching, event-driven updates, and denormalization with
-  FirestoreORM.'
+  FlintFire.'
 ---
 
-Production-tested recipes that compose firestore-orm's hooks, transactions, and repository extension
+Production-tested recipes that compose FlintFire's hooks, transactions, and repository extension
 points into larger architectural patterns.
 
 Most of these recipes lean on two building blocks:
-[lifecycle hooks](/firestore-orm/guides/concepts/lifecycle-hooks/) to react to writes, and
-[transactions](/firestore-orm/guides/working-with-data/transactions/) to keep connected writes
+[lifecycle hooks](/flintfire/guides/concepts/lifecycle-hooks/) to react to writes, and
+[transactions](/flintfire/guides/working-with-data/transactions/) to keep connected writes
 atomic. Where a recipe uses the `withSchema` factory, remember that the schema **must not** declare
 a top-level `id` — the factory rejects it at construction, because the document name is the sole
-source of `id`. See [schema validation](/firestore-orm/guides/concepts/schema-validation/) for
+source of `id`. See [schema validation](/flintfire/guides/concepts/schema-validation/) for
 details.
 
 The recipes below are independent; jump to whichever one fits your problem:
@@ -40,7 +40,7 @@ methods), or **composition** when you want a narrower app-owned API (or when you
 Extend `FirestoreRepository` and call its public methods from your helpers:
 
 ```typescript
-import { FirestoreRepository, makeValidator } from '@reggieofarrell/firestore-orm';
+import { FirestoreRepository, makeValidator } from 'flintfire';
 import { Firestore } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
@@ -85,10 +85,10 @@ Design constraints for subclasses:
 
 Wrap a `withSchema` (or plain) repository and expose only the methods your app needs. This is the
 same shape used by the [caching](#caching-layer) and [rate limiting](#rate-limiting) recipes, and by
-the NestJS provider pattern in [Framework Integration](/firestore-orm/guides/integrations/express/):
+the NestJS provider pattern in [Framework Integration](/flintfire/guides/integrations/express/):
 
 ```typescript
-import { FirestoreRepository } from '@reggieofarrell/firestore-orm';
+import { FirestoreRepository } from 'flintfire';
 
 class UserRepository {
   private repo = FirestoreRepository.withSchema(db, 'users', userSchema);
@@ -223,7 +223,7 @@ and keep the two in sync with hooks. (Firestore Enterprise's pre-GA Pipeline que
 preview full-text search stage, but it requires the Enterprise edition and is not yet GA; an
 external search service remains the recommendation for production Core-operation workloads. This ORM
 wraps Core operations — see
-[Scope & capabilities](/firestore-orm/reference/scope-and-capabilities/).)
+[Scope & capabilities](/flintfire/reference/scope-and-capabilities/).)
 
 ```typescript
 // services/search.service.ts
@@ -388,7 +388,7 @@ await archivingService.archiveAndDelete(userRepo, 'user-123');
 
 The generic parameter is constrained with `T extends object` to match `FirestoreRepository`'s own
 constraint. For stronger guarantees you can run the read, the archive write, and the delete inside a
-single [transaction](/firestore-orm/guides/working-with-data/transactions/).
+single [transaction](/flintfire/guides/working-with-data/transactions/).
 
 ## Rate Limiting
 
@@ -442,7 +442,7 @@ import {
   NotFoundError,
   UpdateInput,
   UpdateOptions,
-} from '@reggieofarrell/firestore-orm';
+} from 'flintfire';
 import { Firestore } from 'firebase-admin/firestore';
 
 type Order = {

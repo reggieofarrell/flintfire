@@ -2,12 +2,12 @@
 root: false
 targets:
   - '*'
-description: Critical guardrails for firestore-orm test files
+description: Critical guardrails for FlintFire test files
 globs:
   - src/tests/**/*.test.ts
 cursor:
   alwaysApply: false
-  description: Critical guardrails for firestore-orm test files
+  description: Critical guardrails for FlintFire test files
   globs:
     - src/tests/**/*.test.ts
 ---

@@ -1,7 +1,7 @@
 {
-  "name": "@reggieofarrell/firestore-orm",
+  "name": "flintfire",
   "version": "2.2.1",
-  "description": "Type-safe Firestore ORM with validation, lifecycle hooks, and a powerful query builder. Built for Firebase Admin SDK with full TypeScript support.",
+  "description": "A type-safe, schema-aware Firestore data-access library for Node.js, built for the Firebase Admin SDK.",
   "type": "module",
   "main": "./dist/cjs/index.js",
   "module": "./dist/index.js",
@@ -123,12 +123,15 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/reggieofarrell/firestore-orm"
+    "url": "https://github.com/reggieofarrell/flintfire"
   },
   "bugs": {
-    "url": "https://github.com/reggieofarrell/firestore-orm/issues"
+    "url": "https://github.com/reggieofarrell/flintfire/issues"
   },
-  "homepage": "https://reggieofarrell.github.io/firestore-orm/",
+  "homepage": "https://reggieofarrell.github.io/flintfire/",
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=22.0.0"
   },
@@ -166,8 +169,5 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.0",
     "zod": "^4.0.0"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }

@@ -9,6 +9,13 @@ consumers can switch between major documentation lines (e.g. v2 vs v3) in the UI
 - **v2** is archived under `website/src/content/docs/2.0/` with its sidebar snapshot in
   `website/src/content/versions/2.0.json`. Do not hand-edit the archive — it is a frozen snapshot of
   the v2 docs.
+
+  **One-time FlintFire path relocation (v3 rename):** the freeze still holds for *content*.
+  Install/import specifiers stay `@reggieofarrell/firestore-orm`, and v2 behavioral statements are
+  not rewritten. The v3 rename playbook made a single exception: site-path prefixes
+  `/firestore-orm/` → `/flintfire/` and live GitHub/Pages URLs were rewritten so archived pages do
+  not 404 after the GitHub Pages project path moved. Do not repeat that rewrite as a general
+  archive-edit practice.
 - The `starlight-versions` plugin is **enabled** in `astro.config.mjs`
   (`versions: [{ slug: '2.0', label: 'v2' }]`, `current: { label: 'v3' }`), so the UI shows a v2/v3
   switcher.
@@ -20,7 +27,7 @@ plugin; they stay as single-tree Markdown in the repo.
 
 ## Deploy (GitHub Pages)
 
-Live docs at https://reggieofarrell.github.io/firestore-orm/ are published by
+Live docs at https://reggieofarrell.github.io/flintfire/ are published by
 [`.github/workflows/deploy-docs.yml`](../.github/workflows/deploy-docs.yml). They update **only**
 when:
 

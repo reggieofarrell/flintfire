@@ -1,18 +1,18 @@
 ---
 title: 'Real-World Examples'
-description: 'End-to-end e-commerce, multi-tenant, and social feed examples using FirestoreORM.'
+description: 'End-to-end e-commerce, multi-tenant, and social feed examples using FlintFire.'
 ---
 
 Three end-to-end walkthroughs that combine schemas, hooks, transactions, queries, and real-time
 listeners into production-shaped features.
 
 Each example below is a complete slice — schema, repository (with its
-[lifecycle hooks](/firestore-orm/guides/concepts/lifecycle-hooks/)), and a service class — so you
+[lifecycle hooks](/flintfire/guides/concepts/lifecycle-hooks/)), and a service class — so you
 can see how the pieces fit together in a real application. For focused explanations of any single
-mechanism, see [CRUD operations](/firestore-orm/guides/working-with-data/crud-operations/), the
-[query builder](/firestore-orm/guides/working-with-data/queries/),
-[transactions](/firestore-orm/guides/working-with-data/transactions/), and
-[error handling](/firestore-orm/reference/errors/).
+mechanism, see [CRUD operations](/flintfire/guides/working-with-data/crud-operations/), the
+[query builder](/flintfire/guides/working-with-data/queries/),
+[transactions](/flintfire/guides/working-with-data/transactions/), and
+[error handling](/flintfire/reference/errors/).
 
 In this guide:
 
@@ -24,8 +24,8 @@ In this guide:
 
 This example shows a full order lifecycle: validating inventory in a `beforeCreate` hook, reducing
 stock and sending confirmation email in `afterCreate`, guarding shipped orders in `beforeUpdate`,
-cancelling via a [transaction](/firestore-orm/guides/working-with-data/transactions/), and computing
-revenue with `sum()` / `average()` [aggregations](/firestore-orm/guides/working-with-data/queries/).
+cancelling via a [transaction](/flintfire/guides/working-with-data/transactions/), and computing
+revenue with `sum()` / `average()` [aggregations](/flintfire/guides/working-with-data/queries/).
 Note that no schema declares a top-level `id` — `withSchema` rejects it at construction, and the
 document name is the sole source of `id`.
 
@@ -64,7 +64,7 @@ export type Order = z.infer<typeof orderSchema>;
 
 ```typescript
 // repositories/order.repository.ts
-import { FirestoreRepository } from '@reggieofarrell/firestore-orm';
+import { FirestoreRepository } from 'flintfire';
 import { db } from '../config/firebase';
 import { orderSchema, Order } from '../schemas/order.schema';
 import { inventoryService } from '../services/inventory.service';
@@ -125,7 +125,7 @@ for the guard. The `afterUpdate` payload is just `{ id }`, so the hook re-reads 
 // services/order.service.ts
 import { orderRepo } from '../repositories/order.repository';
 import { userRepo } from '../repositories/user.repository';
-import { ConflictError } from '@reggieofarrell/firestore-orm';
+import { ConflictError } from 'flintfire';
 
 export class OrderService {
   async createOrder(userId: string, items: OrderItem[]) {
@@ -221,7 +221,7 @@ Reads use `getById(id)`, which returns `FirestoreDocument<T>` or `null` — ther
 
 A tenant record enforces a unique slug via `beforeCreate`, bootstraps a default workspace and owner
 membership in `afterCreate`, and enforces seat limits with a
-[transaction](/firestore-orm/guides/working-with-data/transactions/) so concurrent invites cannot
+[transaction](/flintfire/guides/working-with-data/transactions/) so concurrent invites cannot
 oversell seats.
 
 ```typescript
@@ -370,7 +370,7 @@ is convenient for immediately echoing the new plan back to the caller.
 
 This feed reads a user's follow graph, then serves both a live view (via `onSnapshot`) and a
 paginated backfill (via `paginate`) of published posts from followed authors. See the
-[query builder guide](/firestore-orm/guides/working-with-data/queries/) for the full surface of
+[query builder guide](/flintfire/guides/working-with-data/queries/) for the full surface of
 `onSnapshot` and cursor pagination.
 
 ```typescript
@@ -396,7 +396,7 @@ export type Follow = z.infer<typeof followSchema>;
 
 ```typescript
 // repositories/post.repository.ts
-import { FirestoreRepository } from '@reggieofarrell/firestore-orm';
+import { FirestoreRepository } from 'flintfire';
 import { db } from '../config/firebase';
 import { Follow, followSchema, Post, postSchema } from '../schemas/post.schema';
 
@@ -471,4 +471,4 @@ Forward opaque pagination is `paginate(pageSize, cursor?)` and requires a prior 
 throws otherwise) — the first page calls `paginate(limit)`, and subsequent pages pass the cursor
 returned by the previous call as `paginate(limit, cursor)`. Typed `startAfter` / `endAt` bounds and
 `limitToLast` reverse pages are available on the query builder for range and reverse walks; see
-[Queries](/firestore-orm/guides/working-with-data/queries/#query-bounds--reverse-pagination).
+[Queries](/flintfire/guides/working-with-data/queries/#query-bounds--reverse-pagination).

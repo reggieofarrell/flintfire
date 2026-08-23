@@ -1,9 +1,9 @@
 ---
 title: 'Best Practices'
-description: 'Recommended patterns for production use of FirestoreORM repositories and queries.'
+description: 'Recommended patterns for production use of FlintFire repositories and queries.'
 ---
 
-Patterns and conventions for building maintainable, efficient applications with firestore-orm.
+Patterns and conventions for building maintainable, efficient applications with FlintFire.
 
 These recommendations cover repository lifecycle, query efficiency, data hygiene, and hook design.
 Each one includes a working example and the reasoning behind it.
@@ -35,7 +35,7 @@ each collection has a single source of truth.
 ```typescript
 // repositories/index.ts
 import { db } from '../config/firebase';
-import { FirestoreRepository } from '@reggieofarrell/firestore-orm';
+import { FirestoreRepository } from 'flintfire';
 import * as schemas from '../schemas';
 
 export const userRepo = FirestoreRepository.withSchema(db, 'users', schemas.userSchema);
@@ -73,7 +73,7 @@ const result = await userRepo.query().orderBy('createdAt', 'desc').offsetPaginat
 
 **Why:** Offset pagination requires Firestore to scan and skip every document before your offset,
 while cursor pagination jumps directly to the starting position. See
-[Queries](/firestore-orm/guides/working-with-data/queries/) for the full pagination API.
+[Queries](/flintfire/guides/working-with-data/queries/) for the full pagination API.
 
 ## 4. Use query updates for bulk operations
 
@@ -102,14 +102,14 @@ await orderRepo.bulkUpdate(orders.map(o => ({ id: o.id, data: { status: 'expired
 set the query matches, and an inequality inside a `whereFilter(f => f.or(...))` branch excludes
 documents missing that field — so a bulk write can silently skip documents you meant to touch while
 reporting a successful count. See
-[Composite AND/OR filters](/firestore-orm/guides/working-with-data/queries/#composite-andor-filters).
+[Composite AND/OR filters](/flintfire/guides/working-with-data/queries/#composite-andor-filters).
 
 **Note:** `query().update()` and `query().delete()` run the **bulk** lifecycle hooks
 (`beforeBulkUpdate`/`afterBulkUpdate`, `beforeBulkDelete`/`afterBulkDelete`), not the per-document
 `before/afterUpdate` / `before/afterDelete` hooks. If you rely on per-document
 `beforeUpdate`/`afterUpdate` or `beforeDelete`/`afterDelete` side effects, use the single-document
 methods instead. See
-[Lifecycle hooks](/firestore-orm/guides/concepts/lifecycle-hooks/).
+[Lifecycle hooks](/flintfire/guides/concepts/lifecycle-hooks/).
 
 ## 5. Add timestamps consistently
 
@@ -139,7 +139,7 @@ await userRepo.update(id, {
 ```
 
 If you prefer to store native Firestore timestamps instead of ISO strings, see
-[Timestamps](/firestore-orm/guides/concepts/timestamps/) for the millisecond converter and the
+[Timestamps](/flintfire/guides/concepts/timestamps/) for the millisecond converter and the
 hook-based write conversion pattern.
 
 ## 6. Handle composite index errors gracefully
@@ -167,8 +167,8 @@ try {
 }
 ```
 
-See [Error handling](/firestore-orm/reference/errors/) for the full error taxonomy and
-[Troubleshooting](/firestore-orm/reference/troubleshooting/) for index-related tips.
+See [Error handling](/flintfire/reference/errors/) for the full error taxonomy and
+[Troubleshooting](/flintfire/reference/troubleshooting/) for index-related tips.
 
 ## 7. Use transactions for critical operations
 
@@ -176,7 +176,7 @@ Any operation requiring consistency across multiple documents should use a trans
 `runInTransaction` passes a transaction-scoped repository; do all reads with `getInTransaction`
 before any writes. For a lock-free consistent snapshot or a PITR / time-travel read, use
 `{ readOnly: true }` or `runReadOnlyAt(readTime, fn)` — see
-[Transactions](/firestore-orm/guides/working-with-data/transactions/).
+[Transactions](/flintfire/guides/working-with-data/transactions/).
 
 ```typescript
 // ✅ Atomic transfer
@@ -203,7 +203,7 @@ await accountRepo.runInTransaction(async (tx, repo) => {
 });
 ```
 
-See [Transactions](/firestore-orm/guides/working-with-data/transactions/) for the complete
+See [Transactions](/flintfire/guides/working-with-data/transactions/) for the complete
 transaction-scoped API.
 
 ## 8. Use streaming for large data exports
@@ -255,5 +255,5 @@ userRepo.on('afterCreate', async user => {
 });
 ```
 
-See [Lifecycle hooks](/firestore-orm/guides/concepts/lifecycle-hooks/) for the full event list and
+See [Lifecycle hooks](/flintfire/guides/concepts/lifecycle-hooks/) for the full event list and
 payload shapes.

@@ -3,13 +3,13 @@ name: implementation-planning
 description: >-
   Write a detailed, evidence-backed implementation plan into docs/plans/ for an
   implementer who will not share your context — a teammate, a later session, or
-  a Cursor Cloud Agent on a fresh clone. Use when handing off a firestore-orm
-  issue, or via the write-plan command. NOT for planning a change you will
-  implement yourself in the same session (plan mode is enough). NOT for
-  executing an existing plan — see the plan-execution skill. NOT for trivial
-  doc-only or config edits.
+  a Cursor Cloud Agent on a fresh clone. Use when handing off a FlintFire issue,
+  or via the write-plan command. NOT for planning a change you will implement
+  yourself in the same session (plan mode is enough). NOT for executing an
+  existing plan — see the plan-execution skill. NOT for trivial doc-only or
+  config edits.
 ---
-# Implementation Planning (firestore-orm)
+# Implementation Planning (FlintFire)
 
 A plan here is a **handoff contract**, not a to-do list. It is written for an implementer who has
 none of your investigation in context, and it is graded by one question: _can they execute it
@@ -84,7 +84,7 @@ that is a calibration, not a target.
 6. **Separate "verified" from "could not verify."** §5 exists so the implementer does not inherit
    your overclaim. Example: `check:consumer` defaults to the dev `firebase-admin`, so one local run
    covers **one** peer major; CI fans out over `^12` / `^13` / `^14` plus a pinned-firestore `^12`
-   leg via `FIRESTORE_ORM_ADMIN_VERSION` / `FIRESTORE_ORM_FIRESTORE_VERSION`. Never claim the legs
+   leg via `FLINTFIRE_ADMIN_VERSION` / `FLINTFIRE_FIRESTORE_VERSION`. Never claim the legs
    you did not run.
 7. **Verify the prescription, not just the findings.** Rules 1–6 govern §3 — the tree as it is.
    §6/§8/§9/§10 are what the implementer will _type_, and they need executing too. This is where

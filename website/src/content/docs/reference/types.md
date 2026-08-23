@@ -5,11 +5,11 @@ description:
   UpdateInput, SentinelPolicy, and more.'
 ---
 
-Types re-exported from the package entry point (`@reggieofarrell/firestore-orm`). For the classes
-these types describe, see [FirestoreRepository](/firestore-orm/reference/repository/) and
-[FirestoreQueryBuilder](/firestore-orm/reference/query-builder/) (which also documents
+Types re-exported from the package entry point (`flintfire`). For the classes
+these types describe, see [FirestoreRepository](/flintfire/reference/repository/) and
+[FirestoreQueryBuilder](/flintfire/reference/query-builder/) (which also documents
 `FirestoreCollectionGroup` and `FirestoreCollectionGroupQueryBuilder`); for the runtime helpers, see
-[Helpers & Utilities](/firestore-orm/reference/helpers/).
+[Helpers & Utilities](/flintfire/reference/helpers/).
 
 - **`ID`** — `string` document-identifier alias.
 - **`FirestoreDocument<T>`** — the flat read-result shape. For a concrete `T`, equivalent to
@@ -22,7 +22,7 @@ these types describe, see [FirestoreRepository](/firestore-orm/reference/reposit
 - **`DocumentOf<R>`** — extracts a repository's document result type
   (`FirestoreDocument<DataOf<R>>`); name a returned document type without spelling the generics.
 - **`CollectionGroupDocument<T>`** — the read-result shape of a
-  [collection-group query](/firestore-orm/guides/working-with-data/queries/#collection-group-queries):
+  [collection-group query](/flintfire/guides/working-with-data/queries/#collection-group-queries):
   `Omit<T, 'id' | 'path' | 'parentPath'>` plus a readonly `id`, the full document `path`
   (`'users/u1/posts/p1'`), and the containing collection's `parentPath` (`'users/u1/posts'`). All
   plain strings, so a result stays JSON-serializable — rebuild a reference with `db.doc(row.path)`.
@@ -48,18 +48,18 @@ these types describe, see [FirestoreRepository](/firestore-orm/reference/reposit
 - **`DetailedQuerySnapshot<R>`** — detailed listener payload: `docs`, `changes`, `size`, `empty`,
   `readTime`.
 - **`InvalidDocumentIdReason`** — machine-readable cause carried by `InvalidDocumentIdError` (the
-  error class is documented in [Error Handling](/firestore-orm/reference/errors/)).
+  error class is documented in [Error Handling](/flintfire/reference/errors/)).
 - **`HookEvent`** — union of supported lifecycle hook names.
 - **`HookContext<E>`** — second argument to every lifecycle hook: `event`, `execution`
   (`'direct'` | `'transaction'`), `retryable`, and (on the transaction branch only) diagnostic
-  `attempt: number | null`. See [Lifecycle Hooks](/firestore-orm/guides/concepts/lifecycle-hooks/).
+  `attempt: number | null`. See [Lifecycle Hooks](/flintfire/guides/concepts/lifecycle-hooks/).
 - **`WriteOutcome`** — discriminated persistence outcome carried by `WriteOutcomeError` (see
-  [Error Handling](/firestore-orm/reference/errors/)).
+  [Error Handling](/flintfire/reference/errors/)).
 - **`UpdateOptions`** — `{ merge?: boolean; returnDoc?: boolean; withMetadata?: boolean;
   lastUpdateTime?: Timestamp }`. `returnDoc` and `withMetadata` are mutually exclusive.
 - **`ReadConverter<T>`** — read-only converter: the `fromFirestore(snapshot) => T` mapper passed as
   `readConverter` (the repository builds the full `FirestoreDataConverter` internally). See
-  [Read Converters](/firestore-orm/guides/concepts/read-converters/).
+  [Read Converters](/flintfire/guides/concepts/read-converters/).
 - **`SafeResult<T>`** — `{ success: true; data } | { success: false; error: ValidationError }`
   returned by `safeValidate`.
 - **`PaginatedResult<T>`** — `{ items; nextCursor; hasMore }` from cursor pagination.
@@ -91,7 +91,7 @@ these types describe, see [FirestoreRepository](/firestore-orm/reference/reposit
   model: `(f: QueryFilterFactory<OmitId<UnionStored>>) => …`. Prefer `StoredDataOf<typeof repo>` for
   repository-bound predicates. See ADR-0028.
 - **`QueryFilterFactory<S>`** — the callback argument of
-  [`whereFilter(...)`](/firestore-orm/reference/query-builder/): schema-aware `where` / `whereId` /
+  [`whereFilter(...)`](/flintfire/reference/query-builder/): schema-aware `where` / `whereId` /
   `and` / `or` builders that return an SDK `Filter`. `and()` and `or()` throw when called with no
   filters. `Filter` itself is **not** re-exported — import it from `firebase-admin/firestore`, as
   with `FieldPath` and `WhereFilterOp`. Useful for extracting a reusable typed predicate — annotate
@@ -114,7 +114,7 @@ these types describe, see [FirestoreRepository](/firestore-orm/reference/reposit
   cannot bypass the transaction or `readTime`. The optional second type parameter `S` is the
   **stored** model used to type `fieldMask` paths on `getManyInTransaction` (mirroring `select()` /
   `where()`); it defaults to `T` so existing one-argument uses keep compiling. See
-  [Transactions](/firestore-orm/guides/working-with-data/transactions/).
+  [Transactions](/flintfire/guides/working-with-data/transactions/).
 - **`UpdateInput<T>`** — update payload type; for a concrete `T`, `UpdateData<Omit<T, 'id'>>` (typed
   dot-notation paths). Distributes over union write models (ADR-0028).
 - **`CreateInput<T>`** — create payload type; for a concrete `T`, `WithFieldValue<Omit<T, 'id'>>`;
@@ -132,7 +132,7 @@ these types describe, see [FirestoreRepository](/firestore-orm/reference/reposit
 - **`FieldValueKind`** — union of recognized Firestore sentinel kinds.
 
 The package also exports runtime helpers — validation combinators, timestamp utilities, and
-dot-notation utilities — documented on the [Helpers & Utilities](/firestore-orm/reference/helpers/)
-page. The vector-search extension (`@reggieofarrell/firestore-orm/vector`) exports
+dot-notation utilities — documented on the [Helpers & Utilities](/flintfire/reference/helpers/)
+page. The vector-search extension (`flintfire/vector`) exports
 `withVectorSearch`, `vectorEmbeddingSchema`, `VectorDistanceMeasure`, `isVectorFieldValue`, and
-related constants — see [Vector Search](/firestore-orm/guides/advanced/vector-search/).
+related constants — see [Vector Search](/flintfire/guides/advanced/vector-search/).

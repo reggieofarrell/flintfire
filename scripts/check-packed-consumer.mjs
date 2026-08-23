@@ -23,16 +23,15 @@ import { join } from 'node:path';
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const PKG = pkg.name;
 // The firebase-admin major to test against. Defaults to the dev version, but CI parametrizes it
-// (FIRESTORE_ORM_ADMIN_VERSION=^12 / ^13 / ^14) to exercise every declared peer major honestly.
-const ADMIN_VERSION =
-  process.env.FIRESTORE_ORM_ADMIN_VERSION || pkg.devDependencies['firebase-admin'];
+// (FLINTFIRE_ADMIN_VERSION=^12 / ^13 / ^14) to exercise every declared peer major honestly.
+const ADMIN_VERSION = process.env.FLINTFIRE_ADMIN_VERSION || pkg.devDependencies['firebase-admin'];
 const ADMIN = `firebase-admin@${ADMIN_VERSION}`;
 // Optional: force the TRANSITIVE @google-cloud/firestore to a specific version via an npm override,
 // to exercise the vector object-form floor (B3). firebase-admin 12 can resolve a firestore below the
 // >= 7.10 that the object-form findNearest() requires, so CI pins e.g. 7.9.0 and proves the packed
 // library still installs, compiles, and loads against it. Unset (the default) uses whatever the
 // chosen firebase-admin resolves.
-const FIRESTORE_VERSION = process.env.FIRESTORE_ORM_FIRESTORE_VERSION;
+const FIRESTORE_VERSION = process.env.FLINTFIRE_FIRESTORE_VERSION;
 const ZOD = `zod@${pkg.devDependencies['zod']}`;
 const TS = `typescript@${pkg.devDependencies['typescript']}`;
 

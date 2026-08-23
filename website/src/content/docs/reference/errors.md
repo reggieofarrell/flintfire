@@ -6,7 +6,7 @@ description: 'Error classes, when they throw, and the parseFirestoreError normal
 Typed error classes for validation, not-found, conflict, failed-precondition, malformed-id, and
 missing-index failures, plus the `parseFirestoreError` normalizer. The drop-in Express middleware
 that maps these to HTTP responses lives in
-[Express integration](/firestore-orm/guides/integrations/express/).
+[Express integration](/flintfire/guides/integrations/express/).
 
 ## Overview
 
@@ -22,7 +22,7 @@ import {
   FirestoreIndexError,
   InvalidDocumentIdError,
   WriteOutcomeError,
-} from '@reggieofarrell/firestore-orm';
+} from 'flintfire';
 
 try {
   await userRepo.create(invalidData);
@@ -79,7 +79,7 @@ their `*InTransaction` equivalents, `whereId`, and `whereFilter`'s `f.whereId` �
 that contains `/`, is `.` or `..`, is wrapped in `__…__`, is empty, or exceeds 1500 bytes. On
 `bulkWrite`, a malformed id is reported per item in `BulkWriteResult.error` (siblings still write);
 `recursiveDelete` still throws this error for a bad `id`. See
-[Document Identity](/firestore-orm/guides/concepts/document-identity/).
+[Document Identity](/flintfire/guides/concepts/document-identity/).
 
 Properties:
 
@@ -131,7 +131,7 @@ concurrency, and it is the normalized form of a raw Firestore `failed-preconditi
 
 The rejected write is never applied, so the stored document is exactly what the other writer left —
 a retry against a freshly-read token is always safe. See
-[Conditional writes](/firestore-orm/guides/working-with-data/crud-operations/#conditional-writes).
+[Conditional writes](/flintfire/guides/working-with-data/crud-operations/#conditional-writes).
 On `bulkWrite`, the same error arrives inside `BulkWriteResult.error` for that item.
 
 Two neighbouring cases are deliberately **not** this error:
@@ -201,7 +201,7 @@ try {
 
 Key side effects by a business / write identity stored atomically with the data — not by
 `HookContext.attempt` (diagnostic only). Durable after-hook delivery is tracked as
-[#80](https://github.com/reggieofarrell/firestore-orm/issues/80).
+[#80](https://github.com/reggieofarrell/flintfire/issues/80).
 
 `parseFirestoreError` **preserves** an existing `WriteOutcomeError` unchanged before SDK
 normalization.
@@ -209,7 +209,7 @@ normalization.
 ## Normalizing raw Firestore errors
 
 ```typescript
-import { parseFirestoreError } from '@reggieofarrell/firestore-orm';
+import { parseFirestoreError } from 'flintfire';
 ```
 
 **`parseFirestoreError(error: unknown): Error`**
@@ -241,6 +241,6 @@ that inspected `error.code` on those raw errors must now branch on `ConflictErro
 ## Mapping errors to HTTP responses
 
 The ORM ships a pre-built Express middleware that maps these error classes to HTTP status codes and
-JSON bodies. It is published from the optional `@reggieofarrell/firestore-orm/express` subpath and
+JSON bodies. It is published from the optional `flintfire/express` subpath and
 is documented, with the full status-code and response-body tables, in
-[Express integration](/firestore-orm/guides/integrations/express/#error-handling-middleware).
+[Express integration](/flintfire/guides/integrations/express/#error-handling-middleware).

@@ -2,7 +2,7 @@
 name: plan-execution
 description: Execute a committed implementation plan from docs/plans/ that was handed to you, keeping notes.md as you go and passing an independent refute-first adversarial review before declaring the work ready. Use when picking up a plan-backed issue branch, or via the implement-plan command. NOT for writing the plan — see the implementation-planning skill. NOT for a plan you produced with the user in this same session, where the notes artifact and plan-directory lifecycle do not apply.
 ---
-# Plan Execution (firestore-orm)
+# Plan Execution (FlintFire)
 
 You have been handed a plan under `docs/plans/issue-NN-<slug>/`. It is a **contract**, and it was
 written from executed evidence — treat it as authoritative over the issue body it came from.
