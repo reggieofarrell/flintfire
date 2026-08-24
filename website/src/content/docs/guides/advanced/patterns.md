@@ -75,13 +75,31 @@ Design constraints for subclasses:
 - Build custom logic on the **public** API (`create`, `getById`, `findByField`, `query()`,
   transactions, hooks, and so on). Collection refs, validators, and other internals are `private`
   and are not available to subclasses.
-- Prefer composition (below) when you want `withSchema`'s no-top-level-`id` assertion and options
-  bag (`writeSchema`, `readConverter`, `sentinelPolicy`) without re-wiring them through
-  `super(...)`.
-- A subclass built with `super(db, path, makeValidator(schema))` gets runtime **validation** but no
-  attached `schemas` — that is the constructor's 6th argument. So `repo.schemas` is `undefined` and
-  `validate()` / `safeValidate()` throw a config error on such an instance. Pass a
-  `RepositorySchemaSet` too if you need them, or prefer composition over a `withSchema` instance.
+- `super(db, path, makeValidator(schema))` is enough for the common case. The constructor falls back
+  to the validator's own schema bundle, so `repo.schemas`, `repo.readSchema`, `validate()` and
+  `safeValidate()` all work — you do not need to pass a `RepositorySchemaSet` as well.
+- **If you use a write overlay, pass the schema bundle explicitly.** `makeValidator(writeSchema)`
+  derives its bundle from whatever schema you hand it, so `schemas.read` would be the *write*
+  schema — and read validation would then accept `FieldValue` sentinels that a read should reject.
+  Mirror what `withSchema` does: build the validator from the write schema, then pass a bundle whose
+  `read` is the real read schema.
+
+  ```typescript
+  const validator = makeValidator(userWriteSchema);
+  super(db, 'users', validator, undefined, undefined, {
+    read: userSchema, // the READ schema — not the write overlay
+    create: validator.schemas.create,
+    update: validator.schemas.update,
+    stored: userStoredSchema ?? userSchema,
+  });
+  ```
+
+- `schemas.stored` is not populated by the fallback. It is only consulted by `collectionGroup()`, to
+  reject a stored shape that collides with group identity (`path` / `parentPath`), so supply it if
+  you use collection-group queries with a divergent stored shape.
+- Prefer composition (below) when you would rather not re-wire `withSchema`'s options
+  (`writeSchema`, `storedSchema`, `readConverter`, `sentinelPolicy`, `allowLegacyDatastoreIds`)
+  through positional `super(...)` arguments.
 - **Subclassing adds methods; it does not enforce invariants.** Overriding a write method intercepts
   only that method — most write paths do not route through it. If you need a rule that holds on
   every write, see [Enforced denormalization](#enforced-denormalization).

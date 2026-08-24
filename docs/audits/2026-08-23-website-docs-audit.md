@@ -197,10 +197,24 @@ the build).
 2. **Keep** "Custom repository methods → Subclassing" unchanged. It compiles today and is the right
    tool for convenience helpers. Add one cross-reference: subclassing adds methods, it does not
    enforce invariants.
-3. **Add a caveat to that subclassing section** that a subclass built with
-   `super(db, path, makeValidator(schema))` gets validation but **no `schemas`**, so `validate()` /
-   `safeValidate()` / `repo.schemas` throw or return `undefined` (the constructor's 6th argument is
-   what populates them).
+3. **Add a caveat to that subclassing section** about how a subclass acquires its schema bundle. ~~A
+   subclass built with `super(db, path, makeValidator(schema))` gets validation but no `schemas`.~~
+   **CORRECTED 2026-08-23 — that claim was wrong**, and it briefly shipped in `patterns.md` before
+   being fixed. The constructor does `this.schemasInternal = schemas ?? validator?.schemas`, so the
+   validator's own bundle is the fallback: `repo.schemas`, `repo.readSchema`, `validate()` and
+   `safeValidate()` all work on such an instance (verified at runtime). The real caveats are
+   narrower, and both were missed:
+   - **With a write overlay**, `makeValidator(writeSchema)` derives `schemas.read` from the _write_
+     schema, so read validation would accept `FieldValue` sentinels a read should reject — verified:
+     `schemas.read.safeParse({ loginCount: FieldValue.increment(1) })` succeeds. A subclass using an
+     overlay must pass an explicit bundle whose `read` is the real read schema, exactly as
+     `withSchema` does internally.
+   - `schemas.stored` is not set by the fallback; only `collectionGroup()` consults it.
+
+   Method note: this finding was originally inferred from the constructor's parameter list without
+   reading its body — the exact failure mode this audit criticizes elsewhere. It is the one entry
+   here that was not verified against behavior before being written.
+
 4. **Add the coverage tables above** (or a condensed form) to the new section, so a reader choosing
    between override / hooks / facade can see why.
 5. If a hook-based variant is offered as the non-atomic alternative, state the delete-side gap:
