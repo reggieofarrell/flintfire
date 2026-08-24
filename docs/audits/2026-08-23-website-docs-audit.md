@@ -182,8 +182,10 @@ the build).
 ### Library follow-up (out of scope for the docs fix)
 
 **L-A — ship a `ReadOnlyQuery` builder type so the `Omit` leak above is impossible.** Small,
-additive, and independent of everything else here. Two shapes were compiled against real source and
-**both hold at any chain depth**:
+additive, and independent of everything else here. Recorded as
+[ADR-0041](../adr/0041-read-only-query-builder-type.md), tracked in
+[#100](https://github.com/reggieofarrell/flintfire/issues/100). Two shapes were compiled against
+real source and **both hold at any chain depth**:
 
 - **Export the existing `FirestoreQueryBuilderBase`.** Nearly free — it is already write-free
   (`update` / `delete` live only on the concrete subclass) and is simply not exported. `this` types

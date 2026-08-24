@@ -216,9 +216,9 @@ teardown.
   so it narrows the surface rather than guaranteeing the invariant. Note that one obstacle
   originally cited here is **not** real: `Omit<FirestoreQueryBuilder<…>, 'update' | 'delete'>` is
   indeed defeated by the fluent `this` return type, but a **self-returning** read-only builder type
-  holds at any chain depth, so a facade does not have to hide the query builder. See the
-  `ReadOnlyQuery` follow-up in the [docs audit](../audits/2026-08-23-website-docs-audit.md) — that
-  is an independent, additive type-level improvement, not a prerequisite for this ADR.
+  holds at any chain depth, so a facade does not have to hide the query builder — see
+  [ADR-0041](0041-read-only-query-builder-type.md), an independent, additive type-level improvement
+  that is not a prerequisite for this ADR.
 - **An opt-in atomic-boundary write API** (`updateAtomic(id, data, ({ tx, repo }) => …)`). Honest
   and general, but opt-in per call site — convenient, not enforcing. Worth adding later as sugar
   over interceptors.
