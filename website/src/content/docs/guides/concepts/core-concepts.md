@@ -43,9 +43,11 @@ trailing positional arguments. See
 [schema validation](/flintfire/guides/concepts/schema-validation/) for the full contract.
 
 To add domain helpers (`findByEmail`, `deactivate`, and so on), subclass `FirestoreRepository` or
-wrap a `withSchema` instance — both are supported. See
+wrap a `withSchema` instance — both are supported. Subclasses should wire validation with
+`FirestoreRepository.withSchemaArgs(...)` (spread into `super`), because `withSchema` always returns
+a plain repository. See
 [Custom repository methods](/flintfire/guides/advanced/patterns/#custom-repository-methods) for
-the constraints (`withSchema` returns a plain repository; subclasses use the public API only).
+the full contract.
 
 The full constructor signature is
 `new FirestoreRepository<T, W = T, S = T, WO = W>(db, collectionPath, validator?, parentPath?, readConverter?, schemas?, allowLegacyDatastoreIds?)`,

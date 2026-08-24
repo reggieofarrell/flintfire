@@ -12,6 +12,11 @@ these types describe, see [FirestoreRepository](/flintfire/reference/repository/
 [Helpers & Utilities](/flintfire/reference/helpers/).
 
 - **`ID`** — `string` document-identifier alias.
+- **`RepositoryConstructorArgs<T, W, WO>`** — the positional constructor tuple for
+  `FirestoreRepository`:
+  `(db, collectionPath, validator?, parentPath?, readConverter?, schemas?, allowLegacyDatastoreIds?)`.
+  The validator is required when `WO` diverges from `W` and optional when they match. Returned by
+  `FirestoreRepository.withSchemaArgs` so subclasses can spread it into `super(...)` (ADR-0042).
 - **`FirestoreDocument<T>`** — the flat read-result shape. For a concrete `T`, equivalent to
   `Omit<T, 'id'> & { readonly id: ID }`; for unresolved generics it is a **distributive
   conditional** so union read models narrow correctly (ADR-0028). Returned by every read (`getById`,

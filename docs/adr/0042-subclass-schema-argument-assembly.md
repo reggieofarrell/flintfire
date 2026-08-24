@@ -1,6 +1,6 @@
 # ADR-0042: Expose `withSchema`'s argument assembly for subclasses
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-23
 - **Deciders:** Reggie O'Farrell
 - **Related:** Issue [#102](https://github.com/reggieofarrell/flintfire/issues/102); refines
@@ -41,7 +41,7 @@ read should reject. Verified at runtime:
 
 ```
 naive makeValidator(write)     read-parse of sentinel -> ACCEPTED  ✗   stored: undefined ✗
-argsFromSchema helper          read-parse of sentinel -> rejected  ✓   stored: set ✓
+withSchemaArgs helper          read-parse of sentinel -> rejected  ✓   stored: set ✓
 ```
 
 Nothing surfaces this. `validate()` does not throw; it simply over-permits. It is a correctness hole
@@ -59,14 +59,14 @@ which is exactly the overlay case. Any helper must satisfy both branches.
 We will add a static that performs the same argument assembly `withSchema` already does, shaped for
 spreading into `super(...)`.
 
-1. **`FirestoreRepository.argsFromSchema(db, collectionPath, readSchema, options?)`** returns the
+1. **`FirestoreRepository.withSchemaArgs(db, collectionPath, readSchema, options?)`** returns the
    constructor argument tuple.
 
    ```typescript
    class StrictUserRepository extends FirestoreRepository<User, UserWrite, User, UserParsed> {
      constructor(db: Firestore) {
        super(
-         ...FirestoreRepository.argsFromSchema(db, 'users', userSchema, {
+         ...FirestoreRepository.withSchemaArgs(db, 'users', userSchema, {
            writeSchema: userWrite,
            sentinelPolicy: 'strict',
          }),
@@ -84,9 +84,13 @@ spreading into `super(...)`.
    schema and `schemas.stored` is always populated, so the overlay hole is **unreachable** rather
    than documented.
 
-4. **`withSchema` will be refactored to call it**, so there is one assembly path instead of two that
-   can drift. This is the part that keeps the fix from decaying: a future option added to
-   `withSchema` lands in the subclass path automatically.
+4. **`withSchema` and `subcollection` share the same assembler** (`buildWithSchemaArgs`) that backs
+   `withSchemaArgs`, so there is one assembly path instead of three that can drift. A future option
+   added to the bag lands in all three call sites automatically. Each public entry point passes its
+   own error-message `context` (`withSchema` / `subcollection` / `withSchemaArgs`), and
+   `subcollection` additionally passes a `readSchemaContext` so its positional-argument label
+   (`...subcollection(..., readSchema, ...)`) survives — every construction error the three
+   factories can raise stays **byte-identical** to the pre-refactor wording, pinned by unit tests.
 
 5. **Additive.** A new static; no existing signature changes and no behavior change for existing
    callers.
@@ -104,6 +108,19 @@ in the `extends` clause, which is the part that cannot be inferred.
 **Not a full fix for hand-rolled construction.** A subclass can still call the positional
 constructor directly and reintroduce the hole. This makes the correct path easy and obvious; it does
 not remove the incorrect one, because the constructor is public API.
+
+**The fix is a runtime fix; the stored generic `S` stays unchecked.**
+`RepositoryConstructorArgs<T, W, WO>` has no `S` slot — the constructor's `schemas` parameter is a
+plain `RepositorySchemaSet` — so a tuple-returning helper structurally cannot bind `S`. It comes
+only from the subclass's `extends` clause and is not cross-checked against `options.storedSchema`: a
+mismatch compiles silently even though `schemas.stored` is correct at runtime, and `S` is what types
+`collectionGroup()` and its field paths. `withSchema` does bind it (`z.output<SS>`) because it
+returns an instance. The `SS` type parameter is therefore inference-only on `withSchemaArgs`, kept
+for signature parity and commented as such so it is not "tidied away" on the assumption that `S`
+flows. Binding it would mean adding an `S` parameter to the now-public `RepositoryConstructorArgs`
+and to the constructor's `schemas` slot — a larger change than this ADR's scope, and deliberately
+deferred. Documented in the helper's JSDoc and in the repository reference and subclassing guide
+instead.
 
 **Backward compatibility.** None at risk. Note the forward commitment: the returned tuple shape
 becomes public, so it must track `RepositoryConstructorArgs`. Deriving the return type from that
@@ -130,6 +147,9 @@ type rather than restating it keeps them in lockstep.
 - **Leave `schemas.stored` unset in the fallback.** Considered acceptable (only `collectionGroup()`
   consults it), but since the helper has the read schema in hand there is no reason not to populate
   it.
+- **Name the helper `argsFromSchema` (or `schemaArgs` / `configFromSchema`).** Rejected in favor of
+  `withSchemaArgs`: the bare `args` does not say whose arguments, while `withSchemaArgs` parallels
+  the factory it mirrors and reads as “the `withSchema` assembly, for `super(...)`.”
 
 ## References
 

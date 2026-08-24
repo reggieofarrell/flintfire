@@ -37,10 +37,13 @@ methods), or **composition** when you want a narrower app-owned API (or when you
 
 ### Subclassing
 
-Extend `FirestoreRepository` and call its public methods from your helpers:
+Extend `FirestoreRepository` and call its public methods from your helpers. Prefer
+`FirestoreRepository.withSchemaArgs(...)` when the subclass needs schema validation — it performs the
+same argument assembly `withSchema` does, so the read / write / stored split is correct by
+construction (including write overlays):
 
 ```typescript
-import { FirestoreRepository, makeValidator } from 'flintfire';
+import { FirestoreRepository } from 'flintfire';
 import { Firestore } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
@@ -53,9 +56,9 @@ type User = z.infer<typeof userSchema>;
 
 class UserRepository extends FirestoreRepository<User> {
   constructor(db: Firestore) {
-    // Pass a validator when the subclass needs the same runtime validation `withSchema` provides.
     // `withSchema` always returns a plain `FirestoreRepository` — it cannot construct your subclass.
-    super(db, 'users', makeValidator(userSchema));
+    // `withSchemaArgs` returns the constructor tuple `withSchema` would pass; spread it into super.
+    super(...FirestoreRepository.withSchemaArgs(db, 'users', userSchema));
   }
 
   async findByEmail(email: string) {
@@ -70,36 +73,58 @@ class UserRepository extends FirestoreRepository<User> {
 export const userRepo = new UserRepository(db);
 ```
 
+Write overlay (cast-free combinator writes) — same helper, no hand-rolled schema bundle:
+
+```typescript
+import { FirestoreRepository, zNumberWrite } from 'flintfire';
+import { Firestore } from 'firebase-admin/firestore';
+import { z } from 'zod';
+
+const userSchema = z.object({
+  email: z.email(),
+  active: z.boolean(),
+  loginCount: z.number(),
+});
+const userWrite = z.object({
+  email: z.email(),
+  active: z.boolean(),
+  loginCount: zNumberWrite(), // number | FieldValue.increment(...)
+});
+
+type User = z.output<typeof userSchema>;
+type UserWrite = z.input<typeof userWrite>;
+type UserParsed = z.output<typeof userWrite>;
+
+class StrictUserRepository extends FirestoreRepository<User, UserWrite, User, UserParsed> {
+  constructor(db: Firestore) {
+    super(
+      ...FirestoreRepository.withSchemaArgs(db, 'users', userSchema, {
+        writeSchema: userWrite,
+        sentinelPolicy: 'strict',
+      }),
+    );
+  }
+}
+```
+
 Design constraints for subclasses:
 
 - Build custom logic on the **public** API (`create`, `getById`, `findByField`, `query()`,
   transactions, hooks, and so on). Collection refs, validators, and other internals are `private`
   and are not available to subclasses.
-- `super(db, path, makeValidator(schema))` is enough for the common case. The constructor falls back
-  to the validator's own schema bundle, so `repo.schemas`, `repo.readSchema`, `validate()` and
-  `safeValidate()` all work — you do not need to pass a `RepositorySchemaSet` as well.
-- **If you use a write overlay, pass the schema bundle explicitly.** `makeValidator(writeSchema)`
-  derives its bundle from whatever schema you hand it, so `schemas.read` would be the *write*
-  schema — and read validation would then accept `FieldValue` sentinels that a read should reject.
-  Mirror what `withSchema` does: build the validator from the write schema, then pass a bundle whose
-  `read` is the real read schema.
-
-  ```typescript
-  const validator = makeValidator(userWriteSchema);
-  super(db, 'users', validator, undefined, undefined, {
-    read: userSchema, // the READ schema — not the write overlay
-    create: validator.schemas.create,
-    update: validator.schemas.update,
-    stored: userStoredSchema ?? userSchema,
-  });
-  ```
-
-- `schemas.stored` is not populated by the fallback. It is only consulted by `collectionGroup()`, to
-  reject a stored shape that collides with group identity (`path` / `parentPath`), so supply it if
-  you use collection-group queries with a divergent stored shape.
-- Prefer composition (below) when you would rather not re-wire `withSchema`'s options
-  (`writeSchema`, `storedSchema`, `readConverter`, `sentinelPolicy`, `allowLegacyDatastoreIds`)
-  through positional `super(...)` arguments.
+- **Use `withSchemaArgs` for any schema-backed subclass.** It is the documented path: `schemas.read`
+  is always the read schema, `schemas.stored` is always populated, and options like `readConverter`,
+  `sentinelPolicy`, `parentPath`, and `allowLegacyDatastoreIds` stay in a named bag instead of
+  positional `undefined`s. Calling `makeValidator(writeSchema)` alone and spreading that into
+  `super(...)` is still possible (the constructor is public) but leaves `schemas.read` as the write
+  overlay — read validation would then accept `FieldValue` sentinels a read should reject.
+- **You still declare the stored generic `S` yourself, and it is not checked.** `withSchemaArgs`
+  returns the constructor tuple, which carries no stored type — so `S` comes only from your
+  `extends FirestoreRepository<T, W, S, WO>` clause. If you pass a `storedSchema` whose shape differs
+  from the read model (a `readConverter` reshapes reads, say), set `S` to match it: `S` is what types
+  `collectionGroup()` and its field paths, and a mismatch compiles silently even though
+  `schemas.stored` is correct at runtime. Plain repositories, where the stored shape equals the read
+  shape, need nothing extra.
 - **Subclassing adds methods; it does not enforce invariants.** Overriding a write method intercepts
   only that method — most write paths do not route through it. If you need a rule that holds on
   every write, see [Enforced denormalization](#enforced-denormalization).

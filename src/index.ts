@@ -14,6 +14,7 @@ export type {
   DataOf,
   StoredDataOf,
   DocumentOf,
+  RepositoryConstructorArgs,
 } from './core/FirestoreRepository.js';
 export type { HookEvent, HookContext } from './core/Hooks.js';
 export type { FirestoreDocument, CollectionGroupDocument } from './core/DocumentId.js';

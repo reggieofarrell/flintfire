@@ -417,8 +417,11 @@ type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : fals
  * write output (`WO`) that differs from the write input (`W`). So it is **required** whenever `WO`
  * diverges from `W`, and optional when they match (the default and every schema-less repository).
  * This prevents a schema-less instance from promising a parsed output no parser produces (review S1).
+ *
+ * Exported so {@link FirestoreRepository.withSchemaArgs}'s return type stays in lockstep with the
+ * constructor (ADR-0042) — subclasses that spread the helper into `super(...)` name the same tuple.
  */
-type RepositoryConstructorArgs<T extends object, W extends object, WO extends object> =
+export type RepositoryConstructorArgs<T extends object, W extends object, WO extends object> =
   MutuallyAssignable<W, WO> extends true
     ? [
         db: Firestore,
@@ -598,11 +601,11 @@ export class FirestoreRepository<
   }
 
   /**
-   * Enforces, on the **schema factories** (`withSchema`/`subcollection`), the ADR-0018 invariant that
-   * a `readConverter` requires a `storedSchema` at RUNTIME, not only via the TypeScript overloads
-   * (review R6). The overloads block the typed path, but a JavaScript caller of a factory — or a
-   * TypeScript call crossing an `any` boundary — could otherwise construct a structurally-unsound
-   * repository whose stored/query shape silently defaults to the read schema.
+   * Enforces, on the **schema factories** (`withSchema` / `subcollection` / `withSchemaArgs`), the
+   * ADR-0018 invariant that a `readConverter` requires a `storedSchema` at RUNTIME, not only via the
+   * TypeScript overloads (review R6). The overloads block the typed path, but a JavaScript caller of
+   * a factory — or a TypeScript call crossing an `any` boundary — could otherwise construct a
+   * structurally-unsound repository whose stored/query shape silently defaults to the read schema.
    *
    * This applies to the schema-inferred factories only. The unvalidated escape hatches (the raw
    * positional constructor and {@link FirestoreRepository.raw}) run no Zod validation and infer no
@@ -621,6 +624,82 @@ export class FirestoreRepository<
           'options.storedSchema describing the physical document (ADR-0018).',
       );
     }
+  }
+
+  /**
+   * Single schema-argument assembler shared by {@link withSchemaArgs}, {@link withSchema}, and
+   * {@link subcollection} (ADR-0042). `context` is the public entry-point name used in construction
+   * errors so callers still see `withSchema` / `subcollection` / `withSchemaArgs` rather than a
+   * shared-helper label that would change the observable message contract.
+   *
+   * `readSchemaContext` exists so the refactor is byte-identical in its observable messages:
+   * `subcollection` takes its read schema as a POSITIONAL argument and has always named it
+   * (`...subcollection(..., readSchema, ...)`), while `withSchema` / `withSchemaArgs` use the bare
+   * context. Defaults to `context` for those two.
+   */
+  private static buildWithSchemaArgs(
+    db: Firestore,
+    collectionPath: string,
+    readSchema: z.ZodObject<any>,
+    options:
+      | {
+          writeSchema?: z.ZodObject<any>;
+          storedSchema?: z.ZodObject<any>;
+          readConverter?: ReadConverter<any>;
+          sentinelPolicy?: SentinelPolicy;
+          allowLegacyDatastoreIds?: boolean;
+          parentPath?: string;
+        }
+      | undefined,
+    context: string,
+    readSchemaContext: string = context,
+  ): RepositoryConstructorArgs<any, any, any> {
+    FirestoreRepository.assertSchemaHasNoTopLevelId(readSchema, readSchemaContext);
+    if (options?.writeSchema) {
+      FirestoreRepository.assertSchemaHasNoTopLevelId(
+        options.writeSchema,
+        `${context} (writeSchema)`,
+      );
+    }
+    if (options?.storedSchema) {
+      FirestoreRepository.assertSchemaHasNoTopLevelId(
+        options.storedSchema,
+        `${context} (storedSchema)`,
+      );
+    }
+    FirestoreRepository.assertConverterHasStoredSchema(options, context);
+
+    // Write validation (and create/update schema derivation) runs against the write overlay when
+    // one was supplied; otherwise the read schema is the write base too.
+    const writeBase = options?.writeSchema ?? readSchema;
+    const validator = makeValidator(writeBase, undefined, {
+      sentinelPolicy: options?.sentinelPolicy,
+    });
+
+    // Force `schemas.read` to the *real* read schema even when `writeBase` is an overlay — this is
+    // the correctness fix that naive `makeValidator(writeSchema)` misses. `stored` retains the
+    // EFFECTIVE at-rest shape (the read schema when none was supplied, per ADR-0018) so
+    // `collectionGroup()` can reject a stored shape that collides with group identity.
+    const schemas = Object.freeze({
+      read: readSchema,
+      create: validator.schemas.create,
+      update: validator.schemas.update,
+      stored: options?.storedSchema ?? readSchema,
+    });
+
+    // Cast: `RepositoryConstructorArgs` is a deferred conditional under the generic W/WO pair, and
+    // the implementation signature erases those generics to `any`. The tuple is sound by
+    // construction — we always supply a validator, which satisfies both the optional-validator
+    // (W === WO) and required-validator (W !== WO) branches. Mirrors `raw()` / `runInTransaction`.
+    return [
+      db,
+      collectionPath,
+      validator,
+      options?.parentPath,
+      options?.readConverter,
+      schemas,
+      options?.allowLegacyDatastoreIds,
+    ] as RepositoryConstructorArgs<any, any, any>;
   }
 
   /**
@@ -672,6 +751,119 @@ export class FirestoreRepository<
   }
 
   /**
+   * Assemble the positional constructor arguments that {@link withSchema} would pass, so a
+   * subclass can spread them into `super(...)` without re-deriving the read/write/stored schema
+   * bundle by hand (ADR-0042 / issue #102).
+   *
+   * Why this exists: `withSchema` always returns a plain `FirestoreRepository`, so a subclass must
+   * call the positional constructor itself. For a plain schema, `super(db, path, makeValidator(s))`
+   * is fine — the constructor falls back to the validator's own bundle. For a **write overlay**,
+   * `makeValidator(writeSchema)` alone is wrong: it would leave `schemas.read` as the write overlay,
+   * and {@link validate} / {@link safeValidate} would then accept `FieldValue` sentinels a read
+   * should reject. This helper performs the same assembly `withSchema` already does — validator from
+   * the write base, `schemas.read` forced to the real read schema, `schemas.stored` always
+   * populated — so the overlay hole is unreachable on the documented subclass path.
+   *
+   * Options match `withSchema` / `subcollection`, plus `parentPath` (needed when the subclass is a
+   * subcollection and must thread parent tracking without positional `undefined`s for
+   * `readConverter` / `allowLegacyDatastoreIds`). `parentPath` is a **marker**, not a parsed value:
+   * only its presence is observed (by {@link isSubcollection}), and {@link getParentId} derives the
+   * parent id from `collectionPath`. Pass the composed subcollection path, as `subcollection` does.
+   *
+   * **Limitation — the stored generic `S` is not bound by this helper.** The constructor tuple is
+   * `RepositoryConstructorArgs<T, W, WO>`; it has no `S` slot, so `S` comes solely from the
+   * subclass's own `extends FirestoreRepository<T, W, S, WO>` clause and is NOT cross-checked
+   * against `options.storedSchema`. At runtime `schemas.stored` is always correct (that is what this
+   * helper fixes); at the type level a mismatched `S` compiles silently, and `S` is what types
+   * {@link collectionGroup} and its field paths. Declare `S` to match `storedSchema` yourself.
+   * `withSchema` does bind it (`z.output<SS>`) because it returns an instance rather than a tuple.
+   *
+   * @param db - Firestore database instance
+   * @param collectionPath - Collection path (top-level or already-composed subcollection path)
+   * @param readSchema - Canonical read schema describing the **read model** (no top-level `id`)
+   * @param options - Same bag as {@link withSchema}, plus optional `parentPath`
+   * @returns A {@link RepositoryConstructorArgs} tuple ready to spread into `super(...)` /
+   *   `new FirestoreRepository(...)`
+   *
+   * @example
+   * // Subclass with a write overlay — reads stay typed/validated by the read schema
+   * class StrictUserRepository extends FirestoreRepository<User, UserWrite, User, UserParsed> {
+   *   constructor(db: Firestore) {
+   *     super(...FirestoreRepository.withSchemaArgs(db, 'users', userSchema, {
+   *       writeSchema: userWrite,
+   *       sentinelPolicy: 'strict',
+   *     }));
+   *   }
+   * }
+   */
+  // Overload 1 — no `readConverter`: `storedSchema` optional (mirrors withSchema).
+  //
+  // `SS` is inference-only here and deliberately absent from the return type: the constructor tuple
+  // has no stored-type slot (see `RepositoryConstructorArgs`), so unlike `withSchema` — which returns
+  // an instance and can bind `z.output<SS>` as the repository's `S` — this helper cannot propagate
+  // it. It is kept for signature parity with `withSchema`/`subcollection` so the three option bags
+  // read identically. Do not "tidy" it away expecting `S` to start flowing; it cannot without adding
+  // an `S` parameter to `RepositoryConstructorArgs` and the constructor's `schemas` slot.
+  static withSchemaArgs<
+    RS extends z.ZodObject<any>,
+    WS extends z.ZodObject<any> = RS,
+    SS extends z.ZodObject<any> = RS,
+  >(
+    db: Firestore,
+    collectionPath: string,
+    readSchema: RS,
+    options?: {
+      writeSchema?: WS;
+      storedSchema?: SS;
+      sentinelPolicy?: SentinelPolicy;
+      allowLegacyDatastoreIds?: boolean;
+      parentPath?: string;
+      readConverter?: undefined;
+    },
+  ): RepositoryConstructorArgs<z.output<RS>, z.input<WS>, z.output<WS>>;
+  // Overload 2 — `readConverter` present: `storedSchema` REQUIRED (review A3 / ADR-0018).
+  static withSchemaArgs<
+    RS extends z.ZodObject<any>,
+    SS extends z.ZodObject<any>,
+    WS extends z.ZodObject<any> = RS,
+  >(
+    db: Firestore,
+    collectionPath: string,
+    readSchema: RS,
+    options: {
+      readConverter: ReadConverter<z.output<RS>>;
+      storedSchema: SS;
+      writeSchema?: WS;
+      sentinelPolicy?: SentinelPolicy;
+      allowLegacyDatastoreIds?: boolean;
+      parentPath?: string;
+    },
+  ): RepositoryConstructorArgs<z.output<RS>, z.input<WS>, z.output<WS>>;
+  static withSchemaArgs(
+    db: Firestore,
+    collectionPath: string,
+    readSchema: z.ZodObject<any>,
+    options?: {
+      writeSchema?: z.ZodObject<any>;
+      storedSchema?: z.ZodObject<any>;
+      readConverter?: ReadConverter<any>;
+      sentinelPolicy?: SentinelPolicy;
+      allowLegacyDatastoreIds?: boolean;
+      parentPath?: string;
+    },
+  ): RepositoryConstructorArgs<any, any, any> {
+    // Public entry point — error messages name this static so subclassers debugging construction
+    // see `withSchemaArgs` rather than an internal helper.
+    return FirestoreRepository.buildWithSchemaArgs(
+      db,
+      collectionPath,
+      readSchema,
+      options,
+      'FirestoreRepository.withSchemaArgs',
+    );
+  }
+
+  /**
    * Create a repository instance with Zod schema validation.
    * Automatically validates all create and update operations.
    *
@@ -683,6 +875,9 @@ export class FirestoreRepository<
    *   otherwise it is `z.input<readSchema>`. Build the overlay from the write combinators
    *   (`zNumberWrite`/`zArrayWrite`/`zDateWrite`/`withDelete`/`zSentinel`) to accept native values
    *   and `FieldValue` sentinels on `create`/`update` with no cast.
+   *
+   * Prefer {@link withSchemaArgs} when subclassing — `withSchema` always returns a plain
+   * `FirestoreRepository` and cannot construct a subclass.
    *
    * @param db - Firestore database instance
    * @param collection - Collection path
@@ -779,41 +974,17 @@ export class FirestoreRepository<
       allowLegacyDatastoreIds?: boolean;
     },
   ): FirestoreRepository<any, any, any, any> {
-    FirestoreRepository.assertSchemaHasNoTopLevelId(readSchema, 'FirestoreRepository.withSchema');
-    if (options?.writeSchema) {
-      FirestoreRepository.assertSchemaHasNoTopLevelId(
-        options.writeSchema,
-        'FirestoreRepository.withSchema (writeSchema)',
-      );
-    }
-    if (options?.storedSchema) {
-      FirestoreRepository.assertSchemaHasNoTopLevelId(
-        options.storedSchema,
-        'FirestoreRepository.withSchema (storedSchema)',
-      );
-    }
-    FirestoreRepository.assertConverterHasStoredSchema(options, 'FirestoreRepository.withSchema');
-    const writeBase = options?.writeSchema ?? readSchema;
-    const validator = makeValidator(writeBase, undefined, {
-      sentinelPolicy: options?.sentinelPolicy,
-    });
-    // Validate writes against `writeBase`, but expose the plain `readSchema` as `schemas.read`.
-    // `stored` retains the EFFECTIVE at-rest shape (the read schema when none was supplied, per
-    // ADR-0018) so `collectionGroup()` can reject a stored shape that collides with group identity.
-    const schemas = Object.freeze({
-      read: readSchema,
-      create: validator.schemas.create,
-      update: validator.schemas.update,
-      stored: options?.storedSchema ?? readSchema,
-    });
+    // Single assembly path (ADR-0042): withSchema and withSchemaArgs both call buildWithSchemaArgs
+    // so the subclass helper and the factory cannot drift. Context stays `withSchema` so existing
+    // construction-error messages (and any caller filtering on the prefix) are unchanged.
     return new FirestoreRepository<any, any, any, any>(
-      db,
-      collection,
-      validator,
-      undefined,
-      options?.readConverter,
-      schemas,
-      options?.allowLegacyDatastoreIds,
+      ...FirestoreRepository.buildWithSchemaArgs(
+        db,
+        collection,
+        readSchema,
+        options,
+        'FirestoreRepository.withSchema',
+      ),
     );
   }
 
@@ -956,46 +1127,26 @@ export class FirestoreRepository<
     this.validateId(parentId, 'subcollection parent id');
     validateCollectionSegment(subcollectionName, 'subcollection name');
     const newPath = `${this.collectionPath}/${parentId}/${subcollectionName}`;
-    FirestoreRepository.assertSchemaHasNoTopLevelId(
-      readSchema,
-      'FirestoreRepository.subcollection(..., readSchema, ...)',
-    );
-    if (options?.writeSchema) {
-      FirestoreRepository.assertSchemaHasNoTopLevelId(
-        options.writeSchema,
-        'FirestoreRepository.subcollection (writeSchema)',
-      );
-    }
-    if (options?.storedSchema) {
-      FirestoreRepository.assertSchemaHasNoTopLevelId(
-        options.storedSchema,
-        'FirestoreRepository.subcollection (storedSchema)',
-      );
-    }
-    FirestoreRepository.assertConverterHasStoredSchema(
-      options,
-      'FirestoreRepository.subcollection',
-    );
-    const writeBase = options?.writeSchema ?? readSchema;
-    const validator = makeValidator(writeBase, undefined, {
-      sentinelPolicy: options?.sentinelPolicy,
-    });
-    // Validate writes against `writeBase`, but expose the plain `readSchema` as `schemas.read`.
-    // `stored` retains the EFFECTIVE at-rest shape — see withSchema.
-    const schemas = Object.freeze({
-      read: readSchema,
-      create: validator.schemas.create,
-      update: validator.schemas.update,
-      stored: options?.storedSchema ?? readSchema,
-    });
+
+    // Same assembly path as withSchema / withSchemaArgs (via buildWithSchemaArgs) so the
+    // read/write/stored split cannot drift. `parentPath` is the composed subcollection path —
+    // `isSubcollection()` keys off its presence. Inherit the parent's legacy-id flag when the caller
+    // did not override it. Both message contexts are passed explicitly so every construction error
+    // this factory can raise is byte-identical to the pre-refactor wording, including the positional
+    // `(..., readSchema, ...)` label the read-schema assertion has always used.
     return new FirestoreRepository<any, any, any, any>(
-      this.db,
-      newPath,
-      validator,
-      newPath, // for tracking parent path for reference
-      options?.readConverter,
-      schemas,
-      options?.allowLegacyDatastoreIds ?? this.allowLegacyDatastoreIds,
+      ...FirestoreRepository.buildWithSchemaArgs(
+        this.db,
+        newPath,
+        readSchema,
+        {
+          ...options,
+          parentPath: newPath,
+          allowLegacyDatastoreIds: options?.allowLegacyDatastoreIds ?? this.allowLegacyDatastoreIds,
+        },
+        'FirestoreRepository.subcollection',
+        'FirestoreRepository.subcollection(..., readSchema, ...)',
+      ),
     );
   }
 
