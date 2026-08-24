@@ -1,13 +1,14 @@
 # ADR-0042: Expose `withSchema`'s argument assembly for subclasses
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-23
 - **Deciders:** Reggie O'Farrell
 - **Related:** Issue [#102](https://github.com/reggieofarrell/flintfire/issues/102); refines
   [ADR-0007](0007-retire-curried-schema-factories.md) (value-inferred factories); touches the schema
   bundle from [ADR-0009](0009-explicit-read-validators.md) and the stored model from
   [ADR-0018](0018-document-identity-and-data-model.md); surfaced by the
-  [v3 docs audit](../audits/2026-08-23-website-docs-audit.md) (H1 item 3)
+  [v3 docs audit](https://github.com/reggieofarrell/flintfire/blob/0ef66cb3888496d0959a82ec2068546265be5928/docs/audits/2026-08-23-website-docs-audit.md)
+  (H1 item 3)
 
 ## Context
 
@@ -41,7 +42,7 @@ read should reject. Verified at runtime:
 
 ```
 naive makeValidator(write)     read-parse of sentinel -> ACCEPTED  ✗   stored: undefined ✗
-argsFromSchema helper          read-parse of sentinel -> rejected  ✓   stored: set ✓
+withSchemaArgs helper          read-parse of sentinel -> rejected  ✓   stored: set ✓
 ```
 
 Nothing surfaces this. `validate()` does not throw; it simply over-permits. It is a correctness hole
@@ -59,14 +60,14 @@ which is exactly the overlay case. Any helper must satisfy both branches.
 We will add a static that performs the same argument assembly `withSchema` already does, shaped for
 spreading into `super(...)`.
 
-1. **`FirestoreRepository.argsFromSchema(db, collectionPath, readSchema, options?)`** returns the
+1. **`FirestoreRepository.withSchemaArgs(db, collectionPath, readSchema, options?)`** returns the
    constructor argument tuple.
 
    ```typescript
    class StrictUserRepository extends FirestoreRepository<User, UserWrite, User, UserParsed> {
      constructor(db: Firestore) {
        super(
-         ...FirestoreRepository.argsFromSchema(db, 'users', userSchema, {
+         ...FirestoreRepository.withSchemaArgs(db, 'users', userSchema, {
            writeSchema: userWrite,
            sentinelPolicy: 'strict',
          }),
@@ -84,12 +85,29 @@ spreading into `super(...)`.
    schema and `schemas.stored` is always populated, so the overlay hole is **unreachable** rather
    than documented.
 
-4. **`withSchema` will be refactored to call it**, so there is one assembly path instead of two that
-   can drift. This is the part that keeps the fix from decaying: a future option added to
-   `withSchema` lands in the subclass path automatically.
+4. **`withSchema` and `subcollection` share the same assembler** (`buildWithSchemaArgs`) that backs
+   `withSchemaArgs`, so there is one assembly path instead of three that can drift. A future option
+   added to the bag lands in all three call sites automatically. Each public entry point passes its
+   own error-message `context` (`withSchema` / `subcollection` / `withSchemaArgs`), and
+   `subcollection` additionally passes a `readSchemaContext` so its positional-argument label
+   (`...subcollection(..., readSchema, ...)`) survives — every construction error the three
+   factories can raise stays **byte-identical** to the pre-refactor wording, pinned by unit tests.
 
-5. **Additive.** A new static; no existing signature changes and no behavior change for existing
-   callers.
+5. **The subclass's declared stored generic `S` is checked, not trusted.**
+   `RepositoryConstructorArgs` takes a 4th parameter `S = any` and types its `schemas` slot
+   `RepositorySchemaSetFor<S>`, so `super(...)` rejects an `extends` clause that contradicts the
+   `storedSchema` passed alongside it. Without this the helper would fix the runtime bundle and
+   leave a silent type-level hole in the same place — a documented caveat instead of an unreachable
+   mistake, which is the outcome decision 3 exists to avoid. See Consequences for the direction the
+   check runs in and why.
+
+6. **Additive, with two backward-compatible type changes.** `withSchemaArgs` is a new static and no
+   runtime behavior changes for existing callers. Two exported _types_ do change shape, both
+   compatibly: `RepositoryConstructorArgs` gains a defaulted 4th parameter (its 3-argument form
+   keeps its previous meaning), and `RepositorySchemaSet` becomes the erased alias
+   `RepositorySchemaSetFor<any>` (identical for reading and for assigning a `ZodObject` into it).
+   The `schemas` getter still returns the erased form, so no consumer is forced to name a stored
+   type.
 
 ## Consequences
 
@@ -104,6 +122,37 @@ in the `extends` clause, which is the part that cannot be inferred.
 **Not a full fix for hand-rolled construction.** A subclass can still call the positional
 constructor directly and reintroduce the hole. This makes the correct path easy and obvious; it does
 not remove the incorrect one, because the constructor is public API.
+
+**The stored generic `S` is checked too, not just the runtime bundle.** This was initially scoped
+out and then pulled in, because the alternative was shipping a runtime fix beside a _documented_
+type-level hole — the exact shape of problem this ADR argues against, and on a type
+(`RepositoryConstructorArgs`) that becomes public in the same change, where the arity is cheapest to
+get right once.
+
+`RepositoryConstructorArgs` gains a 4th parameter `S = any`, and its `schemas` slot is typed
+`RepositorySchemaSetFor<S>` — the existing `RepositorySchemaSet` becomes the erased alias
+`RepositorySchemaSetFor<any>`, so consumer annotations keep their previous meaning. The stored slot
+is `z.ZodObject<any> & z.ZodType<S>`: the `ZodObject` half preserves internal `.shape` access, the
+`ZodType<S>` half carries the type. A subclass whose `extends` clause contradicts the `storedSchema`
+it passes now fails at `super(...)`.
+
+The check is **directional, by design**. Zod 4 declares `ZodType<out Output>` covariantly, so:
+
+| Declared `S` vs `storedSchema` | Result       | Rationale                                              |
+| ------------------------------ | ------------ | ------------------------------------------------------ |
+| unrelated shape                | **rejected** | outright contradiction                                 |
+| wider (a field at rest lacks)  | **rejected** | would invent collection-group field paths              |
+| narrower (a subset)            | accepted     | under-reports paths only; unsound in neither direction |
+
+Both unsound directions are caught; the safe one is permitted. Pinned by `@ts-expect-error` guards
+in `src/tests/types/with-schema-args.type-test.ts`, including a deliberately un-guarded narrower
+case so the asymmetry is explicit rather than accidental.
+
+Costs: `RepositorySchemaSetFor` is one more exported type name, and `SS` on `withSchemaArgs` is now
+load-bearing rather than decorative — commented so it is not erased "for simplicity", which would
+silently return `S` to an unverified hand-declaration. The public _read_ surface is unchanged: the
+`schemas` getter still returns the erased `RepositorySchemaSet`, so the stored type is checked on
+the way in and not imposed on the way out.
 
 **Backward compatibility.** None at risk. Note the forward commitment: the returned tuple shape
 becomes public, so it must track `RepositoryConstructorArgs`. Deriving the return type from that
@@ -130,6 +179,9 @@ type rather than restating it keeps them in lockstep.
 - **Leave `schemas.stored` unset in the fallback.** Considered acceptable (only `collectionGroup()`
   consults it), but since the helper has the read schema in hand there is no reason not to populate
   it.
+- **Name the helper `argsFromSchema` (or `schemaArgs` / `configFromSchema`).** Rejected in favor of
+  `withSchemaArgs`: the bare `args` does not say whose arguments, while `withSchemaArgs` parallels
+  the factory it mirrors and reads as “the `withSchema` assembly, for `super(...)`.”
 
 ## References
 
@@ -138,5 +190,6 @@ type rather than restating it keeps them in lockstep.
   `schemas ?? validator?.schemas` fallback, and `withSchema`'s assembly
 - `src/core/Validation.ts` — `makeValidator`, which derives its bundle from whichever schema it is
   given (the root of the overlay hole)
-- [v3 docs audit](../audits/2026-08-23-website-docs-audit.md) — H1 item 3, including the corrected
-  claim that surfaced this
+- [v3 docs audit](https://github.com/reggieofarrell/flintfire/blob/0ef66cb3888496d0959a82ec2068546265be5928/docs/audits/2026-08-23-website-docs-audit.md)
+  — H1 item 3, including the corrected claim that surfaced this (the audit was working material,
+  removed in `80ece9a`; permalinked at `0ef66cb`)

@@ -3,7 +3,18 @@ import { FieldValue, UpdateData, WithFieldValue } from 'firebase-admin/firestore
 import { isDotNotation, validateDotNotationPath } from '../utils/dotNotation.js';
 import { areFiniteVectorComponents, genuineVectorComponents } from '../utils/vectorValue.js';
 
-export type RepositorySchemaSet = Readonly<{
+/**
+ * The repository's schema bundle, parameterized by the **stored** (at-rest) type `S`.
+ *
+ * `S` exists so the constructor can *check* it: `RepositoryConstructorArgs` places this type in the
+ * `schemas` slot, so a subclass whose `extends FirestoreRepository<T, W, S, WO>` clause contradicts
+ * the `storedSchema` it passes fails to compile (ADR-0042). Zod 4 declares `ZodType<out Output>`
+ * covariantly, so the check rejects an unrelated or *wider* `S` — the unsound directions, which would
+ * invent query field paths that do not exist at rest — and permits a narrower one, which is merely
+ * under-permissive. Use the erased {@link RepositorySchemaSet} alias where the stored type is
+ * irrelevant.
+ */
+export type RepositorySchemaSetFor<S = any> = Readonly<{
   read: z.ZodObject<any>;
   create: z.ZodObject<any>;
   update: z.ZodObject<any>;
@@ -13,12 +24,19 @@ export type RepositorySchemaSet = Readonly<{
    * schema when none was given (the stored model defaults to the read model).
    *
    * Optional because the low-level constructor accepts a hand-rolled bundle, and because a
-   * `Validator`'s own schema set describes only the write side. Consumers that need the stored shape
-   * as a TYPE should use `StoredDataOf<typeof repo>` — this is the runtime counterpart, used by
-   * `collectionGroup()` to reject a stored shape that collides with collection-group identity.
+   * `Validator`'s own schema set describes only the write side. This is the runtime counterpart of
+   * the repository's `S` generic, used by `collectionGroup()` to reject a stored shape that collides
+   * with collection-group identity; `StoredDataOf<typeof repo>` reads the same shape as a type off an
+   * existing instance. The `& z.ZodType<S>` half is what lets the constructor cross-check `S`.
    */
-  stored?: z.ZodObject<any>;
+  stored?: z.ZodObject<any> & z.ZodType<S>;
 }>;
+
+/**
+ * Stored-shape-erased alias, and the public name. Kept so existing consumer annotations
+ * (`RepositorySchemaSet`) continue to mean exactly what they meant before the `S` parameter existed.
+ */
+export type RepositorySchemaSet = RepositorySchemaSetFor<any>;
 
 /**
  * Validates write payloads and carries the schema set. The repository models a **single write shape**

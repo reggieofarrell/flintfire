@@ -14,6 +14,7 @@ export type {
   DataOf,
   StoredDataOf,
   DocumentOf,
+  RepositoryConstructorArgs,
 } from './core/FirestoreRepository.js';
 export type { HookEvent, HookContext } from './core/Hooks.js';
 export type { FirestoreDocument, CollectionGroupDocument } from './core/DocumentId.js';
@@ -77,6 +78,7 @@ export type {
   CreateOutput,
   Validator,
   RepositorySchemaSet,
+  RepositorySchemaSetFor,
   SentinelPolicy,
   FieldValueKind,
 } from './core/Validation.js';

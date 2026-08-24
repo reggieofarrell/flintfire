@@ -44,6 +44,27 @@ paths are derived from the stored shape `S` (excluding the synthetic `id`) via t
 
 ## Static methods
 
+**`withSchemaArgs<RS extends ZodObject, WS extends ZodObject = RS, SS extends ZodObject = RS>(db: Firestore, collectionPath: string, readSchema: RS, options?: { writeSchema?: WS; storedSchema?: SS; readConverter?: ReadConverter<z.output<RS>>; sentinelPolicy?: SentinelPolicy; allowLegacyDatastoreIds?: boolean; parentPath?: string }): RepositoryConstructorArgs<z.output<RS>, z.input<WS>, z.output<WS>>`**
+
+Assemble the positional constructor arguments that `withSchema` would pass, so a **subclass** can
+spread them into `super(...)`. Same options bag as `withSchema` / `subcollection`, plus
+`parentPath`. Guarantees the **runtime** read / write / stored split is correct by construction —
+including when a `writeSchema` overlay is present — so `schemas.read` is never accidentally the
+write overlay and `schemas.stored` is always populated.
+See [Advanced Patterns](/flintfire/guides/advanced/patterns/) (Custom repository methods).
+`withSchema` and `subcollection` call this internally (one assembly path).
+
+**The stored generic `S` is checked.** The returned tuple carries the stored type, so a subclass
+whose `extends FirestoreRepository<T, W, S, WO>` clause contradicts the `storedSchema` it passes
+fails to compile at the `super(...)` call — you cannot silently mis-declare the shape that types
+`collectionGroup()` and its field paths. The check is directional: an unrelated `S`, or one *wider*
+than the stored schema (claiming a field nothing at rest has), is rejected; a *narrower* `S` is
+accepted, since it only under-reports field paths.
+
+`parentPath` is a **marker**: only its presence is read, by `isSubcollection()` — `getParentId()`
+derives the id from the collection path — so pass the composed subcollection path, as
+`subcollection` does.
+
 **`withSchema<RS extends ZodObject, WS extends ZodObject = RS, SS extends ZodObject = RS>(db: Firestore, collection: string, readSchema: RS, options?: { writeSchema?: WS; storedSchema?: SS; readConverter?: ReadConverter<z.output<RS>>; sentinelPolicy?: SentinelPolicy; allowLegacyDatastoreIds?: boolean }): FirestoreRepository<z.output<RS>, z.input<WS>, z.output<SS>, z.output<WS>>`**
 
 Create a schema-validated repository. The **read type** is `z.output<readSchema>`, the **write-input
@@ -60,7 +81,8 @@ construction throws with a remedial error — the document name is the sole `id`
 sentinel kind each field accepts. When a `readConverter` is supplied, `storedSchema` is **required**
 (the converter changes the read shape, so query paths need an explicit at-rest schema) — see
 [Read Converters](/flintfire/guides/concepts/read-converters/). `allowLegacyDatastoreIds` opts
-into accepting legacy Datastore-mode numeric ids.
+into accepting legacy Datastore-mode numeric ids. Always returns a plain `FirestoreRepository` —
+subclasses should use `withSchemaArgs` instead.
 
 **`raw<T extends object, W extends object = T, S extends object = T>(db: Firestore, collection: string, options?: { readConverter?: ReadConverter<T>; allowLegacyDatastoreIds?: boolean }): FirestoreRepository<T, W, S, W>`**
 
@@ -69,13 +91,16 @@ generic `T`; no Zod validation runs. Prefer this over the positional constructor
 repository with options — it keeps a security-relevant flag like `allowLegacyDatastoreIds`
 discoverable instead of a trailing positional boolean.
 
-**`new FirestoreRepository<T extends object, W extends object = T, S extends object = T, WO extends object = W>(db: Firestore, collectionPath: string, validator?: Validator<W, WO>, parentPath?: string, readConverter?: ReadConverter<T>, schemas?: RepositorySchemaSet, allowLegacyDatastoreIds?: boolean)`**
+**`new FirestoreRepository<T extends object, W extends object = T, S extends object = T, WO extends object = W>(...args: RepositoryConstructorArgs<T, W, WO>)`**
 
-Low-level constructor with optional validation and an optional read-only converter. A
+Low-level constructor with optional validation and an optional read-only converter. The argument
+tuple is `RepositoryConstructorArgs<T, W, WO>` — positionally
+`(db, collectionPath, validator?, parentPath?, readConverter?, schemas?, allowLegacyDatastoreIds?)`.
+The validator is required when `WO` diverges from `W` and optional when they match. A
 `ReadConverter<T>` is the `fromFirestore(snapshot) => T` mapper only; the repository builds the full
 `FirestoreDataConverter` internally and applies it to reads, so `toFirestore` is never invoked.
-There is no options / config / debug / logger bag anywhere in the constructor — prefer
-`withSchema(...)` (or `raw(...)` for an unvalidated repository) for typical use.
+Prefer `withSchema(...)` (or `raw(...)` for an unvalidated repository) for typical use, and
+`withSchemaArgs` when subclassing.
 
 ## Reads
 
