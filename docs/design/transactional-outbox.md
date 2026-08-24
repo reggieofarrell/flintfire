@@ -2,7 +2,18 @@
 
 Status: **Draft for future implementation**  
 Tracking issue: [#80](https://github.com/reggieofarrell/flintfire/issues/80)  
-Related issue: [#46](https://github.com/reggieofarrell/flintfire/issues/46)
+Related issue: [#46](https://github.com/reggieofarrell/flintfire/issues/46)  
+Depends on: [ADR-0040](../adr/0040-repository-write-interceptors.md) (repository write interceptors)
+
+> **Sequencing note (2026-08-23).** This design's central invariant — an event is durable only when
+> its document and the domain write commit together — is exactly the primitive defined by
+> [ADR-0040](../adr/0040-repository-write-interceptors.md). Interceptors will be built **first**, so
+> `enqueue` becomes an interceptor rather than a parallel atomic-boundary mechanism, and the
+> "Convenience methods for ordinary writes" gap below is closed by them instead of by Phase 4. The
+> shared hard problems (batch capacity accounting, refusing `bulkWrite` for lack of a shared
+> boundary, transaction-retry semantics) are resolved once, in ADR-0040, for every consumer.
+> Interceptors provide the boundary only; everything after the commit — durable state, lease/claim,
+> retry, dead-lettering, workers — remains the scope of this design.
 
 ## Summary
 
@@ -260,7 +271,9 @@ await orderRepo.create(order);
 outbox.enqueue(/* no shared atomic boundary */);
 ```
 
-A future convenience layer may expose APIs such as:
+[ADR-0040](../adr/0040-repository-write-interceptors.md) closes this gap generally: an interceptor
+registered on the repository commits its writes inside the primary write's boundary on every
+supported path, or refuses the write. A future convenience layer may then expose APIs such as:
 
 ```ts
 await outbox.runInTransaction(orderRepo, async ({ tx, repo, enqueue }) => {
@@ -709,9 +722,12 @@ as separate internal milestones.
 
 ### Phase 4 — Repository convenience
 
-- single-write transaction/batch wrappers;
+- ~~single-write transaction/batch wrappers~~ — **superseded by
+  [ADR-0040](../adr/0040-repository-write-interceptors.md)**. The atomic boundary is no longer this
+  design's responsibility; a single-write wrapper becomes a thin adapter over an interceptor;
 - declarative outbox event projectors, if still justified;
-- explicit bulk semantics and chunk accounting;
+- explicit bulk semantics and chunk accounting — inherits ADR-0040's coverage matrix, including its
+  refusal of read-capable interceptors on the bulk paths;
 - optional ordering partitions.
 
 ## Open design questions
