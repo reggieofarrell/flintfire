@@ -4,8 +4,9 @@
 - **Date:** 2026-08-23
 - **Deciders:** Reggie O'Farrell
 - **Related:** ADR-0001 (fork and 2.0.0 re-architecture), ADR-0006 (Starlight site and major-version
-  archives), [`docs/plans/flintfire-v3-release/PLAN.md`](../plans/flintfire-v3-release/PLAN.md),
-  `CHANGELOG.md` (generated 3.0.0 entry),
+  archives),
+  [`docs/plans/flintfire-v3-release/PLAN.md`](https://github.com/reggieofarrell/flintfire/blob/070b378d3ba023f7c7b7c673e41d104e6de8d443/docs/plans/flintfire-v3-release/PLAN.md)
+  (removed in `ef77b57`; permalinked at `070b378`), `CHANGELOG.md` (generated 3.0.0 entry),
   [PR #94](https://github.com/reggieofarrell/flintfire/pull/94) (prep),
   [PR #95](https://github.com/reggieofarrell/flintfire/pull/95) (release),
   [GitHub Release v3.0.0](https://github.com/reggieofarrell/flintfire/releases/tag/v3.0.0),
@@ -114,12 +115,13 @@ Shipped as `flintfire@3.0.0` from `reggieofarrell/flintfire` at merge SHA
 release PR was #95. npm `latest` is `3.0.0` with Trusted Publishing provenance.
 `@reggieofarrell/firestore-orm@2.x` is deprecated in place (all five 2.x versions); no old-name v3
 was published. Execution evidence:
-[`docs/plans/flintfire-v3-release/notes.md`](../plans/flintfire-v3-release/notes.md) until that
-directory is removed in a later cleanup PR.
+[`docs/plans/flintfire-v3-release/notes.md`](https://github.com/reggieofarrell/flintfire/blob/070b378d3ba023f7c7b7c673e41d104e6de8d443/docs/plans/flintfire-v3-release/notes.md)
+— that directory was removed in `ef77b57` as anticipated, so the link is a permalink at `070b378`.
 
 ## References
 
-- [`docs/plans/flintfire-v3-release/PLAN.md`](../plans/flintfire-v3-release/PLAN.md) —
-  owner-approved decisions D1–D13 and the release playbook
+- [`docs/plans/flintfire-v3-release/PLAN.md`](https://github.com/reggieofarrell/flintfire/blob/070b378d3ba023f7c7b7c673e41d104e6de8d443/docs/plans/flintfire-v3-release/PLAN.md)
+  — owner-approved decisions D1–D13 and the release playbook (permalink; the directory was removed
+  in `ef77b57`)
 - [npm Trusted Publishers](https://docs.npmjs.com/trusted-publishers/)
 - [GitHub repository rename behavior](https://docs.github.com/en/repositories/creating-and-managing-repositories/renaming-a-repository)
