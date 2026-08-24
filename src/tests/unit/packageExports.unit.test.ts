@@ -72,4 +72,12 @@ describe('package exports', () => {
     expect((orm as Record<string, unknown>).WriteMetadata).toBeUndefined();
     expect((orm as Record<string, unknown>).WriteResultWithMetadata).toBeUndefined();
   });
+
+  it('documents that ReadOnlyQuery is a type-only root export (issue #100)', () => {
+    // ReadOnlyQuery is an interface — it erases at runtime. Compile-time root-import coverage lives
+    // in src/tests/types/read-only-query.type-test.ts (T-11). Assert it is not accidentally emitted
+    // as a runtime value on the package entry (a value export would also blow the zero-slack unit
+    // gate on src/index.ts).
+    expect((orm as Record<string, unknown>).ReadOnlyQuery).toBeUndefined();
+  });
 });

@@ -166,6 +166,14 @@ these types describe, see [FirestoreRepository](/flintfire/reference/repository/
   a plan-only request and `R[]` (possibly `[]`) when `analyze: true`.
 - **`QueryExplainStreamResult<R>`** — one chunk from `explainStream()`; `document` and `metrics` are
   both optional, because metrics arrive as a separate chunk from the documents.
+- **`ReadOnlyQuery<T, W = T, S = T, R = FirestoreDocument<T>>`** — a **read-only view** of
+  `FirestoreQueryBuilder`: the entire read surface (filtering, composite filters, document-name
+  queries, ordering, projection, bounds, aggregation, pagination, streaming, listeners, explain)
+  with `update()` / `delete()` absent **at every chain depth**. Every clause member returns
+  `ReadOnlyQuery` (not `this`), so the narrowing survives a fluent chain; `repo.query()` is
+  assignable with **no cast**. Type-level only — a deliberate cast back to the concrete builder
+  still reaches the write terminals. See
+  [Read-only view](/flintfire/reference/query-builder/#read-only-view).
 
 The package also exports runtime helpers — validation combinators, timestamp utilities, and
 dot-notation utilities — documented on the [Helpers & Utilities](/flintfire/reference/helpers/)

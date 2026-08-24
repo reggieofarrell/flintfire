@@ -489,7 +489,7 @@ together or not at all. The bypass paths are not intercepted — they are simply
 
 ```typescript
 import { FirestoreRepository } from 'flintfire';
-import type { DataOf, ID, UpdateInput } from 'flintfire';
+import type { DataOf, ID, ReadOnlyQuery, UpdateInput } from 'flintfire';
 
 const orderRepo = FirestoreRepository.withSchema(db, 'orders', orderSchema);
 const userRepo = FirestoreRepository.withSchema(db, 'users', userSchema);
@@ -502,9 +502,12 @@ class OrderService {
     private readonly users: typeof userRepo,
   ) {}
 
-  // Reads: terminating helpers (see the note below on why the query builder is not exposed).
+  // Reads: hand out a ReadOnlyQuery (or keep curated terminal read helpers).
   getById(id: ID) {
     return this.orders.getById(id);
+  }
+  query(): ReadOnlyQuery<Order> {
+    return this.orders.query();
   }
   countByStatus(status: Order['status']) {
     return this.orders.query().where('status', '==', status).count();
@@ -542,20 +545,14 @@ Because `orders` and `users` are `private`, `orderService.update(...)`, `.upsert
 `.bulkUpdate(...)`, `.bulkWrite(...)`, `.delete(...)`, `.recursiveDeleteCollection(...)` and the rest
 are **compile errors** — there is no path to a write that skips `setStatus`.
 
-:::note[Why reads are terminating helpers rather than a query builder]
-Returning the query builder would hand back `query().update()` and `query().delete()`, and narrowing
-it does **not** work: `Omit<FirestoreQueryBuilder<…>, 'update' | 'delete'>` blocks only the immediate
-call, because the chainable clause methods return `this` (typed as the full builder). A single
-`.where(...)` restores the write terminals:
+:::tip[Handing out the query builder safely]
+`ReadOnlyQuery` makes `update()` / `delete()` absent at every chain depth — annotate
+`query(): ReadOnlyQuery<Order>` and return `this.orders.query()` with no cast. A bare
+`Omit` of those two members does **not** work: TypeScript resolves `this` against the declared
+receiver, so the first `.where(...)` hands the full builder back. The guarantee is compile-time
+only; a deliberate cast still reaches the write terminals. See
+[Read-only view](/flintfire/reference/query-builder/#read-only-view).
 
-```typescript
-declare const q: Omit<FirestoreQueryBuilder<Order, Order, Order>, 'update' | 'delete'>;
-await q.update({ status: 'shipped' }); // ✗ blocked
-await q.where('status', '==', 'pending').update({ status: 'shipped' }); // ✓ compiles — leak
-```
-
-So expose terminating helpers (`count()`, `paginate()`, `get()` called inside the facade) and let no
-builder escape.
 :::
 
 ### 2. Why not subclass and override the write methods?

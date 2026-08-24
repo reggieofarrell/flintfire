@@ -15,7 +15,9 @@ walkthrough of these methods, see [Queries](/flintfire/guides/working-with-data/
 `FirestoreDocument<T>` and is narrowed to `FirestoreDocument<DeepPartial<T>>` by `select()`. Pass
 `{ withMetadata: true }` on a terminal to receive `WithMetadata<R>` (or an array of pairs) instead —
 `R` itself is unchanged. Chainable clause methods (`where`, `whereFilter`, `whereId`, `orderBy`,
-`orderById`, `limit`) return `this`; `select()` returns a **new** builder (see below).
+`orderById`, `limit`) return `this`; `select()` returns a **new** builder (see below). See
+[Read-only view](#read-only-view) for handing the builder across a boundary without its write
+terminals.
 
 ## Clauses
 
@@ -281,6 +283,38 @@ empty patch is rejected with a `ValidationError`.
 
 Delete all matching documents; returns the matched (deleted) count. Runs the bulk hooks
 `beforeBulkDelete` and `afterBulkDelete` (`{ ids, documents }`).
+
+## Read-only view
+
+`interface ReadOnlyQuery<T, W = T, S = T, R = FirestoreDocument<T>>` — a structural **read-only
+view** of `FirestoreQueryBuilder`. Hand it out from a facade that owns its own write paths:
+`repository.query()` is assignable with **no cast**.
+
+```typescript
+class OrderService {
+  constructor(private readonly orders: typeof orderRepo) {}
+  query(): ReadOnlyQuery<Order> {
+    return this.orders.query(); // structural — no cast
+  }
+}
+
+await svc.query().where('status', '==', 'pending').orderBy('updatedAt').get(); // ✓
+await svc.query().where('status', '==', 'pending').update({ status: 'shipped' }); // ✗ TS2339
+```
+
+Every clause member returns `ReadOnlyQuery` (not `this`), so `update()` / `delete()` stay absent at
+any chain depth — including after `select()`. A bare
+`Omit<FirestoreQueryBuilder<…>, 'update' | 'delete'>` does **not** work: TypeScript resolves `this`
+against the declared receiver, so the `Omit` blocks only the immediate call and the first
+`.where(...)` hands the full builder back.
+
+The [collection-group query builder](#collection-group-query-builder) needs no equivalent: it
+declares no write terminals at all (`update` / `delete` are absent from its public surface). Same
+for `VectorQueryBuilder` on the `/vector` entry; `ReadOnlyQuery` is still re-exported there so a
+facade over a vector-enabled repository can name the type without importing the main entry.
+
+**Type-level only.** A deliberate cast back to `FirestoreQueryBuilder` still reaches `update()`.
+The purpose is compile-time enforcement of an application's own boundary (ADR-0041).
 
 ## Collection-group query builder
 

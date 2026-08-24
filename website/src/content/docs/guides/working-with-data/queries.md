@@ -309,7 +309,10 @@ Everything else behaves exactly as it does on a single-collection query — `whe
 A collection group has no `CollectionReference`, so there is **no write surface**: `update()` and
 `delete()` do not exist on a group builder (a compile error, not a runtime throw). Their bulk hooks
 carry `{ ids }` payloads, and ids are not unique across a group, so every registered hook would see
-ambiguous identity. For a group-wide write, drop to the Admin SDK — see
+ambiguous identity. That absence is structural on the group builder; for the *single-collection*
+builder, annotate a facade return as
+[`ReadOnlyQuery`](/flintfire/reference/query-builder/#read-only-view) to get the same guarantee at
+the type level. For a group-wide write, drop to the Admin SDK — see
 [Scope & Capabilities](/flintfire/reference/scope-and-capabilities/#raw-sdk-escape-hatch).
 
 ### ⚠️ Collection-group queries need their own indexes
@@ -477,7 +480,8 @@ that a projected query cannot be used with `onSnapshot()` (see below).
 
 `query().update(data)` updates every document matching the query and returns the number of documents
 **written**; `query().delete()` deletes every matching document and returns the **matched (deleted)
-count**.
+count**. To hand a query builder across a trust boundary with those write terminals withheld,
+annotate it as [`ReadOnlyQuery`](/flintfire/reference/query-builder/#read-only-view).
 
 > **Note:** `query().update()` runs the **bulk** lifecycle hooks `beforeBulkUpdate` (which may
 > mutate the update payload before validation) and `afterBulkUpdate` (receiving `{ ids }` of the

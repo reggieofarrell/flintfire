@@ -24,6 +24,7 @@ export type {
   QueryFilterFactory,
   QueryExplainResult,
   QueryExplainStreamResult,
+  ReadOnlyQuery,
 } from './core/QueryBuilder.js';
 export type {
   CountAggregation,
