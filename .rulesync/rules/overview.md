@@ -1,21 +1,24 @@
 ---
 root: true
-# The root project memory is generated only to AGENTS.md, which Cursor and Codex read natively.
-# Claude Code does NOT read AGENTS.md, so CLAUDE.md is a committed symlink to AGENTS.md (repo root).
-# Neither tool needs the root re-emitted as a scoped rule, so this rule targets the AGENTS.md family
-# only; scoped rules still target Cursor and Claude.
+# The root project memory is generated to AGENTS.md (read natively by Cursor and Codex) and to
+# CLAUDE.md (Claude Code does not read AGENTS.md). Both are REAL generated files — CLAUDE.md was
+# previously a committed symlink to AGENTS.md, which double-loaded every rule for Claude Code:
+# AGENTS.md inlines the non-root rule bodies, and Claude Code also reads .claude/rules/.
+# `cursor` is deliberately absent: Cursor reads AGENTS.md natively, so emitting the root as a
+# scoped .mdc as well would load the overview twice there.
 targets:
   - agentsmd
   - codexcli
+  - claudecode
 description: FlintFire project overview, working mode, project rules, and environment/tooling notes
 ---
 
 # FlintFire — project instructions
 
 Canonical, always-loaded project memory. Authored once in `.rulesync/rules/overview.md` and
-generated to the root `AGENTS.md`, which Cursor and Codex read natively. **Claude Code does not read
-`AGENTS.md`**, so `CLAUDE.md` is a symlink to `AGENTS.md` at the repo root — one content file, read by
-every tool. `flintfire` is a **TypeScript library** (published to npm) — a
+generated to the root `AGENTS.md` (read natively by Cursor and Codex) and to `CLAUDE.md` (**Claude
+Code does not read `AGENTS.md`**). Both are generated files — edit the source, never these.
+`flintfire` is a **TypeScript library** (published to npm) — a
 type-safe Firestore ORM for the Firebase Admin SDK. There is no long-running application server;
 "running it" means building the library and exercising it against the local **Firestore emulator**.
 See also `README.md` and `docs/development/testing.md`.
@@ -86,7 +89,11 @@ Scoped rules currently defined:
 
 - **Skills & commands:** authored in `.rulesync/skills/*/SKILL.md` and `.rulesync/commands/*.md`;
   `npm run rules:sync` generates them for every tool (Cursor, Claude Code, and the AGENTS.md family
-  under `.agents/`). Edit the `.rulesync/` source, never the generated files.
+  under `.agents/`). Edit the `.rulesync/` source, never the generated files. The rulesync **CLI**
+  version is lockfile-pinned; a daily GitHub Action bumps it to the newest release that is at least
+  two days old (`.npmrc` `min-release-age=2`) and, when generated files change, the Cursor Agent
+  CLI (Grok 4.5) reviews the diff — see `docs/development/rulesync.md`. Do not float the CLI with
+  `npx rulesync@latest`, and do not pass `--min-release-age=0` to bypass the cooldown.
 - **Architecture decisions:** record significant/contract-level changes as an ADR in `docs/adr/`
   (use the `/adr` skill; start from `docs/adr/0000-template.md`).
 - **Commits:** Conventional Commits (enforced by commitlint on the `commit-msg` hook).

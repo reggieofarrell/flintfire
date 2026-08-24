@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Shell(git)",
+      "Shell(grep)",
+      "Shell(rg)",
+      "Shell(find)",
+      "Shell(ls)",
+      "Shell(wc)",
+      "Shell(diff)",
+      "Shell(test)",
+      "Shell(head)",
+      "Shell(tail)",
+      "Shell(cat)",
+      "WebFetch(github.com)",
+      "WebFetch(docs.github.com)",
+      "WebFetch(raw.githubusercontent.com)"
+    ],
+    "deny": [
+      "Write(**)",
+      "Shell(gh)",
+      "Shell(npm)",
+      "Shell(rm)",
+      "Shell(curl)",
+      "Shell(git:push)",
+      "Shell(git:commit)",
+      "Shell(git:reset)",
+      "Shell(git:checkout)",
+      "Read(.env*)",
+      "Write(.env*)"
+    ]
+  }
+}

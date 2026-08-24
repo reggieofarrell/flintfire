@@ -1,0 +1,304 @@
+name: Rulesync upgrade
+
+# Keep the committed rulesync CLI current without auto-merging generator output.
+#
+# Job 1 (deterministic): if npm has a newer `rulesync` than the lockfile, bump it,
+# regenerate agent-config files, and open a PR. `rules:check` only proves the new
+# tree matches this CLI — not that the layout this repo depends on survived.
+#
+# Job 2 (Cursor Agent CLI, Grok 4.5): when generated files actually changed, review
+# the diff against main using `.rulesync/skills/rulesync-upgrade-review`. Restricted
+# autonomy: the agent writes a verdict to stdout; this workflow posts the PR comment
+# and fails the check on hold/block. Never grok-4.5-fast.
+#
+# Docs: docs/development/rulesync.md
+# Secret: CURSOR_API_KEY (Cursor dashboard → Integrations). Required only when
+# generated files change; the bump PR is still opened without it.
+
+on:
+  schedule:
+    # Daily 14:00 UTC. rulesync has shipped multiple minors in a single day; weekly
+    # would leave the lockfile stale. The bump job no-ops when already current.
+    - cron: '0 14 * * *'
+  workflow_dispatch:
+    inputs:
+      review_pr:
+        description: Skip bump; re-run the Grok 4.5 review on this existing PR number
+        required: false
+        type: string
+
+concurrency:
+  group: rulesync-upgrade
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  bump:
+    name: Bump rulesync and regenerate
+    if: github.event_name != 'workflow_dispatch' || inputs.review_pr == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      skipped: ${{ steps.prepare.outputs.skipped }}
+      pr_number: ${{ steps.pr.outputs.pr_number }}
+      generated_changed: ${{ steps.pr.outputs.generated_changed }}
+      from_version: ${{ steps.prepare.outputs.from_version }}
+      to_version: ${{ steps.prepare.outputs.to_version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # Need origin/main as the diff base after we cut the upgrade branch.
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Bump rulesync to the newest cooldown-eligible release
+        id: prepare
+        run: |
+          set -euo pipefail
+
+          FROM_VERSION="$(node -p "require('./node_modules/rulesync/package.json').version")"
+          echo "Lockfile rulesync=${FROM_VERSION}"
+
+          # Do not install an exact `npm view … version` / `@latest` — that is the
+          # dist-tag, often < 2 days old, and `.npmrc` `min-release-age=2` errors on
+          # exact versions that fail the window. `*` lets npm pick the newest
+          # version that is old enough (including a later major).
+          npm install 'rulesync@*' --save-dev --no-fund --no-audit
+
+          TO_VERSION="$(node -p "require('./node_modules/rulesync/package.json').version")"
+          echo "Resolved rulesync=${TO_VERSION} (min-release-age=2)"
+          echo "from_version=${FROM_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "to_version=${TO_VERSION}" >> "${GITHUB_OUTPUT}"
+
+          if [ "${FROM_VERSION}" = "${TO_VERSION}" ]; then
+            echo "Already on the newest cooldown-eligible rulesync; nothing to bump."
+            echo "skipped=true" >> "${GITHUB_OUTPUT}"
+            git checkout -- package.json package-lock.json
+            exit 0
+          fi
+
+          echo "skipped=false" >> "${GITHUB_OUTPUT}"
+          npm run rules:sync
+          npm run rules:check
+
+      - name: Create or update pull request
+        id: pr
+        if: steps.prepare.outputs.skipped != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FROM_VERSION: ${{ steps.prepare.outputs.from_version }}
+          TO_VERSION: ${{ steps.prepare.outputs.to_version }}
+        run: |
+          set -euo pipefail
+
+          BRANCH="chore/deps-rulesync-${TO_VERSION}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git checkout -B "${BRANCH}"
+
+          # Bot commit: skip husky (Node pin / lint-staged). The PR still runs tests.yml.
+          HUSKY=0 git add -A
+          if git diff --cached --quiet; then
+            echo "::error::Version differs but git has nothing to commit after regenerate."
+            exit 1
+          fi
+
+          HUSKY=0 git commit -m "$(cat <<EOF
+          chore(deps): bump rulesync from ${FROM_VERSION} to ${TO_VERSION}
+
+          Regenerated agent-config files with the new CLI. Do not auto-merge:
+          rules:check only proves the tree matches this generator.
+          EOF
+          )"
+
+          # Same-version re-runs recreate the commit; lease keeps a human force-out
+          # from being silently overwritten if they pushed commits we have not seen.
+          git fetch origin "${BRANCH}" || true
+          git push --force-with-lease -u origin "HEAD:${BRANCH}"
+
+          PR_NUMBER="$(gh pr list --head "${BRANCH}" --json number --jq '.[0].number // empty')"
+          if [ -z "${PR_NUMBER}" ]; then
+            gh pr create \
+              --title "chore(deps): bump rulesync from ${FROM_VERSION} to ${TO_VERSION}" \
+              --body "$(cat <<EOF
+          ## Summary
+
+          - Bump \`rulesync\` \`${FROM_VERSION}\` → \`${TO_VERSION}\` and regenerate agent-config files.
+          - Release notes: https://github.com/dyoshikawa/rulesync/releases/tag/v${TO_VERSION}
+
+          ## Review
+
+          \`rules:check\` is not enough. If generated files changed, the **Rulesync upgrade / Review generated diff** job runs the Cursor Agent CLI (Grok 4.5) against the invariants in \`.rulesync/skills/rulesync-upgrade-review\`. Merge only on a \`merge\` verdict.
+
+          ## Test plan
+
+          - [ ] Generated-file review posted (or this PR is lockfile-only)
+          - [ ] \`tests.yml\` green on this branch
+          EOF
+          )"
+            PR_NUMBER="$(gh pr list --head "${BRANCH}" --json number --jq '.[0].number')"
+          fi
+
+          echo "pr_number=${PR_NUMBER}" >> "${GITHUB_OUTPUT}"
+
+          # Only paths rulesync is allowed to emit. A surprise file elsewhere still
+          # lands in the commit (git add -A) and should fail the agent review.
+          if git diff --quiet origin/main -- \
+            AGENTS.md CLAUDE.md \
+            .agents \
+            .cursor/rules .cursor/commands .cursor/skills \
+            .claude/rules .claude/commands .claude/skills
+          then
+            echo "generated_changed=false" >> "${GITHUB_OUTPUT}"
+            gh pr comment "${PR_NUMBER}" --body "$(cat <<EOF
+          ## rulesync upgrade review
+
+          **From:** \`${FROM_VERSION}\`
+          **To:** \`${TO_VERSION}\`
+          **Generated files vs \`main\`:** unchanged
+          **Verdict:** merge
+
+          Lockfile/manifest bump only. Generator output is byte-identical to \`main\`, so the Cursor Agent review was skipped.
+          EOF
+          )"
+          else
+            echo "generated_changed=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+  review:
+    name: Review generated diff
+    needs: bump
+    # Re-review path: bump is skipped and workflow_dispatch supplied a PR number.
+    # Normal path: bump opened a PR whose generated files actually changed.
+    # prettier-ignore
+    if: ${{ always() && ((needs.bump.result == 'success' && needs.bump.outputs.generated_changed == 'true') || (needs.bump.result == 'skipped' && github.event_name == 'workflow_dispatch' && inputs.review_pr != '')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check out the upgrade PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.review_pr || needs.bump.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          gh pr checkout "${PR_NUMBER}"
+          git fetch origin main
+
+      - name: Require CURSOR_API_KEY
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+        run: |
+          if [ -z "${CURSOR_API_KEY}" ]; then
+            echo "::error::CURSOR_API_KEY is not set. Add it as a repository secret (Cursor dashboard → Integrations). The bump PR was opened; generated-file review cannot run."
+            exit 1
+          fi
+
+      - name: Install Cursor CLI
+        run: |
+          curl https://cursor.com/install -fsS | bash
+          echo "${HOME}/.cursor/bin" >> "${GITHUB_PATH}"
+
+      - name: Restrict CLI permissions
+        run: |
+          # Project `.cursor/cli.json` would also constrain local `agent` sessions.
+          # Scope these denies to CI by writing the global CLI config on the runner.
+          mkdir -p "${HOME}/.cursor"
+          cp .github/cursor/rulesync-upgrade.cli.json "${HOME}/.cursor/cli-config.json"
+
+      - name: Review with Grok 4.5
+        id: agent
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          FROM_VERSION: ${{ needs.bump.outputs.from_version }}
+          TO_VERSION: ${{ needs.bump.outputs.to_version }}
+          PR_NUMBER: ${{ inputs.review_pr || needs.bump.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+
+          # Do not export GH_TOKEN into the agent process. Comments are posted
+          # by the next step, not by the model.
+          unset GH_TOKEN || true
+
+          # node_modules is not in git and this job does not npm ci. Versions
+          # always come from package-lock.json on each ref.
+          lockfile_rulesync_version() {
+            # ubuntu-latest has Python; this job does not npm ci or setup-node.
+            git show "$1:package-lock.json" | python3 -c \
+              "import json, sys; print(json.load(sys.stdin)['packages']['node_modules/rulesync']['version'])"
+          }
+          if [ -z "${FROM_VERSION}" ]; then
+            FROM_VERSION="$(lockfile_rulesync_version origin/main)"
+          fi
+          if [ -z "${TO_VERSION}" ]; then
+            TO_VERSION="$(lockfile_rulesync_version HEAD)"
+          fi
+
+          PROMPT_FILE="$(mktemp)"
+          sed \
+            -e "s/{{FROM_VERSION}}/${FROM_VERSION}/g" \
+            -e "s/{{TO_VERSION}}/${TO_VERSION}/g" \
+            -e "s/{{PR_NUMBER}}/${PR_NUMBER}/g" \
+            .github/cursor/rulesync-upgrade-review-prompt.md \
+            > "${PROMPT_FILE}"
+
+          # --mode ask: read-only. --force: approve allowed tools without a TTY.
+          # --trust: headless workspace prompt. Model is grok-4.5, never *-fast.
+          agent -p "$(cat "${PROMPT_FILE}")" \
+            --model grok-4.5 \
+            --mode ask \
+            --output-format text \
+            --force \
+            --trust \
+            --sandbox disabled \
+            | tee review.md
+
+      - name: Post review comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.review_pr || needs.bump.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          gh pr comment "${PR_NUMBER}" --body-file review.md
+
+      - name: Enforce verdict
+        run: |
+          set -euo pipefail
+          # Last Verdict line wins if the model echoed the template twice.
+          VERDICT="$(grep -E '^\*\*Verdict:\*\*' review.md | tail -n 1 | sed -E 's/.*\*\*Verdict:\*\*[[:space:]]*//; s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')"
+          echo "Parsed verdict: ${VERDICT}"
+          case "${VERDICT}" in
+            merge) exit 0 ;;
+            hold|block)
+              echo "::error::rulesync upgrade review verdict is '${VERDICT}'. Human decision required; check is red on purpose."
+              exit 1
+              ;;
+            *)
+              echo "::error::Could not parse a merge/hold/block Verdict line from the agent output."
+              exit 1
+              ;;
+          esac

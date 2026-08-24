@@ -3,13 +3,12 @@ root: false
 targets:
   - '*'
 description: Remind agent to suggest writing or updating tests after code changes
-globs:
-  - '**/*'
+# No `globs` on purpose. `globs: ['**/*']` generates `paths: ['**/*']` for Claude Code, which is
+# CONDITIONAL — the rule attaches only once Claude reads a matching file, not at session start.
+# Omitting globs entirely is what makes it unconditional there; `cursor.alwaysApply` covers Cursor.
 cursor:
   alwaysApply: true
   description: Remind agent to suggest writing or updating tests after code changes
-  globs:
-    - '**/*'
 ---
 # Test Awareness
 

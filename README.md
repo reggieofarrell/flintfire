@@ -166,6 +166,11 @@ npm run build
 npm test
 ```
 
+`.npmrc` sets `min-release-age=2` (npm 11.10+, shipped with Node 24). Fresh publishes are not
+resolved until they are two days old. Use Node 24 from `.nvmrc` for installs; npm 10 (Node 22)
+ignores that setting silently. Do not pass `--min-release-age=0` unless a human is applying a known
+emergency `npm audit fix` (then prefer `min-release-age-exclude` for that package).
+
 ### Coding Standards
 
 - Use TypeScript strict mode
