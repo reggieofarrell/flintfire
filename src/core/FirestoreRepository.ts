@@ -32,6 +32,7 @@ import {
   validateCollectionSegment,
   validateDocumentId,
 } from '../utils/documentId.js';
+import { warnIfWriteMethodsOverridden } from './writeOverrideWarning.js';
 
 export type ID = string;
 
@@ -475,6 +476,29 @@ export class FirestoreRepository<
   private schemasInternal?: RepositorySchemaSetFor<S>;
   private allowLegacyDatastoreIds: boolean;
 
+  /**
+   * Set to `true` on a **subclass** to silence the once-per-class write-override warning.
+   *
+   * Why this exists: overriding a write method looks like an enforced invariant but sibling paths
+   * bypass it. The warning is permanent library behavior (not a transitional nag). Deliberate
+   * partial overrides — e.g. logging on `update` only — should set this flag rather than live with
+   * stderr noise. Must be set on the constructor before the first instance is constructed.
+   *
+   * Inheritance: this is a normal JS static. A subclass that sets `true` also silences further
+   * subclasses that inherit the flag; redeclare `static suppressWriteOverrideWarning = false` on a
+   * deeper class if that class's write overrides should warn again.
+   *
+   * @example
+   * class LoggingUserRepository extends FirestoreRepository<User> {
+   *   static suppressWriteOverrideWarning = true;
+   *   override async update(...args: Parameters<FirestoreRepository<User>['update']>) {
+   *     console.log('update', args[0]);
+   *     return super.update(...args);
+   *   }
+   * }
+   */
+  static suppressWriteOverrideWarning = false;
+
   constructor(...args: RepositoryConstructorArgs<T, W, WO, S>) {
     const [
       db,
@@ -529,6 +553,10 @@ export class FirestoreRepository<
         );
       }
     }
+    // Once-per-class warn when a subclass overrides a write method it cannot enforce across sibling
+    // paths (issue #103). Short-circuits for plain FirestoreRepository instances. Field-style /
+    // ctor-body overrides are invisible here — see writeOverrideWarning.ts.
+    warnIfWriteMethodsOverridden(this, FirestoreRepository, FirestoreRepository.prototype);
   }
 
   /**

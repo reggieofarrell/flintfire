@@ -128,7 +128,12 @@ Design constraints for subclasses:
   equals the read shape, need nothing extra.
 - **Subclassing adds methods; it does not enforce invariants.** Overriding a write method intercepts
   only that method — most write paths do not route through it. If you need a rule that holds on
-  every write, see [Enforced denormalization](#enforced-denormalization).
+  every write, see [Enforced denormalization](#enforced-denormalization). Overriding one of the
+  public write methods also emits a **once-per-class** `console.warn` from the base constructor
+  (method-style overrides only — class-field / ctor-body assignments are not detected today). For a
+  deliberate partial override (logging, metrics), silence it with
+  `static suppressWriteOverrideWarning = true` on the subclass. The flag is a normal JS static — a
+  suppressing parent also silences further subclasses unless they redeclare it `false`.
 
 ### Composition
 
@@ -573,7 +578,10 @@ transaction callback never re-enter an override either.
 
 Overriding is still the right tool for **adding** behavior to one entry point — see
 [Custom repository methods](#custom-repository-methods). It is not a mechanism for enforcing an
-invariant.
+invariant. The base constructor warns once per subclass when a listed write method is overridden on
+the prototype; set `static suppressWriteOverrideWarning = true` if the partial override is
+intentional (inherited by further subclasses unless redeclared `false`). Class-field and
+constructor-body overrides are invisible to that check until a future write choke point lands.
 
 ### 3. Hooks: broad coverage, but not atomic
 
