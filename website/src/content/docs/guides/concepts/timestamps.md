@@ -99,7 +99,7 @@ The main entry also exports the primitives the converter is built from:
 | `createMillisTimestampConverter<T>(fields?)` | Build a `readConverter` mapper (recursive `Timestamp -> number` read conversion)    |
 | `convertTimestampsToMillis<T>(data)`         | Recursively convert every `Timestamp` in a value to an ms `number` (returns a copy) |
 | `convertTimestampToMillis(ts)`               | Convert a single `Timestamp` to an ms `number` (throws if not a `Timestamp`)        |
-| `convertMillisToTimestamp(ms)`               | Convert an ms `number` to a `Timestamp`                                             |
+| `convertMillisToTimestamp(ms)`               | Convert an ms `number` to a `Timestamp` (throws `TypeError` if not a finite number)  |
 
 `convertTimestampsToMillis` uses a structural `toMillis` duck-check and never references
 `firebase-admin`, so it is safe to reuse in shared/browser code; non-`Timestamp` value types (a

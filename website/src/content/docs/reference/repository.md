@@ -281,7 +281,9 @@ Create or overwrite the document with the given ID. Returns `{ id }` by default;
 `{ returnDoc: true }` to resolve to the final persisted `FirestoreDocument<T>` (postcommit
 converter/read failures are `WriteOutcomeError` / `phase: 'read-back'`); pass
 `{ withMetadata: true }` for `{ id, writeTime }` on either the create or update branch. Use
-`createWithId` instead when the document must **not** already exist.
+`createWithId` instead when the document must **not** already exist. Hook dispatch is
+**existence-dependent**: a create fires `beforeCreate` / `afterCreate`, an overwrite fires
+`beforeUpdate` / `afterUpdate`. It also costs an extra read (the existence pre-read).
 
 **`delete(id: ID, options: { withMetadata: true; lastUpdateTime?: Timestamp }): Promise<{ writeTime: Timestamp }>`**
 **`delete(id: ID, options?: { withMetadata?: false; lastUpdateTime?: Timestamp }): Promise<void>`**
@@ -344,7 +346,8 @@ await postRepo.recursiveDeleteCollection();
 **`id(raw: string): ID`**
 
 Validate an untrusted document id at the boundary and return it as an `ID`. Throws
-`InvalidDocumentIdError` when `raw` is malformed (empty, contains `/`, `.`, `..`, a `__…__` reserved
+`InvalidDocumentIdError` when `raw` is malformed (not a string, empty, contains `/`, **is** `.` or
+`..`, matches the `__…__` reserved
 pattern, or exceeds 1500 bytes). Use it before passing a request-supplied id to `getById`, `update`,
 etc. See [Document Identity](/flintfire/guides/concepts/document-identity/).
 
@@ -398,7 +401,8 @@ Supported events:
 - `beforeBulkUpdate`, `afterBulkUpdate`
 - `beforeBulkDelete`, `afterBulkDelete`
 
-Payload notes: `beforeCreate` / `beforeUpdate` receive the mutable write payload (`WriteInput`);
+Payload notes: `beforeCreate` / `beforeUpdate` receive the mutable write payload
+(`CreateInput<W>` / `UpdateInput<W>`);
 `afterCreate` receives the parsed write output (`z.output<writeSchema>`) plus the generated `id`;
 `afterUpdate` receives `{ id }`; `afterBulkUpdate` receives `{ ids }`; `beforeBulkDelete` /
 `afterBulkDelete` receive `{ ids: ID[]; documents: FirestoreDocument<T>[] }`; single-delete hooks
@@ -421,6 +425,22 @@ throws otherwise); when a `readConverter` is supplied, `storedSchema` is require
 unvalidated subcollection, construct a repository directly against the full path with
 `new FirestoreRepository<Order>(db, `${parentPath}/${parentId}/orders`)`. See
 [Subcollections](/flintfire/guides/working-with-data/subcollections/).
+
+**`isSubcollection(): boolean`**
+
+`true` when this repository targets a subcollection (it has a parent path), `false` for a top-level
+collection.
+
+**`get schemas(): RepositorySchemaSet | undefined`** /
+**`get readSchema(): ZodObject | undefined`** /
+**`get createSchema(): ZodObject | undefined`** /
+**`get updateSchema(): ZodObject | undefined`**
+
+The schemas attached to a validated repository, or `undefined` on an unvalidated one. `schemas` is
+the whole bundle (`read` / `create` / `update`, plus an optional `stored`); the other three are
+convenience getters for its members. A repository constructed with only a validator (and no
+`schemas` argument) has no bundle, so these are `undefined` and `validate` / `safeValidate` throw a
+config error.
 
 **`getParentId(): ID | null`**
 

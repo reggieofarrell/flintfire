@@ -27,8 +27,17 @@ import { z } from 'zod';
 import { Timestamp } from 'firebase-admin/firestore';
 import { FirestoreRepository, ReadConverter } from 'flintfire';
 
-// Runs on every read: map the stored Timestamp back to a Date. Return data WITHOUT `id` — the
-// repository overlays the document id after the mapper returns.
+// The READ model. `createdAt` is declared as a Date here because that is what the converter below
+// produces — the read schema must describe the converted shape, not the stored one.
+const userSchema = z.object({
+  name: z.string(),
+  email: z.email(),
+  createdAt: z.date(),
+});
+type User = z.infer<typeof userSchema>;
+
+// Runs on every read: map the stored Timestamp to the Date the read model declares. Return data
+// WITHOUT `id` — the repository overlays the document id after the mapper returns.
 const userReadConverter: ReadConverter<User> = snapshot => {
   const data = snapshot.data();
   return { ...data, createdAt: (data.createdAt as Timestamp).toDate() } as User;

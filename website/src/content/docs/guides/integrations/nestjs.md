@@ -25,11 +25,11 @@ import { z } from 'zod';
 
 export const userSchema = z.object({
   name: z.string().min(1),
-  email: z.string().email(),
+  email: z.email(),
   age: z.number().int().positive().optional(),
   status: z.enum(['active', 'inactive', 'suspended']),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 });
 
 export type User = z.infer<typeof userSchema>;
@@ -135,7 +135,8 @@ export class UserRepository {
 }
 ```
 
-The `afterCreate` hook receives the freshly created document (including its generated `id`). See
+The `afterCreate` hook receives the **parsed write output** (`z.output<writeSchema>`) plus the
+generated `id` — not a document read back from Firestore. See
 [Lifecycle hooks](/flintfire/guides/concepts/lifecycle-hooks/) for the full event list and
 payload shapes.
 

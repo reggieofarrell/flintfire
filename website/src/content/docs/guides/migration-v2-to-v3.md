@@ -32,10 +32,10 @@ write, or stored schema with a top-level `id` is **rejected at construction** wi
 
 ```typescript
 // v2 — id declared in the schema
-const userSchema = z.object({ id: z.string(), name: z.string(), email: z.string().email() });
+const userSchema = z.object({ id: z.string(), name: z.string(), email: z.email() });
 
 // v3 — remove the top-level id; the document name is the id
-const userSchema = z.object({ name: z.string(), email: z.string().email() });
+const userSchema = z.object({ name: z.string(), email: z.email() });
 type User = z.infer<typeof userSchema>; // read-data shape (no id)
 ```
 
@@ -58,7 +58,8 @@ What this changes:
   `string`; `in` / `not-in` take a `readonly string[]`) and `orderById(direction?)`, which query the
   document name natively.
 - **Validated id boundaries.** Every id-taking method validates its id and rejects one containing
-  `/`, `.`, `..`, a `__…__` reserved pattern, the empty string, or over 1500 bytes — throwing the
+  `/`, that **is** `.` or `..`, that matches a `__…__` reserved pattern, that is not a string, that
+  is empty, or that exceeds 1500 bytes — throwing the
   new `InvalidDocumentIdError`. Use `repo.id(raw)` to validate an untrusted id at the boundary, and
   `repo.newId()` to mint a validated auto-id without writing. Reads echo the document name as `id`,
   never a caller-supplied path.
@@ -121,8 +122,9 @@ contracts tightened:
   repository were silently stripped and never written. In v3 they are validated and persisted; a bad
   leaf value or an unknown field path now throws `ValidationError` instead of silently doing
   nothing. If you relied on that no-op, audit those call sites.
-- `query().update(...)` now returns the number of documents **actually written** (payloads that
-  sanitized to empty are not counted), not the matched count.
+- `query().update(...)` returns the number of documents written. A payload that sanitizes to empty
+  is **rejected** with a `ValidationError` rather than skipped (see
+  [#10](#10-empty-update-payloads-are-rejected)), so on success the count equals the matched count.
 - **`bulkPatch`'s `beforeBulkUpdate` hook now receives the raw (un-flattened) input**, matching
   single-document `patch`. In v2 it saw pre-flattened dot-notation keys. A hook that read
   `update.data['profile.verified']` should read `update.data.profile?.verified` (or handle both).
@@ -274,7 +276,7 @@ new `ReadOnlyTransactionalRepository` surface (mapping still goes through `fromS
 query-shaped PITR), so it fronts every PITR example. There is **no** deprecated alias. Same kind of
 rename as
 [`collectionCount`](#9-aggregations-totalcount--collectioncount-and-average-returns-number--null)
-(ADR-0021 D11), landed in the same unreleased 3.0.0 window.
+(ADR-0021 D11), landed in the same 3.0.0 release.
 
 v3 also adds transaction options (`runInTransaction(fn, options?)` with `maxAttempts` /
 `{ readOnly: true, readTime? }`) and `runReadOnlyAt(readTime, fn)`. See
@@ -315,7 +317,7 @@ In v2, a partial `update()` on a schema-validated repository re-applied every fi
 **overwrote the stored `prefs` map** — data loss for a field the caller never touched. (This bit any
 field with a default, and is especially easy to hit with the read-side `.default(...)` backfill
 pattern recommended in
-[Core Concepts](/flintfire/guides/designing/schema-evolution/#normalizing-across-schema-changes).)
+[Schema Evolution](/flintfire/guides/designing/schema-evolution/#normalizing-across-schema-changes).)
 
 In v3, a partial update writes only the keys you actually provide, at every nesting level;
 `update(id, { config: {} })` writes `{}` rather than re-injecting a nested `count` default. Defaults
@@ -406,7 +408,7 @@ type User = { id: string; name: string; email: string };
 const userSchema = z.object({
   id: z.string(),
   name: z.string(),
-  email: z.string().email(),
+  email: z.email(),
 });
 
 // Direct — writes typed as the read type
@@ -422,7 +424,7 @@ const userRepoCurried = FirestoreRepository.withSchema<User>()(db, 'users', user
 const userSchema = z.object({
   // No top-level `id` — the document name is the id (see breaking change #1).
   name: z.string(),
-  email: z.string().email(),
+  email: z.email(),
 });
 
 type User = z.infer<typeof userSchema>;
@@ -492,7 +494,15 @@ const converter: FirestoreDataConverter<User> = {
 ```typescript
 const userReadConverter: ReadConverter<User> = snap => ({ ...snap.data() }) as User;
 
+// A hook writes `serverTimestamp()` into `updatedAt`, and hooks run BEFORE validation — so under
+// the v3 default `sentinelPolicy: 'strict'` that field's write schema must permit the sentinel
+// (see breaking change #7). Without this overlay every write would throw a ValidationError.
+const userWriteSchema = userSchema.extend({
+  updatedAt: z.union([z.string(), zSentinel('serverTimestamp')]),
+});
+
 const userRepo = FirestoreRepository.withSchema(db, 'users', userSchema, {
+  writeSchema: userWriteSchema,
   readConverter: userReadConverter,
   storedSchema: userStoredSchema, // required whenever readConverter is set
 });
@@ -506,6 +516,12 @@ userRepo.on('beforeUpdate', async data => {
   data.updatedAt = FieldValue.serverTimestamp();
 });
 ```
+
+:::caution
+Any `before*` hook that writes a `FieldValue` sentinel needs the matching write combinator on that
+field, because hooks run before validation and strict mode is now the default. See
+[Per-Field Sentinel Approval](/flintfire/guides/concepts/field-value-sentinels/).
+:::
 
 `createMillisTimestampConverter()` is still a drop-in for `readConverter` — only its return type
 narrowed. See [Timestamps ↔ Millis](/flintfire/guides/concepts/timestamps/).

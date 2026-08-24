@@ -88,7 +88,7 @@ enforces.
 > construction**. See
 > [schema validation](/flintfire/guides/concepts/schema-validation/#no-top-level-id) for the
 > rules on `id` handling. For an **unvalidated** subcollection, construct a repository directly
-> against the full path: `new FirestoreRepository<Order>(db, 'users/user-123/orders')`.
+> against the full path: `FirestoreRepository.raw<Order>(db, 'users/user-123/orders')`.
 
 ## Querying a subcollection
 
@@ -194,7 +194,7 @@ userOrders.getParentId(); // 'user-123' (null for a top-level collection)
 userOrders.getCollectionPath(); // 'users/user-123/orders'
 userOrders.isSubcollection(); // true
 
-const topLevel = new FirestoreRepository<User>(db, 'users');
+const topLevel = FirestoreRepository.raw<User>(db, 'users');
 topLevel.getParentId(); // null
 topLevel.isSubcollection(); // false
 ```

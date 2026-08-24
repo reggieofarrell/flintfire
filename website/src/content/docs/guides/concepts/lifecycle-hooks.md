@@ -70,6 +70,19 @@ these hooks wrap.
 - **Bulk operations**: `beforeBulkCreate`, `afterBulkCreate`, `beforeBulkUpdate`, `afterBulkUpdate`,
   `beforeBulkDelete`, `afterBulkDelete`
 
+### `upsert` dispatches on existence
+
+`upsert(id, data)` does an existence pre-read and then takes one of two branches, so **which hooks
+fire depends on whether the document already exists**:
+
+| Document at `id` | Hooks fired                      |
+| ---------------- | -------------------------------- |
+| does not exist   | `beforeCreate` → `afterCreate`   |
+| already exists   | `beforeUpdate` → `afterUpdate`   |
+
+If a rule must hold for every `upsert`, register it on **both** pairs — or use `createWithId` (always
+create-only) when you want a single, predictable branch.
+
 ### Operations that run **no** hooks
 
 Three write paths deliberately fire nothing:
@@ -90,12 +103,12 @@ Do not assume every write goes through the hook table above.
 
 | Event                                  | Payload                                                                                               |
 | -------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `beforeCreate`                         | The create payload (before validation)                                                                |
+| `beforeCreate`                         | The create payload (before validation), plus a **readonly `id`** when the caller supplied one (`createWithId`, `upsert`). Absent for auto-id `create()`, so the field is optional. |
 | `afterCreate`                          | The parsed write output (`z.output<writeSchema>`, coercions/defaults applied) plus the generated `id` |
 | `beforeUpdate`                         | The update payload plus the target `id` (`data & { id }`)                                             |
 | `afterUpdate`                          | `{ id }`                                                                                              |
 | `beforeDelete` / `afterDelete`         | The full persisted document (`FirestoreDocument<T>`)                                                  |
-| `beforeBulkCreate`                     | An array of create payloads (before validation)                                                       |
+| `beforeBulkCreate`                     | An array of create payloads (before validation), each with a **readonly `id`** — ids are generated before the hook runs, so they are always present here |
 | `afterBulkCreate`                      | An array of parsed write outputs (`z.output<writeSchema>`), each plus its generated `id`              |
 | `beforeBulkUpdate`                     | `{ id, data }[]`                                                                                      |
 | `afterBulkUpdate`                      | `{ ids: ID[] }`                                                                                       |

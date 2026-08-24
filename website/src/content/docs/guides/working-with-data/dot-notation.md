@@ -86,13 +86,15 @@ When normalizing, explicit dot-notation keys always win over paths derived from 
 object. For example, an explicit `'profile.name'` overrides the `profile.name` that would otherwise
 be produced by flattening `profile: { name: ... }` in the same payload.
 
-`update()` accepts `{ merge?, returnDoc? }`. `merge` defaults to `false` (whole-object replacement);
-set `returnDoc: true` to get the persisted document back instead of just `{ id }`.
+`update()` accepts `{ merge?, returnDoc?, withMetadata?, lastUpdateTime? }` (see
+[`UpdateOptions`](/flintfire/reference/types/)). `merge` defaults to `false` (whole-object
+replacement); set `returnDoc: true` to get the persisted document back instead of just `{ id }`.
 
 ## Patch Convenience Alias
 
 Use `patch(...)` as a convenience alias for `update(..., { merge: true })`. `patch()` **always
-merges** — there is no `merge` option to toggle; its only option is `{ returnDoc? }`. It applies the
+merges** — there is no `merge` option to toggle; it accepts
+`{ returnDoc?, withMetadata?, lastUpdateTime? }`. It applies the
 same nested-object-to-dot-notation normalization as merge-mode `update()`, so you can pass either
 nested objects or explicit dot-notation keys.
 
@@ -177,9 +179,10 @@ await postRepo.query().where('published', '==', true).update({
 
 ## Transactions with Dot Notation
 
-`updateInTransaction(tx, id, data, options?)` supports dot notation directly. For merge-style
-transaction updates without options, `patchInTransaction(tx, id, data)` is the always-merge
-convenience alias (it takes no options).
+`updateInTransaction(tx, id, data, options?)` supports dot notation directly.
+`patchInTransaction(tx, id, data, options?)` is the always-merge convenience alias — merge is
+implied, so its only option is `{ lastUpdateTime? }` for
+[optimistic concurrency](/flintfire/guides/working-with-data/transactions/#transaction-write-helpers).
 
 ```typescript
 await userRepo.runInTransaction(async (tx, repo) => {
@@ -201,12 +204,35 @@ await userRepo.runInTransaction(async (tx, repo) => {
 ## FieldValue Sentinels
 
 Dot-notation paths compose with Firestore `FieldValue` sentinels across every write surface. See
-[Field Value Sentinels](/flintfire/guides/concepts/field-value-sentinels/) for the full sentinel
-model and per-field validation.
+[Per-Field Sentinel Approval](/flintfire/guides/concepts/field-value-sentinels/) for the full
+sentinel model and per-field validation.
+
+**A sentinel only passes on a field whose write schema permits it.** v3 defaults to
+`sentinelPolicy: 'strict'`, so a plain field accepts **no** sentinel — a `withSchema` repository
+with no `writeSchema` overlay rejects every example below with a `ValidationError`. Declare the
+sentinel each field may receive with the write combinators, then pass the overlay as `writeSchema`:
 
 ```typescript
 import { FieldValue } from 'firebase-admin/firestore';
+import { zArrayWrite, zNumberWrite, zSentinel, withDelete } from 'flintfire';
+import { z } from 'zod';
 
+// Write overlay: each field declares which sentinel it accepts.
+const userWrite = userSchema.extend({
+  createdAt: z.union([z.string(), zSentinel('serverTimestamp')]),
+  loginCount: zNumberWrite(), // number | increment
+  tags: zArrayWrite(z.string()), // string[] | arrayUnion | arrayRemove
+  deprecatedField: withDelete(z.string().optional()), // string | delete()
+});
+
+const userRepo = FirestoreRepository.withSchema(db, 'users', userSchema, {
+  writeSchema: userWrite,
+});
+```
+
+With that overlay in place, sentinels are accepted with no cast:
+
+```typescript
 // Create with server timestamp
 await userRepo.create({
   name: 'Alice',
@@ -228,6 +254,9 @@ await userRepo
     tags: FieldValue.arrayRemove('legacy'),
   });
 ```
+
+`FieldValue.delete()` is rejected on `create` / `bulkCreate` / `upsert` even when the field permits
+it — clear a field with `update()` or `patch()`.
 
 ## Type Safety & Validation
 
@@ -342,10 +371,10 @@ import {
 | ------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `isDotNotation(key)`                        | `(key: string) => boolean`                                                             | `true` when the key contains a `.`.                                                                                                               |
 | `hasDotNotationKeys(obj)`                   | `(obj: Record<string, any>) => boolean`                                                | `true` when any key in the object uses dot notation.                                                                                              |
-| `expandDotNotation(flatObj)`                | `<T = any>(flatObj: Record<string, any>) => T`                                         | Expands flat dot-notation keys into a nested object.                                                                                              |
+| `expandDotNotation(flatObj)`                | `<T = any>(flatObj: Record<string, any>) => T`                                         | Expands flat dot-notation keys into a nested object. **Throws** if any segment is `__proto__`, `prototype`, or `constructor`.                                                                                              |
 | `flattenToDotNotation(obj, prefix?)`        | `(obj: Record<string, any>, prefix?: string) => Record<string, any>`                   | Flattens a nested object into dot-notation keys. Only plain objects are flattened — arrays, `Date` instances, and class instances are left as-is. |
-| `mergeDotNotationUpdate(existing, updates)` | `(existing: Record<string, any>, updates: Record<string, any>) => Record<string, any>` | Merges a mixed regular/dot-notation update into existing data, skipping `undefined` values.                                                       |
-| `validateDotNotationPath(key)`              | `(key: string) => void`                                                                | Throws if the path is empty, starts or ends with a `.`, or contains an empty segment.                                                             |
+| `mergeDotNotationUpdate(existing, updates)` | `(existing: Record<string, any>, updates: Record<string, any>) => Record<string, any>` | Merges a mixed regular/dot-notation update into existing data, skipping `undefined` values. **Throws** on a `__proto__` / `prototype` / `constructor` segment.                                                       |
+| `validateDotNotationPath(key)`              | `(key: string) => void`                                                                | Throws if the path is empty, starts or ends with a `.`, contains an empty segment, or uses a `__proto__` / `prototype` / `constructor` segment (prototype-pollution guard).                                                             |
 | `getRootFields(keys)`                       | `(keys: string[]) => string[]`                                                         | Returns the unique top-level roots, e.g. `['address.city', 'address.zip', 'name']` → `['address', 'name']`.                                       |
 | `getDotNotationDepth(key)`                  | `(key: string) => number`                                                              | Number of path segments, e.g. `'address.city'` → `2`, `'name'` → `1`.                                                                             |
 

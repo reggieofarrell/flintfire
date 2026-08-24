@@ -26,6 +26,35 @@ links and anchors in `website/` are **clean**.
 
 ---
 
+## Resolution
+
+**Applied on branch `docs/apply-v3-audit-findings`** (2026-08-23). 32 of 33 findings fixed in full;
+one partially, noted below. The findings themselves are left as written above — they are the record
+of what was wrong and why, and the rationale is still the best explanation of each fix.
+
+Verified after the edits, not assumed:
+
+- All **210** current-version TypeScript snippets re-extracted and re-compiled against real source;
+  the 35 self-contained ones individually — **zero** genuine API errors.
+- `check:docs` ✓ (190 files, links and heading anchors), `check:format` ✓, `lint` ✓, `test:types` ✓,
+  `docs:build` ✓ (61 pages, Pagefind index built).
+- H1's replacement facade is now pinned by
+  `src/tests/types/enforced-denormalization-facade.type-test.ts` — 13 `@ts-expect-error` guards, so
+  the section cannot silently rot again. That fixture is the structural fix for _why_ H1 shipped: no
+  gate compiled doc snippets.
+
+**L16 applied partially (2 of 4).** The two blocks that could be made valid TypeScript without
+losing anything were fixed (`guides/advanced/vector-search.md`'s object literals now assign to
+consts; `guides/working-with-data/queries.md`'s chain fragments are now complete statements). The
+two remaining blocks — `guides/integrations/cloud-functions.md` and
+`guides/working-with-data/subcollections.md` — are **method-signature displays**, which cannot be
+valid standalone TypeScript without changing what they communicate (a method signature is not a
+statement). Retagging them to a plain fence would cost syntax highlighting for no benefit today,
+since no gate compiles doc snippets. Leave them; a future snippet gate should carry an exclusion
+marker instead.
+
+---
+
 ## High severity
 
 ### H1 — The documented repository-subclassing example does not compile (and the pattern cannot enforce what it claims)
@@ -168,10 +197,28 @@ the build).
 2. **Keep** "Custom repository methods → Subclassing" unchanged. It compiles today and is the right
    tool for convenience helpers. Add one cross-reference: subclassing adds methods, it does not
    enforce invariants.
-3. **Add a caveat to that subclassing section** that a subclass built with
-   `super(db, path, makeValidator(schema))` gets validation but **no `schemas`**, so `validate()` /
-   `safeValidate()` / `repo.schemas` throw or return `undefined` (the constructor's 6th argument is
-   what populates them).
+3. **Add a caveat to that subclassing section** about how a subclass acquires its schema bundle. ~~A
+   subclass built with `super(db, path, makeValidator(schema))` gets validation but no `schemas`.~~
+   **CORRECTED 2026-08-23 — that claim was wrong**, and it briefly shipped in `patterns.md` before
+   being fixed. The constructor does `this.schemasInternal = schemas ?? validator?.schemas`, so the
+   validator's own bundle is the fallback: `repo.schemas`, `repo.readSchema`, `validate()` and
+   `safeValidate()` all work on such an instance (verified at runtime). The real caveats are
+   narrower, and both were missed:
+   - **With a write overlay**, `makeValidator(writeSchema)` derives `schemas.read` from the _write_
+     schema, so read validation would accept `FieldValue` sentinels a read should reject — verified:
+     `schemas.read.safeParse({ loginCount: FieldValue.increment(1) })` succeeds. A subclass using an
+     overlay must pass an explicit bundle whose `read` is the real read schema, exactly as
+     `withSchema` does internally.
+   - `schemas.stored` is not set by the fallback; only `collectionGroup()` consults it.
+
+   The overlay hole is a silent correctness failure rather than an inconvenience, so it is tracked
+   for a library fix: [ADR-0042](../adr/0042-subclass-schema-argument-assembly.md) /
+   [#102](https://github.com/reggieofarrell/flintfire/issues/102).
+
+   Method note: this finding was originally inferred from the constructor's parameter list without
+   reading its body — the exact failure mode this audit criticizes elsewhere. It is the one entry
+   here that was not verified against behavior before being written.
+
 4. **Add the coverage tables above** (or a condensed form) to the new section, so a reader choosing
    between override / hooks / facade can see why.
 5. If a hook-based variant is offered as the non-atomic alternative, state the delete-side gap:

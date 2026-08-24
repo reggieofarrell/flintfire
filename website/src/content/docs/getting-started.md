@@ -76,11 +76,11 @@ import { z } from 'zod';
 export const userSchema = z.object({
   // No `id` field — the repository owns identity (sourced from the document name).
   name: z.string().min(1, 'Name is required'),
-  email: z.string().email('Invalid email address'),
+  email: z.email('Invalid email address'),
   age: z.number().int().positive().optional(),
   status: z.enum(['active', 'inactive', 'suspended']).default('active'),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 });
 
 // The read-data shape (no `id`). Reads resolve to `FirestoreDocument<User>`, which adds the id.
@@ -101,7 +101,7 @@ export const userRepo = FirestoreRepository.withSchema(db, 'users', userSchema);
 ```
 
 Prefer `withSchema` when you want runtime validation. For an unvalidated collection, construct
-`new FirestoreRepository<User>(db, 'users')` instead — see
+`FirestoreRepository.raw<User>(db, 'users')` instead — see
 [Core Concepts](/flintfire/guides/concepts/core-concepts/).
 
 ## 4. Create, query, update, delete

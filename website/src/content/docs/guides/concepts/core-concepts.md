@@ -27,7 +27,7 @@ its own repository instance.
 // Initialize once, use everywhere
 const userRepo = FirestoreRepository.withSchema(db, 'users', userSchema);
 const orderRepo = FirestoreRepository.withSchema(db, 'orders', orderSchema);
-const productRepo = new FirestoreRepository<Product>(db, 'products'); // Without validation
+const productRepo = FirestoreRepository.raw<Product>(db, 'products'); // Without validation
 ```
 
 The `withSchema` factory attaches a Zod schema for runtime validation. Both the read and write types
@@ -37,7 +37,9 @@ not pass an explicit read-type generic. No `readSchema` (`userSchema`, `orderSch
 declare a top-level `id` field — the factory throws at construction if one is present. The document
 name is the sole source of `id`, and reads resolve to `FirestoreDocument<T>`. A `writeSchema` built
 from the write combinators enables cast-free combinator writes. Construct a repository directly with
-`new FirestoreRepository<Product>(db, 'products')` when you don't need validation. See
+`FirestoreRepository.raw<Product>(db, 'products')` when you don't need validation — the named
+factory keeps security-relevant options such as `allowLegacyDatastoreIds` discoverable instead of
+trailing positional arguments. See
 [schema validation](/flintfire/guides/concepts/schema-validation/) for the full contract.
 
 To add domain helpers (`findByEmail`, `deactivate`, and so on), subclass `FirestoreRepository` or

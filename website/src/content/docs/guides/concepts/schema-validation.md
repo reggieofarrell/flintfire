@@ -12,7 +12,7 @@ enforces on `create`, `update`, and `patch`.
 ```typescript
 const userSchema = z.object({
   name: z.string().min(1),
-  email: z.string().email(),
+  email: z.email(),
   age: z.number().int().positive().optional(),
 });
 
@@ -147,8 +147,13 @@ Both methods run against the **converted** read shape — after any `readConvert
 converted types: if `createMillisTimestampConverter` exposes a stored `Timestamp` as a `number`,
 declare that field `z.number()`, not a Timestamp type.
 
-As with all Zod object parsing (and the write paths), keys **not** declared in the read schema are
-**stripped** from the returned value. A stored document that has drifted to include fields outside
+The repository-owned `id` is **separated before parsing and re-attached afterward**, so the returned
+value always carries it even though a read schema may never declare one — and a **strict** read
+schema (`z.strictObject(...)` / `.strict()`) works, rather than rejecting `id` as an unrecognized
+key.
+
+As with all Zod object parsing (and the write paths), other keys **not** declared in the read schema
+are **stripped** from the returned value. A stored document that has drifted to include fields outside
 the schema comes back with those fields dropped — the return value is the parsed shape, not a copy
 of the input.
 

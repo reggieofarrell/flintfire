@@ -55,8 +55,8 @@ export const orderSchema = z.object({
     country: z.string(),
   }),
   trackingNumber: z.string().optional(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 });
 
 export type Order = z.infer<typeof orderSchema>;
@@ -234,8 +234,8 @@ export const tenantSchema = z.object({
   usedSeats: z.number().int().nonnegative().default(0),
   features: z.array(z.string()),
   ownerId: z.string(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 });
 
 export type Tenant = z.infer<typeof tenantSchema>;

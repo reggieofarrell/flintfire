@@ -169,10 +169,16 @@ of a factory group — is silently discarded by Firestore and changes what the q
 import { Filter } from 'firebase-admin/firestore';
 
 // `TRUE OR published` should match everything; the empty AND is dropped, so this NARROWS to published
-.whereFilter(f => f.or(Filter.and(), f.where('status', '==', 'published')))
+await postRepo
+  .query()
+  .whereFilter(f => f.or(Filter.and(), f.where('status', '==', 'published')))
+  .get();
 
 // `FALSE AND published` should match nothing; the empty OR is dropped, so this WIDENS to published
-.whereFilter(f => f.and(Filter.or(), f.where('status', '==', 'published')))
+await postRepo
+  .query()
+  .whereFilter(f => f.and(Filter.or(), f.where('status', '==', 'published')))
+  .get();
 ```
 
 Only a filter that reduces to **no conditions at all** is caught (the query would otherwise match
@@ -327,7 +333,8 @@ const sorted = await productRepo.query().orderBy('price', 'desc').orderBy('name'
 
 `paginate(pageSize, cursor?)` performs **forward**, opaque cursor-based pagination and returns
 `{ items, nextCursor, hasMore }`. It **requires** at least one prior `orderBy()` call for a stable
-cursor and **throws** if `pageSize` is less than or equal to `0`. Pass the previous page's
+cursor and **throws** unless `pageSize` is a positive integer (so `0`, a negative, and `2.5` are all
+rejected). Pass the previous page's
 `nextCursor` to fetch the next page. Tokens encode a document path only — they are not interchangeable
 with typed `startAfter` field values.
 
@@ -532,7 +539,7 @@ const analyzed = await userRepo
   .query()
   .where('status', '==', 'active')
   .explain({ analyze: true });
-// analyzed.documents: User[] (possibly empty []); analyzed.metrics.executionStats is non-null
+// analyzed.documents: FirestoreDocument<User>[] (possibly empty []); metrics.executionStats non-null
 ```
 
 `documents` is **`null`** for plan-only requests and **`[]`** when analyze ran and matched nothing —
