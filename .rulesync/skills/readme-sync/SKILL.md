@@ -38,7 +38,9 @@ match):
 - [ ] One-line package pitch / value prop
 - [ ] Install command (`npm install flintfire firebase-admin zod`) and peer
       dependencies (`firebase-admin`, `zod`, optional `express`)
-- [ ] Quick-start code example — must type-check against the current public API
+- [ ] Quick-start code example — must type-check against the current public API, and use zod 4
+      top-level formats (`z.email()`, `z.iso.datetime()`), not the `@deprecated`
+      `z.string().<format>()` chain — neither README is behind a snippet-compiling gate
 - [ ] v2→v3 migration note when that upgrade path is relevant (do not document migration from
       the original upstream npm package in the READMEs; LICENSE, NOTICE, and readme footers carry
       attribution)
@@ -73,6 +75,7 @@ When shared consumer content changes, also check
 
 ```bash
 npm run check:docs
+npm run check:zod-idioms   # deprecated `z.string().<format>()` chain in either README
 # Optional: confirm pack stages the npm README and restores GitHub afterward
 npm pack --dry-run
 git diff -- README.md   # should be clean

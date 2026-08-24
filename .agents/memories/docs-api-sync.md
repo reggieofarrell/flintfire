@@ -39,5 +39,8 @@ Then update:
 5. Do **not** hand-edit `CHANGELOG.md` — it is generated from Conventional Commits; write a clear
    `feat:` / `fix:` / `feat!:` commit instead.
 
-If you touched any doc links, run `npm run check:docs`. After non-trivial website content changes,
-smoke-test with `npm run docs:build` (forces `NODE_ENV=production` so Pagefind search is included).
+If you touched any doc links, run `npm run check:docs`. If you touched any Zod snippet, run
+`npm run check:zod-idioms` — the `zod` peer range is `^4.0.0`, so docs must teach the top-level
+formats (`z.email()`, `z.iso.datetime()`), never the `@deprecated` `z.string().<format>()` chain.
+After non-trivial website content changes, smoke-test with `npm run docs:build` (forces
+`NODE_ENV=production` so Pagefind search is included).

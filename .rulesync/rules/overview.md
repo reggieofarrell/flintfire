@@ -38,8 +38,9 @@ correct, complete result — never the fastest. Concretely:
   executing it; no "X is normalized" without a test that fails if it regresses. Re-run the
   reviewer's own probes yourself as real tests.
 - **Full gate every time.** `test:types`, `test:unit`, `test:integration:emulator`, both coverage
-  gates, `build`, `check:package`, `lint`, `prettier --check`, `check:docs` — plus a targeted
-  regression test for every finding/change. Report failures honestly with the output.
+  gates, `build`, `check:package`, `lint`, `prettier --check`, `check:docs`, `check:zod-idioms` —
+  plus a targeted regression test for every finding/change. Report failures honestly with the
+  output.
 - **Adversarially self-review before declaring complete.** Ask "what surface did I miss, what did I
   claim without checking, what edge case breaks this?" and close those gaps.
 

@@ -91,11 +91,11 @@ import { z } from 'zod';
 
 export const userSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  email: z.string().email('Invalid email address'),
+  email: z.email('Invalid email address'),
   age: z.number().int().positive().optional(),
   status: z.enum(['active', 'inactive', 'suspended']).default('active'),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 });
 
 export type User = z.infer<typeof userSchema>;

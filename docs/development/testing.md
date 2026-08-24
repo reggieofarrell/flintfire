@@ -131,8 +131,8 @@ thresholds via `scripts/check-coverage-gates.mjs`.
 | Validation (emulator paths) | `Validation.ts`          | 90%   | 80%      | 95%       |
 | Vector extension (emulator) | `src/vector/**`          | 90%   | 75%      | 90%       |
 
-**Pre-push** runs `test:types` + `check:docs` + `test:unit:coverage` + `test:coverage:gate:unit` (no
-Java/emulator).
+**Pre-push** runs `rules:check` + `test:types` + `check:docs` + `check:zod-idioms` +
+`test:unit:coverage` + `test:coverage:gate:unit` (no Java/emulator).
 
 **CI** runs each suite with coverage, then its gate, in parallel matrix jobs, plus a `Type checks`
 job (`test:types`).
@@ -152,10 +152,10 @@ ratcheting.
 
 ## Git hooks
 
-| Hook           | Command                                                                        | Purpose                                                   |
-| -------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------- |
-| **pre-commit** | `lint-staged`                                                                  | ESLint + Prettier on staged files                         |
-| **pre-push**   | `test:types` + `check:docs` + `test:unit:coverage` + `test:coverage:gate:unit` | Type check + doc links + path-specific gate (no emulator) |
+| Hook           | Command                                                                                                             | Purpose                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **pre-commit** | `lint-staged`                                                                                                       | ESLint + Prettier on staged files                                                                          |
+| **pre-push**   | `rules:check` + `test:types` + `check:docs` + `check:zod-idioms` + `test:unit:coverage` + `test:coverage:gate:unit` | Agent-config drift + type check + doc links + deprecated-zod-idiom scan + path-specific gate (no emulator) |
 
 ## Type-level tests
 
