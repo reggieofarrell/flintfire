@@ -65,15 +65,22 @@ concrete class — and excluding `update` and `delete`.
    where(...a: Parameters<QB['where']>): ReadOnlyQuery<…>;
    ```
 
-   so a signature change on `FirestoreQueryBuilder` propagates automatically and parameter drift is
-   structurally impossible. **Do not** apply `Parameters` / `ReturnType` to terminal reads (`get`,
-   `getOne`, `stream`, `paginate`, `offsetPaginate`, `paginateWithCount`, `aggregate`,
-   `distinctValues`, …): those utilities resolve an overloaded member to its **last** signature and
-   erase type parameters. Measured casualties: `whereId`'s comparison overload disappears;
-   `{ withMetadata: true }` overloads disappear; `aggregate` / `distinctValues` lose their generics.
-   Terminals are therefore inherited **verbatim** through `Omit`, which is a homomorphic mapped type
-   and copies overloads and generics unchanged. `whereId` itself is hand-written as two overloads
-   for the same reason.
+   so a _change_ to an existing signature on `FirestoreQueryBuilder` propagates automatically and
+   parameter drift of that kind is structurally impossible. **Do not** apply `Parameters` /
+   `ReturnType` to terminal reads (`get`, `getOne`, `stream`, `paginate`, `offsetPaginate`,
+   `paginateWithCount`, `aggregate`, `distinctValues`, …): those utilities resolve an overloaded
+   member to its **last** signature and erase type parameters. Measured casualties: `whereId`'s
+   comparison overload disappears; `{ withMetadata: true }` overloads disappear; `aggregate` /
+   `distinctValues` lose their generics. Terminals are therefore inherited **verbatim** through
+   `Omit`, which is a homomorphic mapped type and copies overloads and generics unchanged. `whereId`
+   itself is hand-written as two overloads for the same reason.
+
+   **Standing obligation:** deriving with `Parameters` does **not** protect against a _newly added_
+   overload. `Parameters` still resolves the last signature, so inserting e.g.
+   `where(filter: Filter): this` before the existing 3-arg form on the concrete builder would leave
+   `ReadOnlyQuery.where` on the old shape while the key-set / `NoWrites` guards stay green. Adding
+   an overload to a chainable clause requires hand-writing that clause on `ReadOnlyQuery`, the way
+   `whereId` already is. A parameter-equality assert is a tautology and catches nothing.
 
 4. **A two-sided, asserted drift guard pins the member set**, in
    `src/tests/types/read-only-query.type-test.ts`:
@@ -117,9 +124,11 @@ terminating read helpers such as `countByStatus` / `listByStatus` so no builder 
 audit finding H1's caveat be **deleted** rather than maintained.
 
 **Harder / costs.** `ReadOnlyQuery` is a parallel surface over the query builder, so it is a drift
-risk by construction. Decisions 3 and 4 exist specifically to bound that: parameters cannot drift at
-all, and a missing member fails the type gate. What remains unguarded is a _newly added_ read method
-being added to both places with mismatched intent, which review must catch.
+risk by construction. Decisions 3 and 4 exist specifically to bound that: an existing signature
+change cannot drift via `Parameters`, and a missing member fails the type gate; a _new_ clause
+overload still requires a hand-written redeclaration (decision 3's standing obligation). What
+remains unguarded is a _newly added_ read method being added to both places with mismatched intent,
+which review must catch.
 
 **A maintenance note for future readers.** The asserted `Missing` / `Extra` guards look like inert
 type noise. They are not: without them, `ReadOnlyQuery` silently falls behind the builder. And

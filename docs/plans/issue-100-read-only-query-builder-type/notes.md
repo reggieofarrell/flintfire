@@ -7,10 +7,9 @@
 
 ## Status
 
-**Done — pending external review.** `ReadOnlyQuery` exported (root + `/vector`), type tests T-1…T-12
-plus §8.3 sibling-terminal overload pins, facade guide/type-test updated, ADR-0041 Accepted in place,
-website docs swept. Full §10 gate green twice (pre- and post-self-review). Plan directory left in
-place. Not committed (owner decides).
+**Done — pending round-2 external review.** Implementation committed as `2b6cf63`. Round-1
+`review.md` findings **M1, N1, N2, N3, N4** dispositioned below; M1/N2/N4 code+docs fixes applied on
+top of that commit. Plan directory left in place until after review approval.
 
 ## Ambiguities resolved
 
@@ -33,10 +32,14 @@ place. Not committed (owner decides).
    explicitly. Independent review proved the five siblings can be restated with
    `Parameters`/`ReturnType` while `test:types` stays green — added
    `metadataOverloadsSurviveOmitOnSiblingTerminals` (F1 fixed).
-4. **Fresh LCOV vs §3.5 on-disk baseline.** Integration `QueryBuilder.ts` measured **96.57 / 86.44 /
-   100.00** (plan cited 96.39 / 86.50 / 100.00 from LCOV already on disk). Diff is **+122 type/comment
-   lines only** (no executable statements). Unit `index.ts` remains **100 / 100 / 75.76**. Gates pass
-   with headroom. Treat §3.5 as a stale snapshot, not a regression.
+4. **Fresh LCOV vs §3.5 (corrected per external review N1).** Integration `QueryBuilder.ts` at HEAD
+   is **96.57 / 86.44 / 100.00**. Real baseline measured by the external reviewer at `2b6cf63^`:
+   **96.39 / 86.44 / 100.00** (`LF 2298→2420`, `LH 2215→2337`, `BRF/BRH` and `FNF/FNH` unchanged at
+   236/204 and 63/63). So §3.5's **line** figure was correct and genuinely moved: all 122 added
+   type-only lines land in LCOV as covered lines (`LF +122`, `LH +122`). Only §3.5's **branch**
+   figure (86.50) was stale; the real baseline was already 86.44. The reliable "did runtime slip in?"
+   invariant is `FNF/FNH` and `BRF/BRH` unchanged — both hold exactly. Unit `index.ts` remains
+   **100 / 100 / 75.76**.
 
 ## Files touched and why
 
@@ -56,6 +59,10 @@ place. Not committed (owner decides).
 | `website/.../guides/working-with-data/queries.md` | Two cross-links | §9.3 / E14 |
 | `website/.../guides/designing/security-boundary.md` | New section before Out of scope | §9.3 / E15 |
 | `docs/plans/.../notes.md` | This file | skill |
+| `scripts/check-packed-consumer.mjs` | `ReadOnlyQuery` packed asserts (T5 + /vector) | review M1 |
+| `src/core/QueryBuilder.ts` | stripInternal JSDoc warning; N2 overload obligation comments | review M1/N2 |
+| `docs/adr/0041-…` | decision 3 standing obligation | review N2 |
+| `src/tests/unit/packageExports.unit.test.ts` | N4 comment clarity | review N4 |
 
 ## Edge cases / traps handled
 
@@ -65,7 +72,7 @@ place. Not committed (owner decides).
 | T2 | Asserted two-sided Missing/Extra | T-1 / T-2 |
 | T3 | Per-clause `NoWrites` matrix + chain `@ts-expect-error`s | T-3 / T-4 |
 | T4 | Clause keys listed + re-declared | T-3 + `test:types` (M3 → TS2430) |
-| T5 | Helper not tagged `@internal` | `build` / `check:package` / `check:consumer`; emitted `.d.ts` |
+| T5 | Helper not tagged `@internal`; JSDoc warns; packed-consumer names `ReadOnlyQuery` | `scripts/check-packed-consumer.mjs` ESM block (root+/vector + no-writes + post-`.where()`); JSDoc on `ReadOnlyQueryClauseKeys` |
 | T6 | `W` kept with `@template` note | T-9 (W ≠ T + defaulted) |
 | T7 | Tip closing fence on own line + blank line before | §10 step 6 greps empty |
 | T8 | Exact `## Read-only view` heading | `check:docs` |
@@ -125,6 +132,11 @@ npm run docs:build                         ✓; built HTML `:::` greps empty
 Same 15 legs — all ✓ again. Unit 35/456; integration 37/548. `:::` greps empty;
 `terminating helpers` grep empty; `Omit<FirestoreQueryBuilder` only in
 `reference/query-builder.md` explanatory sentence (acceptable per §10 step 8).
+
+### Run 3 (after external review M1/N1–N4 remediation)
+
+All 15 legs ✓. Unit **35 / 456**; integration **37 / 548**. `check:consumer` green with the new
+`ReadOnlyQuery` packed asserts. `:::` greps empty.
 
 ### §10 steps 5–8
 
@@ -199,6 +211,44 @@ fixes:** pass with fixes applied
 
 Run 2 above — all 15 legs green; suite counts unchanged vs Run 1.
 
+## External review (round 1) — dispositions
+
+**Reviewer:** Claude Code (Opus 5), `review.md` · **Reviewed:** `2b6cf63` · **Verdict:** APPROVE WITH
+FIXES · **Do not edit `review.md`.**
+
+### Findings fixed
+
+1. **M1 major — Trap T5's stated guard did not fire** — Added the proved `ReadOnlyQuery` block to
+   `scripts/check-packed-consumer.mjs` (root + `/vector` sameness, `'update'|'delete'` absent on the
+   type, and after `.where()`). Added a stripInternal warning to the `ReadOnlyQueryClauseKeys` JSDoc
+   in `src/core/QueryBuilder.ts` — **without** writing the literal `@`+`internal` token in the block,
+   because TypeScript parses that substring as the tag and would strip the helper the same way
+   (discovered while fixing: a first draft that said "Do NOT tag … `@internal`" left the published
+   `.d.ts` dangling and failed the new consumer assert). Verified: a real `@internal` tag →
+   `check:consumer` red with `TS2322` on the no-writes asserts; control green with both the local
+   `type ReadOnlyQueryClauseKeys` and the `extends` reference present in `dist/core/QueryBuilder.d.ts`.
+2. **N1 minor — §11 / deviation 4 LCOV explanation** — Corrected deviation 4 above: line % moves
+   because LF/LH both rise by the inserted type-only line count; branches were already 86.44 at
+   baseline; the runtime-slip invariant is unchanged `FNF/FNH` + `BRF/BRH`.
+3. **N2 minor — "drift-proof" over-claim** — Amended the clause-parameter comments in
+   `QueryBuilder.ts` and ADR-0041 decision 3 (+ Consequences) with the standing obligation: adding an
+   overload to a chainable clause requires hand-writing that clause on `ReadOnlyQuery`.
+4. **N3 minor — stale Status** — Status section refreshed to reflect `2b6cf63` and round-1 review.
+
+### Findings not treated as defects
+
+- **N4 nit — `packageExports` near-tautological** — Kept the §8.2-mandated assert (house pattern with
+  `WriteMetadata`). Clarified the comment: an interface cannot be a value export of the same name;
+  the load-bearing guards are T-11 and the packed-consumer T5 block.
+
+### Findings deferred
+
+- None.
+
+### Gate re-run after round-1 remediation
+
+**Run 3** under Gate results — all 15 legs green.
+
 ## Could-not-verify
 
 Carried from plan §5:
@@ -209,4 +259,4 @@ Carried from plan §5:
 
 ## Open questions for the reviewer
 
-None — F1 gap is closed; ready for external `review.md`.
+None — round-1 M1/N1–N4 addressed.

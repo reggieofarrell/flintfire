@@ -137,6 +137,26 @@ try {
       `  : never;\n` +
       `const _explainOk: _ExplainSame = true;\n` +
       `void _explainOk;\n` +
+      // Issue #100 / ADR-0041: ReadOnlyQuery must be nameable from root AND /vector (QueryBuilder has
+      // no export-map subpath). Also pins trap T5 — tagging ReadOnlyQueryClauseKeys `@internal` strips
+      // its declaration under stripInternal:true while the extends clause still references it, which
+      // silently re-opens update/delete on the published type. skipLibCheck alone cannot see that;
+      // naming the type and asserting write keys stay absent does. T-12 only imports the source barrel.
+      `import type { ReadOnlyQuery } from '${PKG}';\n` +
+      `import type { ReadOnlyQuery as VectorReadOnlyQuery } from '${PKG}/vector';\n` +
+      `type _ROSame = ReadOnlyQuery<{ n: number }> extends VectorReadOnlyQuery<{ n: number }>\n` +
+      `  ? VectorReadOnlyQuery<{ n: number }> extends ReadOnlyQuery<{ n: number }> ? true : never\n` +
+      `  : never;\n` +
+      `const _roSame: _ROSame = true;\n` +
+      `void _roSame;\n` +
+      `type _RONoWrites = 'update' extends keyof ReadOnlyQuery<{ n: number }> ? never\n` +
+      `  : 'delete' extends keyof ReadOnlyQuery<{ n: number }> ? never : true;\n` +
+      `const _roNoWrites: _RONoWrites = true;\n` +
+      `void _roNoWrites;\n` +
+      `type _ROChain = ReturnType<ReadOnlyQuery<{ n: number }>['where']>;\n` +
+      `type _ROChainNoWrites = 'update' extends keyof _ROChain ? never : true;\n` +
+      `const _roChainOk: _ROChainNoWrites = true;\n` +
+      `void _roChainOk;\n` +
       `const vvl: VectorValueLike = { toArray: () => [1, 2, 3], isEqual: () => false };\n` +
       // ...and the schema input must be number[] | VectorValueLike, NOT `any` (which would silently
       // accept a string). A string assignment must be a compile error, or this @ts-expect-error is

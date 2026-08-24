@@ -74,10 +74,13 @@ describe('package exports', () => {
   });
 
   it('documents that ReadOnlyQuery is a type-only root export (issue #100)', () => {
-    // ReadOnlyQuery is an interface — it erases at runtime. Compile-time root-import coverage lives
-    // in src/tests/types/read-only-query.type-test.ts (T-11). Assert it is not accidentally emitted
-    // as a runtime value on the package entry (a value export would also blow the zero-slack unit
-    // gate on src/index.ts).
+    // ReadOnlyQuery is an interface — it erases at runtime, and a value export of that *same* name
+    // cannot compile in the first place, so this assert is near-tautological for the interface itself.
+    // It still matches the house pattern above (WriteMetadata) and catches a differently-typed runtime
+    // binding that happens to share the name (which would also blow the zero-slack unit gate on
+    // src/index.ts). Compile-time root-import coverage — the load-bearing guard — lives in
+    // src/tests/types/read-only-query.type-test.ts (T-11); the packed-consumer check covers the
+    // published /vector subpath + T5 @internal hazard.
     expect((orm as Record<string, unknown>).ReadOnlyQuery).toBeUndefined();
   });
 });

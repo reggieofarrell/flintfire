@@ -2298,6 +2298,14 @@ export class FirestoreQueryBuilder<
  * Do NOT replace this with a conditional type that derives the set from `keyof`. The list is short,
  * `src/tests/types/read-only-query.type-test.ts` checks it from both sides, and a derived version
  * reads as clever while catching nothing extra.
+ *
+ * Do NOT mark this helper for stripInternal (the TypeScript JSDoc tag that removes declarations from
+ * `.d.ts` emit — trap T5). `tsconfig` sets `stripInternal: true`; applying that tag here would strip
+ * this declaration and leave a dangling reference in the published `.d.ts`. The packed-consumer check
+ * names `ReadOnlyQuery` and asserts write keys stay absent so that regression fails CI.
+ *
+ * (Avoid writing the stripInternal tag name with a leading "@" anywhere in this block — TypeScript
+ * parses it as the tag and would strip this helper the same way.)
  */
 type ReadOnlyQueryClauseKeys =
   | 'where'
@@ -2371,7 +2379,12 @@ export interface ReadOnlyQuery<
   // property type verbatim, overloads and generics included.
   //
   // Only the clause members below are re-declared, and only their RETURN type is written by hand;
-  // parameters are derived from the real builder so they cannot drift (ADR-0041, decision 3).
+  // parameters are derived from the real builder so a *change* to an existing signature cannot
+  // drift (ADR-0041, decision 3). That is NOT proof against a *newly added* overload: `Parameters`
+  // still resolves the last signature, so adding e.g. `where(filter: Filter): this` before the
+  // 3-arg form on the concrete builder would leave `ReadOnlyQuery.where` on the old shape while
+  // T-1/T-2/T-3 stay green. Adding an overload to a chainable clause requires hand-writing that
+  // clause on `ReadOnlyQuery`, the way `whereId` already is.
   where(...a: Parameters<FirestoreQueryBuilder<T, W, S, R>['where']>): ReadOnlyQuery<T, W, S, R>;
   whereFilter(
     ...a: Parameters<FirestoreQueryBuilder<T, W, S, R>['whereFilter']>
@@ -2393,7 +2406,8 @@ export interface ReadOnlyQuery<
   offset(...a: Parameters<FirestoreQueryBuilder<T, W, S, R>['offset']>): ReadOnlyQuery<T, W, S, R>;
   // The four bound members are overloaded too, but their LAST overload is the permissive
   // `(...fieldValues: unknown[])`, which also accepts the `DocumentSnapshot` form — so deriving is
-  // lossless here and keeps them drift-proof.
+  // lossless for today's overload sets. Same standing obligation as above: a *new* overload added
+  // ahead of the rest form must be hand-written on `ReadOnlyQuery` (it is not caught by Parameters).
   startAt(
     ...a: Parameters<FirestoreQueryBuilder<T, W, S, R>['startAt']>
   ): ReadOnlyQuery<T, W, S, R>;
