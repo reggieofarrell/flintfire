@@ -102,6 +102,16 @@ The validator is required when `WO` diverges from `W` and optional when they mat
 Prefer `withSchema(...)` (or `raw(...)` for an unvalidated repository) for typical use, and
 `withSchemaArgs` when subclassing.
 
+**`static suppressWriteOverrideWarning = false`**
+
+Opt out of the once-per-class `console.warn` that fires when a **subclass** overrides a public write
+method (`update`, `create`, `delete`, …) on its prototype. The warning exists because sibling write
+paths do not route through the override — see [Advanced Patterns](/flintfire/guides/advanced/patterns/)
+(Custom repository methods / Enforced denormalization). Set `static suppressWriteOverrideWarning = true`
+on the subclass **before** the first instance is constructed. Method-style overrides only are
+detected; class-field and constructor-body assignments are not. Because the flag is a normal JS
+static, a suppressing parent also silences further subclasses unless they redeclare it `false`.
+
 ## Reads
 
 **`getById(id: ID): Promise<FirestoreDocument<T> | null>`**
