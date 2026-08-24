@@ -39,7 +39,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          # Pin via .nvmrc (Node 24) so CI matches local/dev and ships npm ≥ 11.5.1.
+          # Pin via .nvmrc (Node 24) so CI matches local/dev and ships npm ≥ 11.16
+          # (OIDC Trusted Publishing plus `.npmrc` min-release-age).
           node-version-file: .nvmrc
           cache: npm
 
@@ -269,7 +270,9 @@ jobs:
         run: npm run docs:build
 
   # Verify build + unit tests on the v3 Node floor (22) in addition to the pinned Node (24) used by
-  # the coverage jobs above.
+  # the coverage jobs above. Node 22 ships npm 10, which silently ignores `.npmrc`
+  # `min-release-age`; this job only `npm ci`s the already-reviewed lockfile. The
+  # 2-day publish cooldown is enforced on Node 24 jobs (npm ≥ 11.10).
   node22:
     name: Node 22 (build + unit)
     runs-on: ubuntu-latest

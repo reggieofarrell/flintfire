@@ -84,3 +84,23 @@ if [ "$CURRENT_NODE_VERSION" -ne "$REQUIRED_NODE_VERSION" ]; then
 fi
 
 echo "✓ Node.js version check passed: $CURRENT_NODE_FULL (required: v$REQUIRED_NODE_VERSION.x)"
+
+# `.npmrc` `min-release-age` is ignored on npm < 11.10 (no error, no cooldown).
+# Node 24's bundled npm is ≥ 11.16; fail here if PATH has an older client so a
+# hook cannot resolve a package that CI would have blocked.
+if ! command -v npm >/dev/null 2>&1; then
+  echo "Error: npm is not available on PATH after Node version setup."
+  exit 1
+fi
+
+NPM_VERSION=$(npm -v)
+NPM_MAJOR=$(echo "$NPM_VERSION" | cut -d. -f1)
+NPM_MINOR=$(echo "$NPM_VERSION" | cut -d. -f2)
+
+if [ "$NPM_MAJOR" -lt 11 ] || { [ "$NPM_MAJOR" -eq 11 ] && [ "$NPM_MINOR" -lt 10 ]; }; then
+  echo "Error: npm $NPM_VERSION is too old for .npmrc min-release-age (needs ≥ 11.10.0)."
+  echo "  Use the Node 24 toolchain from .nvmrc so installs honor the 2-day publish cooldown."
+  exit 1
+fi
+
+echo "✓ npm version check passed: $NPM_VERSION (min-release-age requires ≥ 11.10.0)"

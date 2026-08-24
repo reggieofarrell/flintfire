@@ -190,17 +190,27 @@ if the generated files drift from the source, and runs in the `pre-push` hook an
 
 Generated per tool: Cursor (`.cursor/rules/*.mdc`), Claude Code (`.claude/rules/*.md`), and the
 cross-tool `AGENTS.md` standard (root `AGENTS.md` + `.agents/memories/*.md`, read by Codex and
-others). The always-on **project memory** is generated only to the root `AGENTS.md`, which Cursor
-and Codex read natively. Claude Code does **not** read `AGENTS.md`, so `CLAUDE.md` is a committed
-symlink to `AGENTS.md` (same bytes, no duplication). Because neither Cursor nor Claude needs the
-root re-emitted as a scoped rule, the root overview rule targets only the AGENTS.md family —
-rulesync logs a benign "No root rulesync rule file found for target 'cursor'/'claudecode'" note.
+others). The always-on **project memory** is generated to the root `AGENTS.md` (read natively by
+Cursor and Codex) and to `CLAUDE.md`, since Claude Code does **not** read `AGENTS.md`. Both are real
+generated files. `CLAUDE.md` was previously a committed symlink to `AGENTS.md`, which double-loaded
+every rule for Claude Code: `AGENTS.md` inlines the non-root rule bodies, and Claude Code separately
+reads `.claude/rules/`. The root rule deliberately does not target Cursor — Cursor reads `AGENTS.md`
+natively — so rulesync logs a benign "No root rulesync rule file found for target 'cursor'" note.
+
+> **Target order matters.** `agentsmd` and `codexcli` both write `AGENTS.md` and the last one in
+> `targets` wins, but they emit different formats: with `codexcli` last (the current setting) the
+> non-root rule bodies are **inlined** into `AGENTS.md`; with `agentsmd` last, `AGENTS.md` carries
+> only a reference table pointing at `.agents/memories/`. Nothing warns you — do not reorder these
+> casually.
+
+Keeping the CLI on latest, and reviewing generator-output diffs when a bump changes files, is
+documented in [rulesync.md](./rulesync.md) (daily `rulesync-upgrade` workflow + Grok 4.5 review).
 
 Skills and commands are also rulesync-managed (authored in `.rulesync/skills/*/SKILL.md` and
 `.rulesync/commands/*.md`), so they propagate to every agent — Cursor (`.cursor/skills`,
 `.cursor/commands`), Claude Code (`.claude/skills`, `.claude/commands`), and the AGENTS.md family
 (`.agents/skills`). The former `.claude/skills` / `.claude/commands` symlinks into `.cursor/` are
-gone. Testing-related entries:
+gone; the repo now commits no symlinks at all. Testing-related entries:
 
 - `skills/unit-testing/SKILL.md` — unit test patterns
 - `skills/integration-testing/SKILL.md` — emulator integration patterns
@@ -209,4 +219,6 @@ gone. Testing-related entries:
 
 ## Related docs
 
+- [rulesync.md](./rulesync.md) — agent-config source, generation contract, CLI upgrade workflow
+  (`min-release-age=2` so bumps lag npm `latest` by up to two days)
 - [test-coverage-followups.md](./test-coverage-followups.md) — backlog of future coverage work
