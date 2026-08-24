@@ -26,8 +26,9 @@ correct, complete result — never the fastest. Concretely:
   executing it; no "X is normalized" without a test that fails if it regresses. Re-run the
   reviewer's own probes yourself as real tests.
 - **Full gate every time.** `test:types`, `test:unit`, `test:integration:emulator`, both coverage
-  gates, `build`, `check:package`, `lint`, `prettier --check`, `check:docs` — plus a targeted
-  regression test for every finding/change. Report failures honestly with the output.
+  gates, `build`, `check:package`, `lint`, `prettier --check`, `check:docs`, `check:zod-idioms` —
+  plus a targeted regression test for every finding/change. Report failures honestly with the
+  output.
 - **Adversarially self-review before declaring complete.** Ask "what surface did I miss, what did I
   claim without checking, what edge case breaks this?" and close those gaps.
 
@@ -160,8 +161,11 @@ Then update:
 5. Do **not** hand-edit `CHANGELOG.md` — it is generated from Conventional Commits; write a clear
    `feat:` / `fix:` / `feat!:` commit instead.
 
-If you touched any doc links, run `npm run check:docs`. After non-trivial website content changes,
-smoke-test with `npm run docs:build` (forces `NODE_ENV=production` so Pagefind search is included).
+If you touched any doc links, run `npm run check:docs`. If you touched any Zod snippet, run
+`npm run check:zod-idioms` — the `zod` peer range is `^4.0.0`, so docs must teach the top-level
+formats (`z.email()`, `z.iso.datetime()`), never the `@deprecated` `z.string().<format>()` chain.
+After non-trivial website content changes, smoke-test with `npm run docs:build` (forces
+`NODE_ENV=production` so Pagefind search is included).
 
 # Generated agent config — do not hand-edit
 

@@ -169,8 +169,8 @@ import { z } from 'zod';
 const events = defineOutboxEvents({
   'user.email-changed': z.object({
     userId: z.string(),
-    previousEmail: z.string().email(),
-    newEmail: z.string().email(),
+    previousEmail: z.email(),
+    newEmail: z.email(),
   }),
 
   'order.created': z.object({
