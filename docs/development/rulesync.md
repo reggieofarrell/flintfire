@@ -31,9 +31,12 @@ Other invariants the upgrade review encodes:
 rulesync ships often (multiple minors per week is normal). A scheduled workflow
 (`.github/workflows/rulesync-upgrade.yml`) runs daily at 14:00 UTC:
 
-1. **Bump (deterministic).** Installs `rulesync@*` so `.npmrc` `min-release-age=2` can pick the
-   newest version that is at least two days old (an exact `@latest` errors if that dist-tag is too
-   new). If that version is already in the lockfile, the job no-ops. Otherwise it regenerates with
+1. **Bump (deterministic).** Queries `npm view rulesync time` for the newest x.y.z that is at least
+   `min-release-age` days old, then either no-ops or installs that **exact** version. It does
+   **not** run `npm install rulesync@*`: when the lockfile is already on a version inside the window
+   (the usual case the day after a bump), that command keeps the existing `^x.y.z` range, finds
+   nothing old enough, and exits `ETARGET`. If the lockfile is already newer than the newest
+   eligible release, the job skips rather than downgrading. Otherwise it regenerates with
    `rules:sync` + `rules:check` and opens `chore/deps-rulesync-<version>`. If generated files are
    byte-identical to `main`, it comments `Verdict: merge` and skips the agent. The CLI therefore
    lags npm `latest` by up to two days — same supply-chain window as every other dependency.

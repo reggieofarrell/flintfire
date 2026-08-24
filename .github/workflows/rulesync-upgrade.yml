@@ -74,25 +74,48 @@ jobs:
           FROM_VERSION="$(node -p "require('./node_modules/rulesync/package.json').version")"
           echo "Lockfile rulesync=${FROM_VERSION}"
 
-          # Do not install an exact `npm view … version` / `@latest` — that is the
-          # dist-tag, often < 2 days old, and `.npmrc` `min-release-age=2` errors on
-          # exact versions that fail the window. `*` lets npm pick the newest
-          # version that is old enough (including a later major).
-          npm install 'rulesync@*' --save-dev --no-fund --no-audit
+          # Read the same window `.npmrc` enforces so this job cannot drift from
+          # `min-release-age`. `null` is what npm prints when the key is unset.
+          AGE_DAYS="$(npm config get min-release-age)"
+          if [ -z "${AGE_DAYS}" ] || [ "${AGE_DAYS}" = "null" ]; then
+            echo "::error::min-release-age is unset; refusing to bump without a cooldown."
+            exit 1
+          fi
 
-          TO_VERSION="$(node -p "require('./node_modules/rulesync/package.json').version")"
-          echo "Resolved rulesync=${TO_VERSION} (min-release-age=2)"
-          echo "from_version=${FROM_VERSION}" >> "${GITHUB_OUTPUT}"
-          echo "to_version=${TO_VERSION}" >> "${GITHUB_OUTPUT}"
+          # Do not `npm install rulesync@*`. When the lockfile is already on a
+          # version inside the window (the usual case the day after a bump), npm
+          # keeps the existing `^x.y.z` range, finds no matching publish older
+          # than the cutoff, and exits ETARGET — which is how this job failed on
+          # 16.15.0 (~27h old vs a 2-day gate). Query first, then either skip or
+          # install an exact eligible version (never downgrade).
+          ELIGIBLE="$(npm view rulesync time --json | node scripts/rulesync-newest-eligible.mjs eligible --days "${AGE_DAYS}")"
+          echo "Newest cooldown-eligible rulesync=${ELIGIBLE:-<none>} (min-release-age=${AGE_DAYS})"
 
-          if [ "${FROM_VERSION}" = "${TO_VERSION}" ]; then
-            echo "Already on the newest cooldown-eligible rulesync; nothing to bump."
+          skip() {
+            echo "from_version=${FROM_VERSION}" >> "${GITHUB_OUTPUT}"
+            echo "to_version=${FROM_VERSION}" >> "${GITHUB_OUTPUT}"
             echo "skipped=true" >> "${GITHUB_OUTPUT}"
-            git checkout -- package.json package-lock.json
+          }
+
+          if [ -z "${ELIGIBLE}" ]; then
+            echo "No rulesync version is old enough for min-release-age=${AGE_DAYS}; skip."
+            skip
             exit 0
           fi
 
+          if node scripts/rulesync-newest-eligible.mjs gte "${FROM_VERSION}" "${ELIGIBLE}"; then
+            echo "Lockfile ${FROM_VERSION} is already >= ${ELIGIBLE}; skip (do not downgrade a too-new pin)."
+            skip
+            exit 0
+          fi
+
+          echo "from_version=${FROM_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "to_version=${ELIGIBLE}" >> "${GITHUB_OUTPUT}"
           echo "skipped=false" >> "${GITHUB_OUTPUT}"
+
+          # Exact spec of a version that already cleared the window — `min-release-age`
+          # will accept it. `@latest` / `@*` would not.
+          npm install "rulesync@${ELIGIBLE}" --save-dev --no-fund --no-audit
           npm run rules:sync
           npm run rules:check
 
