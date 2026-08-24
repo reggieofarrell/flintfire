@@ -45,11 +45,11 @@ jobs:
       contents: write
       pull-requests: write
     outputs:
-      skipped: ${{ steps.prepare.outputs.skipped }}
+      skipped: ${{ steps.resolve.outputs.skipped }}
       pr_number: ${{ steps.pr.outputs.pr_number }}
       generated_changed: ${{ steps.pr.outputs.generated_changed }}
-      from_version: ${{ steps.prepare.outputs.from_version }}
-      to_version: ${{ steps.prepare.outputs.to_version }}
+      from_version: ${{ steps.resolve.outputs.from_version }}
+      to_version: ${{ steps.resolve.outputs.to_version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -66,13 +66,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Bump rulesync to the newest cooldown-eligible release
-        id: prepare
+      - name: Resolve cooldown-eligible rulesync
+        id: resolve
         run: |
           set -euo pipefail
 
           FROM_VERSION="$(node -p "require('./node_modules/rulesync/package.json').version")"
           echo "Lockfile rulesync=${FROM_VERSION}"
+          echo "from_version=${FROM_VERSION}" >> "${GITHUB_OUTPUT}"
 
           # Read the same window `.npmrc` enforces so this job cannot drift from
           # `min-release-age`. `null` is what npm prints when the key is unset.
@@ -86,33 +87,40 @@ jobs:
           # version inside the window (the usual case the day after a bump), npm
           # keeps the existing `^x.y.z` range, finds no matching publish older
           # than the cutoff, and exits ETARGET — which is how this job failed on
-          # 16.15.0 (~27h old vs a 2-day gate). Query first, then either skip or
-          # install an exact eligible version (never downgrade).
+          # 16.15.0 (~27h old vs a 2-day gate). Query first, then skip remaining
+          # steps (the job stays green) or install an exact eligible version
+          # (never downgrade).
           ELIGIBLE="$(npm view rulesync time --json | node scripts/rulesync-newest-eligible.mjs eligible --days "${AGE_DAYS}")"
           echo "Newest cooldown-eligible rulesync=${ELIGIBLE:-<none>} (min-release-age=${AGE_DAYS})"
 
           skip() {
-            echo "from_version=${FROM_VERSION}" >> "${GITHUB_OUTPUT}"
             echo "to_version=${FROM_VERSION}" >> "${GITHUB_OUTPUT}"
+            echo "eligible=" >> "${GITHUB_OUTPUT}"
             echo "skipped=true" >> "${GITHUB_OUTPUT}"
+            echo "::notice::$1"
+            echo "$1" >> "${GITHUB_STEP_SUMMARY}"
           }
 
           if [ -z "${ELIGIBLE}" ]; then
-            echo "No rulesync version is old enough for min-release-age=${AGE_DAYS}; skip."
-            skip
+            skip "No rulesync version is old enough for min-release-age=${AGE_DAYS}; later steps skipped."
             exit 0
           fi
 
           if node scripts/rulesync-newest-eligible.mjs gte "${FROM_VERSION}" "${ELIGIBLE}"; then
-            echo "Lockfile ${FROM_VERSION} is already >= ${ELIGIBLE}; skip (do not downgrade a too-new pin)."
-            skip
+            skip "Lockfile ${FROM_VERSION} is already >= ${ELIGIBLE}; later steps skipped (will not downgrade a too-new pin)."
             exit 0
           fi
 
-          echo "from_version=${FROM_VERSION}" >> "${GITHUB_OUTPUT}"
           echo "to_version=${ELIGIBLE}" >> "${GITHUB_OUTPUT}"
+          echo "eligible=${ELIGIBLE}" >> "${GITHUB_OUTPUT}"
           echo "skipped=false" >> "${GITHUB_OUTPUT}"
 
+      - name: Install eligible rulesync and regenerate
+        if: steps.resolve.outputs.skipped != 'true'
+        env:
+          ELIGIBLE: ${{ steps.resolve.outputs.eligible }}
+        run: |
+          set -euo pipefail
           # Exact spec of a version that already cleared the window — `min-release-age`
           # will accept it. `@latest` / `@*` would not.
           npm install "rulesync@${ELIGIBLE}" --save-dev --no-fund --no-audit
@@ -121,11 +129,11 @@ jobs:
 
       - name: Create or update pull request
         id: pr
-        if: steps.prepare.outputs.skipped != 'true'
+        if: steps.resolve.outputs.skipped != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          FROM_VERSION: ${{ steps.prepare.outputs.from_version }}
-          TO_VERSION: ${{ steps.prepare.outputs.to_version }}
+          FROM_VERSION: ${{ steps.resolve.outputs.from_version }}
+          TO_VERSION: ${{ steps.resolve.outputs.to_version }}
         run: |
           set -euo pipefail
 
@@ -208,10 +216,12 @@ jobs:
   review:
     name: Review generated diff
     needs: bump
-    # Re-review path: bump is skipped and workflow_dispatch supplied a PR number.
-    # Normal path: bump opened a PR whose generated files actually changed.
+    # Re-review path: the bump job is skipped (job-level `if`) when workflow_dispatch
+    # supplied a PR number — `always()` is required or GitHub would skip this job too.
+    # Cooldown no-ops leave bump *successful* with generated_changed unset, so this
+    # job is skipped (not failed). prettier-ignore: keep the expression on one line.
     # prettier-ignore
-    if: ${{ always() && ((needs.bump.result == 'success' && needs.bump.outputs.generated_changed == 'true') || (needs.bump.result == 'skipped' && github.event_name == 'workflow_dispatch' && inputs.review_pr != '')) }}
+    if: ${{ always() && !cancelled() && ((needs.bump.result == 'success' && needs.bump.outputs.generated_changed == 'true') || (needs.bump.result == 'skipped' && github.event_name == 'workflow_dispatch' && inputs.review_pr != '')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
