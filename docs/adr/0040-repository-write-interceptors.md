@@ -9,7 +9,8 @@
   [ADR-0038](0038-collection-wide-recursive-delete.md),
   [transactional outbox design](../design/transactional-outbox.md),
   [#80](https://github.com/reggieofarrell/flintfire/issues/80),
-  [v3 docs audit](../audits/2026-08-23-website-docs-audit.md) (finding H1)
+  [v3 docs audit](https://github.com/reggieofarrell/flintfire/blob/0ef66cb3888496d0959a82ec2068546265be5928/docs/audits/2026-08-23-website-docs-audit.md)
+  (finding H1)
 
 ## Context
 
@@ -235,8 +236,9 @@ teardown.
 
 - [Transactional outbox design](../design/transactional-outbox.md) and
   [#80](https://github.com/reggieofarrell/flintfire/issues/80)
-- [v3 docs audit, finding H1](../audits/2026-08-23-website-docs-audit.md) — the emulator-probed
-  coverage tables this ADR's Context section summarizes
+- [v3 docs audit, finding H1](https://github.com/reggieofarrell/flintfire/blob/0ef66cb3888496d0959a82ec2068546265be5928/docs/audits/2026-08-23-website-docs-audit.md)
+  — the emulator-probed coverage tables this ADR's Context section summarizes (the audit was working
+  material, removed in `80ece9a`; permalinked at `0ef66cb`)
 - `src/core/FirestoreRepository.ts` — the five single-document write sites, `runUpdate`, and
   `commitInChunks`; `src/core/QueryBuilder.ts` — the bound `commitInChunks` write terminals
 - [ADR-0037](0037-write-metadata-opt-in.md) — why `withMetadata` is absent from transactional writes

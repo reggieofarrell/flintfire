@@ -4,10 +4,10 @@
 - **Date:** 2026-08-23
 - **Deciders:** Reggie O'Farrell
 - **Related:** Issue [#100](https://github.com/reggieofarrell/flintfire/issues/100);
-  [v3 docs audit](../audits/2026-08-23-website-docs-audit.md) (finding H1, follow-up L-A); refines
-  [ADR-0021](0021-v3-query-builder-api-cleanups.md) (query-builder API); same type-level-contract
-  shape as [ADR-0028](0028-distributive-omit-id.md); independent of
-  [ADR-0040](0040-repository-write-interceptors.md)
+  [v3 docs audit](https://github.com/reggieofarrell/flintfire/blob/0ef66cb3888496d0959a82ec2068546265be5928/docs/audits/2026-08-23-website-docs-audit.md)
+  (finding H1, follow-up L-A); refines [ADR-0021](0021-v3-query-builder-api-cleanups.md)
+  (query-builder API); same type-level-contract shape as [ADR-0028](0028-distributive-omit-id.md);
+  independent of [ADR-0040](0040-repository-write-interceptors.md)
 
 ## Context
 
@@ -134,8 +134,9 @@ member from it is a breaking change.
 ## References
 
 - Issue [#100](https://github.com/reggieofarrell/flintfire/issues/100) — tracking
-- [v3 docs audit](../audits/2026-08-23-website-docs-audit.md) — finding H1 (the facade rewrite that
-  surfaced this) and follow-up L-A (the verified shapes)
+- [v3 docs audit](https://github.com/reggieofarrell/flintfire/blob/0ef66cb3888496d0959a82ec2068546265be5928/docs/audits/2026-08-23-website-docs-audit.md)
+  — finding H1 (the facade rewrite that surfaced this) and follow-up L-A (the verified shapes). The
+  audit was working material, removed in `80ece9a`; permalinked at `0ef66cb`.
 - `src/core/QueryBuilder.ts` — `FirestoreQueryBuilderBase` vs `FirestoreQueryBuilder` member split
 - [ADR-0028](0028-distributive-omit-id.md) — precedent for a purely type-level exported-helper
   decision

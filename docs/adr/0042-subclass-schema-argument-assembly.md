@@ -7,7 +7,8 @@
   [ADR-0007](0007-retire-curried-schema-factories.md) (value-inferred factories); touches the schema
   bundle from [ADR-0009](0009-explicit-read-validators.md) and the stored model from
   [ADR-0018](0018-document-identity-and-data-model.md); surfaced by the
-  [v3 docs audit](../audits/2026-08-23-website-docs-audit.md) (H1 item 3)
+  [v3 docs audit](https://github.com/reggieofarrell/flintfire/blob/0ef66cb3888496d0959a82ec2068546265be5928/docs/audits/2026-08-23-website-docs-audit.md)
+  (H1 item 3)
 
 ## Context
 
@@ -189,5 +190,6 @@ type rather than restating it keeps them in lockstep.
   `schemas ?? validator?.schemas` fallback, and `withSchema`'s assembly
 - `src/core/Validation.ts` — `makeValidator`, which derives its bundle from whichever schema it is
   given (the root of the overlay hole)
-- [v3 docs audit](../audits/2026-08-23-website-docs-audit.md) — H1 item 3, including the corrected
-  claim that surfaced this
+- [v3 docs audit](https://github.com/reggieofarrell/flintfire/blob/0ef66cb3888496d0959a82ec2068546265be5928/docs/audits/2026-08-23-website-docs-audit.md)
+  — H1 item 3, including the corrected claim that surfaced this (the audit was working material,
+  removed in `80ece9a`; permalinked at `0ef66cb`)
