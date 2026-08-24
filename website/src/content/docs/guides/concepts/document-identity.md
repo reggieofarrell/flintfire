@@ -22,7 +22,7 @@ const bad = z.object({ id: z.string(), name: z.string() });
 FirestoreRepository.withSchema(db, 'users', bad);
 
 // ✅ the schema describes data only; the repository owns identity
-const userSchema = z.object({ name: z.string(), email: z.string().email() });
+const userSchema = z.object({ name: z.string(), email: z.email() });
 const userRepo = FirestoreRepository.withSchema(db, 'users', userSchema);
 ```
 
@@ -67,8 +67,11 @@ Every id-taking surface validates its id before touching Firestore — `getById`
 `whereFilter`'s `f.whereId`. A malformed id throws `InvalidDocumentIdError` rather than escaping the
 collection boundary.
 
-An id is rejected when it is empty, contains `/`, is `.` or `..`, is wrapped in a `__…__` reserved
-pattern, or exceeds 1500 UTF-8 bytes. Validate a request-supplied id explicitly with
+An id is rejected when it is not a string, empty, contains `/`, is `.` or `..`, is wrapped in a
+`__…__` reserved pattern, exceeds 1500 UTF-8 bytes, or contains invalid UTF-16 (a lone surrogate).
+Each case maps to a distinct `InvalidDocumentIdReason`: `not_string`, `empty`, `contains_slash`,
+`reserved_dot_segment`, `reserved_namespace`, `too_long`, `invalid_utf8`. A dot **inside** a name is
+fine — only the exact values `.` and `..` are rejected. Validate a request-supplied id explicitly with
 **`repo.id(raw)`** before use — it returns the value as an `ID` or throws:
 
 ```typescript

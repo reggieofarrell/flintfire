@@ -118,7 +118,8 @@ not in that group.
 
 `fromSnapshot()` maps a raw snapshot back into the repository's read model + `id`. (There is no
 supported getter for a repository's internal `Firestore` instance — keep your own reference to the
-`db` you injected. `FirestoreQueryBuilder.getUnderlyingQuery()` is `@internal` and returns
+`db` you injected. `FirestoreQueryBuilder.getUnderlyingQuery()` is `@internal` — it is stripped from
+the published type declarations, so typed code cannot call it at all without a cast — and returns
 `Query<any>`; it is used by the vector extension and is not a re-entry point into the builder.)
 
 ## Out of scope

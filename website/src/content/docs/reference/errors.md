@@ -76,7 +76,8 @@ Properties:
 Thrown when a document id is malformed. Every id-taking surface validates its id before touching
 Firestore — `repo.id(raw)`, `getById`, `update`, `patch`, `upsert`, `delete`, the `bulk*` methods,
 their `*InTransaction` equivalents, `whereId`, and `whereFilter`'s `f.whereId` — and rejects an id
-that contains `/`, is `.` or `..`, is wrapped in `__…__`, is empty, or exceeds 1500 bytes. On
+that is not a string, is empty, contains `/`, is `.` or `..`, is wrapped in `__…__`, exceeds 1500
+UTF-8 bytes, or contains invalid UTF-16 (a lone surrogate). On
 `bulkWrite`, a malformed id is reported per item in `BulkWriteResult.error` (siblings still write);
 `recursiveDelete` still throws this error for a bad `id`. See
 [Document Identity](/flintfire/guides/concepts/document-identity/).

@@ -33,10 +33,13 @@ Firestore charges for:
 | `bulkCreate(100)`          | 100 writes                                   | Batched but still counts as 100 writes    |
 | `bulkWrite(N ops)`         | N writes                                     | Still 1 write per op; win is parallelism + per-item failure isolation, not cost |
 | `update()`                 | 1 write                                      | Even if updating one field                |
-| `delete()`                 | 1 delete                                     | Permanently removes document              |
+| `delete()`                 | 1 read + 1 delete                            | Existence pre-read, then the delete       |
+| `upsert()`                 | 1 read + 1 write                             | Existence pre-read chooses create vs update |
+| `bulkDelete(N ids)`        | N reads + 1 delete per surviving doc         | One `getAll` existence pre-read, then the batch |
 | `recursiveDelete(id)`      | 1 delete per document in the subtree         | Target + all descendants                  |
 | `recursiveDeleteCollection()` | 1 delete per document across the collection and all descendants | Entire repository collection + nested subcollections |
-| `query().update()`         | 1 write per match                            | Efficient batch update                    |
+| `query().update()`         | 1 read per match + 1 write per match         | Query, then batched writes                 |
+| `query().delete()`         | 1 read per match + 1 delete per match        | Query, then batched deletes                |
 | `onSnapshot()`             | 1 read per doc initially + 1 read per change | Real-time listener costs                  |
 
 ### What Happens Under the Hood
@@ -235,7 +238,7 @@ Based on testing with Firebase Admin SDK:
 | `bulkCreate()`        | 500                | ~800ms | Single batch                       |
 | `bulkCreate()`        | 1000               | ~1.6s  | Split into 2 batches               |
 | `bulkWrite()`         | large mixed set    | —      | Parallel BulkWriter; still 1 write/op (no production timing claimed here) |
-| `getById()`           | 1                  | ~30ms  | Cached locally after first read    |
+| `getById()`           | 1                  | ~30ms  | Single document read               |
 | `query().get()`       | 100                | ~100ms | Includes network + deserialization |
 | `query().count()`     | 10,000             | ~200ms | Aggregation query                  |
 | `query().aggregate()` | filtered set       | ~200ms | Multi-aggregation (one round trip) |
@@ -246,5 +249,6 @@ Based on testing with Firebase Admin SDK:
 **Notes:**
 
 - Network latency varies by region
-- Firestore has built-in caching for frequently accessed docs
+- The Admin SDK has **no** local document cache (that is a client-SDK feature); what persists
+  between calls is the gRPC channel, not document data
 - Use `limit()` and pagination for large collections

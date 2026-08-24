@@ -26,6 +26,35 @@ links and anchors in `website/` are **clean**.
 
 ---
 
+## Resolution
+
+**Applied on branch `docs/apply-v3-audit-findings`** (2026-08-23). 32 of 33 findings fixed in full;
+one partially, noted below. The findings themselves are left as written above — they are the record
+of what was wrong and why, and the rationale is still the best explanation of each fix.
+
+Verified after the edits, not assumed:
+
+- All **210** current-version TypeScript snippets re-extracted and re-compiled against real source;
+  the 35 self-contained ones individually — **zero** genuine API errors.
+- `check:docs` ✓ (190 files, links and heading anchors), `check:format` ✓, `lint` ✓, `test:types` ✓,
+  `docs:build` ✓ (61 pages, Pagefind index built).
+- H1's replacement facade is now pinned by
+  `src/tests/types/enforced-denormalization-facade.type-test.ts` — 13 `@ts-expect-error` guards, so
+  the section cannot silently rot again. That fixture is the structural fix for _why_ H1 shipped: no
+  gate compiled doc snippets.
+
+**L16 applied partially (2 of 4).** The two blocks that could be made valid TypeScript without
+losing anything were fixed (`guides/advanced/vector-search.md`'s object literals now assign to
+consts; `guides/working-with-data/queries.md`'s chain fragments are now complete statements). The
+two remaining blocks — `guides/integrations/cloud-functions.md` and
+`guides/working-with-data/subcollections.md` — are **method-signature displays**, which cannot be
+valid standalone TypeScript without changing what they communicate (a method signature is not a
+statement). Retagging them to a plain fence would cost syntax highlighting for no benefit today,
+since no gate compiles doc snippets. Leave them; a future snippet gate should carry an exclusion
+marker instead.
+
+---
+
 ## High severity
 
 ### H1 — The documented repository-subclassing example does not compile (and the pattern cannot enforce what it claims)

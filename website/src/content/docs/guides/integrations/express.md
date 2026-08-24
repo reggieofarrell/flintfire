@@ -149,8 +149,16 @@ app.listen(3000, () => {
 >   `paginate(pageSize, cursor?)` and requires a prior `orderBy()`. Typed bounds
 >   (`startAt` / `startAfter` / …) and reverse pages (`limitToLast`) are also on the query builder —
 >   see [Queries](/flintfire/guides/working-with-data/queries/).
-> - `update(id, data, { returnDoc: true })` returns the updated document. The `id` field is always
->   stripped from write payloads, so spreading `...req.body` is safe.
+> - `update(id, data, { returnDoc: true })` returns the updated document. A top-level `id` is always
+>   stripped from write payloads, so `...req.body` cannot repoint the document.
+
+:::caution[Spreading `req.body` is mass assignment]
+`id` is stripped and undeclared keys are dropped by Zod, but every field your schema **does** declare
+is writable from the request body — including privilege-bearing ones like `role` or `status`. For any
+endpoint where that matters, pick fields explicitly or validate the request against a narrower
+request-DTO schema rather than the document schema. See
+[Trust Boundary & Security](/flintfire/guides/designing/security-boundary/).
+:::
 
 ## Error-handling middleware
 

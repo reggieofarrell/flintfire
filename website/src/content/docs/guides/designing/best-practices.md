@@ -119,9 +119,9 @@ does not declare a top-level `id` — the repository sources `doc.id` from the d
 ```typescript
 const userSchema = z.object({
   name: z.string(),
-  email: z.string().email(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  email: z.email(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 });
 
 // On create

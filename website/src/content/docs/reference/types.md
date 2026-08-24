@@ -47,8 +47,10 @@ these types describe, see [FirestoreRepository](/flintfire/reference/repository/
   last was — branch on `type`, not on `exists`.
 - **`DetailedQuerySnapshot<R>`** — detailed listener payload: `docs`, `changes`, `size`, `empty`,
   `readTime`.
-- **`InvalidDocumentIdReason`** — machine-readable cause carried by `InvalidDocumentIdError` (the
-  error class is documented in [Error Handling](/flintfire/reference/errors/)).
+- **`InvalidDocumentIdReason`** — machine-readable cause carried by `InvalidDocumentIdError`:
+  `'not_string' | 'empty' | 'contains_slash' | 'reserved_dot_segment' | 'reserved_namespace' |
+  'too_long' | 'invalid_utf8'` (the error class is documented in
+  [Error Handling](/flintfire/reference/errors/)).
 - **`HookEvent`** — union of supported lifecycle hook names.
 - **`HookContext<E>`** — second argument to every lifecycle hook: `event`, `execution`
   (`'direct'` | `'transaction'`), `retryable`, and (on the transaction branch only) diagnostic
@@ -130,6 +132,28 @@ these types describe, see [FirestoreRepository](/flintfire/reference/repository/
   use `StoredDataOf<typeof repo>`.
 - **`SentinelPolicy`** — `'permissive' | 'strict'` (the v3 default is `'strict'`).
 - **`FieldValueKind`** — union of recognized Firestore sentinel kinds.
+- **`BulkWriteOperationKind`** — `'create' | 'set' | 'update' | 'patch' | 'delete'`, the verb set
+  [`bulkWrite`](/flintfire/reference/repository/) accepts.
+- **`BulkWriteOperation<W>`** — one entry in a `bulkWrite` list, discriminated on `op`. Only
+  `create` may omit `id`; only `update` / `patch` / `delete` accept `lastUpdateTime?`.
+- **`BulkWriteResult`** — positional per-operation outcome, discriminated on `ok`. Successes carry
+  `{ index, id, op, ok: true, writeTime }`; failures carry `{ index, id, op, ok: false, error }`
+  plus an optional `failedAttempts` (present only when the backend rejected the write, absent for a
+  validation or malformed-id rejection where nothing was attempted).
+- **`BulkWriteOptions`** — `{ skipHooks?: boolean; throttling? }`. `skipHooks` is required when the
+  repository has any bulk hook registered; `throttling` is forwarded verbatim to `db.bulkWriter`.
+- **`CountAggregation`** — `{ kind: 'count' }`.
+- **`SumAggregation<S>`** / **`AverageAggregation<S>`** — `{ kind: 'sum' | 'average', field }`, where
+  `field` is a numeric stored path (`NumericFieldPaths<S> | FieldPath`).
+- **`AggregationSpecEntry<S>`** — the union of the three above; **`AggregationSpec<S>`** is
+  `Record<string, AggregationSpecEntry<S>>`, the alias → aggregation map
+  [`aggregate(spec)`](/flintfire/reference/query-builder/) takes.
+- **`AggregationResult<Spec>`** — the resolved result for a spec: each alias maps to `number` for
+  `count` / `sum` and `number | null` for `average`.
+- **`QueryExplainResult<R>`** — `{ metrics, documents }` from `explain()`. `documents` is `null` for
+  a plan-only request and `R[]` (possibly `[]`) when `analyze: true`.
+- **`QueryExplainStreamResult<R>`** — one chunk from `explainStream()`; `document` and `metrics` are
+  both optional, because metrics arrive as a separate chunk from the documents.
 
 The package also exports runtime helpers — validation combinators, timestamp utilities, and
 dot-notation utilities — documented on the [Helpers & Utilities](/flintfire/reference/helpers/)

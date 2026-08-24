@@ -79,10 +79,10 @@ Store embeddings on a **top-level field** (for example `embedding`), not nested 
 
 ```typescript
 // RECOMMENDED
-{ title: 'Article', embedding: FieldValue.vector([...]) }
+const recommended = { title: 'Article', embedding: FieldValue.vector(embeddingArray) };
 
 // DISCOURAGED — emulator bugs with nested vector paths
-{ title: 'Article', metadata: { embedding: FieldValue.vector([...]) } }
+const discouraged = { title: 'Article', metadata: { embedding: FieldValue.vector(embeddingArray) } };
 ```
 
 | Concern             | Top-level                               | Nested (`metadata.embedding`)       |
@@ -221,6 +221,9 @@ the Admin SDK. The emulator throws `No explain results` (no metrics from the emu
 
 ### `vectorEmbeddingSchema(dimensions?)`
 
+**Throws** at schema-construction time when `dimensions` is given and is not a positive integer
+`<= VECTOR_MAX_DIMENSIONS`.
+
 Zod helper whose value type is `number[] | VectorValueLike` — a plain number array or a native
 `FieldValue.vector(...)`. It enforces finite components, the exact `dimensions` length (when given),
 and Firestore's maximum (`VECTOR_MAX_DIMENSIONS`) on **both** forms. A forged plain `{ _values }`
@@ -229,7 +232,7 @@ vector `FieldValue` (recognized by nominal `instanceof` identity) passes.
 
 ### `isVectorFieldValue(value)`
 
-Type guard that returns `true` when a value is a genuine Firestore vector `FieldValue` (the result
+Returns `true` when a value is a genuine Firestore vector `FieldValue` (the result
 of `FieldValue.vector(...)`), recognized by nominal identity rather than object shape.
 
 ### Other exports

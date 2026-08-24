@@ -43,7 +43,7 @@ const updatedUser = await userRepo.update(
 // UPDATE WITH MERGE (merges nested fields instead of replacing the object wholesale)
 await userRepo.update('user-123', { 'profile.nickname': 'Ally' }, { merge: true });
 
-// PATCH (always merges — there is no merge option, only { returnDoc? })
+// PATCH (always merges — no merge option; takes { returnDoc?, withMetadata?, lastUpdateTime? })
 await userRepo.patch('user-123', { name: 'Alice Patched' });
 
 // UPSERT (create if doesn't exist, update if exists)
@@ -114,12 +114,15 @@ const projected = await userRepo.getMany(['alice', 'bob'], {
 
 ### Update vs. patch
 
-- `update(id, data, options?)` accepts `{ merge?, returnDoc?, lastUpdateTime? }`. It is always a
+- `update(id, data, options?)` accepts `{ merge?, returnDoc?, withMetadata?, lastUpdateTime? }`
+  (the exported [`UpdateOptions`](/flintfire/reference/types/); `returnDoc` and `withMetadata` are
+  mutually exclusive). It is always a
   **partial** update — unspecified top-level fields are left unchanged. By default a nested object
   in the payload replaces that field's stored value wholesale; pass `{ merge: true }` to deep-merge
   nested objects instead (they are flattened to dot-paths, so sibling nested fields are preserved).
-- `patch(id, data, options?)` accepts `{ returnDoc?, lastUpdateTime? }` — `patch` always merges, so
-  there is no `merge` option to set. `lastUpdateTime` guards the write the same way as on `update`.
+- `patch(id, data, options?)` accepts `{ returnDoc?, withMetadata?, lastUpdateTime? }` — `patch`
+  always merges, so there is no `merge` option to set. `lastUpdateTime` guards the write the same
+  way as on `update`.
 
 Both dot-notation and nested-object updates are supported; see
 [Dot-notation nested updates](/flintfire/guides/working-with-data/dot-notation/) for the merge
@@ -257,11 +260,24 @@ const deletedCount = await userRepo.bulkDelete(['user-1', 'user-2', 'user-3']);
 | Throughput | 500-op sequential commits | parallel, rate-limit ramped |
 | Duplicate ids | rejected | rejected (same-document commit order is undefined) |
 
+Operations are discriminated on `op`, and there are **five** verbs. Only `create` may omit `id`
+(one is generated); only the update/delete verbs accept a `lastUpdateTime` precondition:
+
+| `op`     | Shape                                   | Semantics                                  |
+| -------- | --------------------------------------- | ------------------------------------------ |
+| `create` | `{ op, id?, data }`                     | Create-only; collision → `ConflictError`   |
+| `set`    | `{ op, id, data }`                      | Create or overwrite (the `upsert` verb)    |
+| `update` | `{ op, id, data, lastUpdateTime? }`     | Partial update                             |
+| `patch`  | `{ op, id, data, lastUpdateTime? }`     | Merge-style update                         |
+| `delete` | `{ op, id, lastUpdateTime? }`           | Delete                                     |
+
 ```typescript
 const results = await userRepo.bulkWrite([
   { op: 'create', data: { name: 'Ada', email: 'ada@example.com' } },
+  { op: 'set', id: 'user-0', data: { name: 'Grace', email: 'grace@example.com' } },
   { op: 'update', id: 'user-1', data: { status: 'active' } },
-  { op: 'delete', id: 'user-2' },
+  { op: 'patch', id: 'user-3', data: { profile: { verified: true } } },
+  { op: 'delete', id: 'user-2', lastUpdateTime: token },
 ]);
 
 const failed = results.filter(result => !result.ok);

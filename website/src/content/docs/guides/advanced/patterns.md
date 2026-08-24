@@ -26,7 +26,7 @@ The recipes below are independent; jump to whichever one fits your problem:
 - [Multi-database pattern](#multi-database-pattern)
 - [Data archiving](#data-archiving)
 - [Rate limiting](#rate-limiting)
-- [Subclassing for enforced denormalization](#subclassing-for-enforced-denormalization)
+- [Enforced denormalization](#enforced-denormalization)
 
 ## Custom repository methods
 
@@ -45,7 +45,7 @@ import { Firestore } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
 const userSchema = z.object({
-  email: z.string().email(),
+  email: z.email(),
   active: z.boolean(),
 });
 
@@ -78,8 +78,13 @@ Design constraints for subclasses:
 - Prefer composition (below) when you want `withSchema`'s no-top-level-`id` assertion and options
   bag (`writeSchema`, `readConverter`, `sentinelPolicy`) without re-wiring them through
   `super(...)`.
-- Override write entry points only when you must enforce extra behavior on every path — see
-  [Subclassing for enforced denormalization](#subclassing-for-enforced-denormalization).
+- A subclass built with `super(db, path, makeValidator(schema))` gets runtime **validation** but no
+  attached `schemas` — that is the constructor's 6th argument. So `repo.schemas` is `undefined` and
+  `validate()` / `safeValidate()` throw a config error on such an instance. Pass a
+  `RepositorySchemaSet` too if you need them, or prefer composition over a `withSchema` instance.
+- **Subclassing adds methods; it does not enforce invariants.** Overriding a write method intercepts
+  only that method — most write paths do not route through it. If you need a rule that holds on
+  every write, see [Enforced denormalization](#enforced-denormalization).
 
 ### Composition
 
@@ -426,101 +431,135 @@ export const rateLimitedUserRepo = new RateLimitedRepository(userRepo);
 As with the archiving helper, the generic parameter is constrained with `T extends object` so it
 satisfies `FirestoreRepository`'s type bound.
 
-## Subclassing for Enforced Denormalization
+## Enforced Denormalization
 
-When you must guarantee that base document updates always include connected denormalized writes,
-subclass `FirestoreRepository` and override write entry points so they all route through one
-transactional path. For adding convenience helpers without changing write semantics, see
-[Custom repository methods](#custom-repository-methods) first — the same public-API and `withSchema`
-constraints apply here.
+When a denormalized field must never drift — an order's status mirrored onto its user, a counter that
+has to match its source — you need the rule to hold on **every** write, not just the one you
+remembered to route. This section is about that guarantee.
+
+### 1. Use a facade that owns the write paths
+
+Hold the repositories **private** inside a service and expose only the operations you have written.
+Each one wraps the primary write and its denormalized sibling in a single transaction, so they commit
+together or not at all. The bypass paths are not intercepted — they are simply **unreachable**.
 
 ```typescript
-import {
-  FirestoreDocument,
-  FirestoreRepository,
-  ID,
-  NotFoundError,
-  UpdateInput,
-  UpdateOptions,
-} from 'flintfire';
-import { Firestore } from 'firebase-admin/firestore';
+import { FirestoreRepository } from 'flintfire';
+import type { DataOf, ID, UpdateInput } from 'flintfire';
 
-type Order = {
-  userId: string;
-  status: 'pending' | 'processing' | 'cancelled';
-  updatedAt: string;
-};
+const orderRepo = FirestoreRepository.withSchema(db, 'orders', orderSchema);
+const userRepo = FirestoreRepository.withSchema(db, 'users', userSchema);
 
-type User = {
-  lastOrderId?: string;
-  lastOrderStatus?: string;
-  lastOrderAt?: string;
-};
+type Order = DataOf<typeof orderRepo>;
 
-class OrderRepository extends FirestoreRepository<Order> {
+class OrderService {
   constructor(
-    db: Firestore,
-    private readonly userRepo: FirestoreRepository<User>,
-  ) {
-    super(db, 'orders');
+    private readonly orders: typeof orderRepo,
+    private readonly users: typeof userRepo,
+  ) {}
+
+  // Reads: terminating helpers (see the note below on why the query builder is not exposed).
+  getById(id: ID) {
+    return this.orders.getById(id);
+  }
+  countByStatus(status: Order['status']) {
+    return this.orders.query().where('status', '==', status).count();
+  }
+  listByStatus(status: Order['status'], pageSize: number, cursor?: string | null) {
+    return this.orders
+      .query()
+      .where('status', '==', status)
+      .orderBy('updatedAt')
+      .paginate(pageSize, cursor);
   }
 
-  // All order updates go through one transaction that also updates denormalized user fields.
-  override async update(
-    id: ID,
-    data: UpdateInput<Order>,
-    options?: UpdateOptions,
-  ): Promise<{ id: ID } | FirestoreDocument<Order>> {
-    return this.runInTransaction(async (tx, repo) => {
+  // The only write path — primary write and denormalized sibling in one transaction.
+  async setStatus(id: ID, status: Order['status']): Promise<{ id: ID }> {
+    return this.orders.runInTransaction(async (tx, repo) => {
       const order = await repo.getInTransaction(tx, id);
-      if (!order) {
-        throw new NotFoundError(`Order with id ${id} not found`);
-      }
+      if (!order) throw new Error(`Order ${id} not found`);
 
-      await repo.updateInTransaction(tx, id, data, options);
-      await this.userRepo.updateInTransaction(
+      const patch: UpdateInput<Order> = { status, updatedAt: new Date().toISOString() };
+      await repo.updateInTransaction(tx, id, patch);
+      await this.users.updateInTransaction(
         tx,
         order.userId,
-        {
-          lastOrderId: id,
-          lastOrderStatus: (data as Partial<Order>).status ?? order.status,
-          lastOrderAt: new Date().toISOString(),
-        } as UpdateInput<User>,
+        { lastOrderId: id, lastOrderStatus: status },
         { merge: true },
       );
-
-      if (options?.returnDoc === true) {
-        // A transaction requires all reads before all writes, so we cannot re-read the document
-        // here — build the returned value from the pre-write read (`order`) overlaid with the patch.
-        return { ...order, ...(data as Partial<Order>) };
-      }
 
       return { id };
     });
   }
-
-  // Keep patch behavior aligned by delegating to the overridden update path.
-  override async patch(
-    id: ID,
-    data: UpdateInput<Order>,
-    options?: { returnDoc?: boolean },
-  ): Promise<{ id: ID } | FirestoreDocument<Order>> {
-    if (options?.returnDoc === true) {
-      return this.update(id, data, { merge: true, returnDoc: true });
-    }
-    return this.update(id, data, { merge: true });
-  }
 }
 ```
 
-`patch` deliberately takes only `{ returnDoc?: boolean }` — patch always merges, so there is no
-`merge` option on it. The override reproduces that always-merge behavior by delegating to `update`
-with `{ merge: true }`, keeping both entry points on the same transactional path.
+Because `orders` and `users` are `private`, `orderService.update(...)`, `.upsert(...)`,
+`.bulkUpdate(...)`, `.bulkWrite(...)`, `.delete(...)`, `.recursiveDeleteCollection(...)` and the rest
+are **compile errors** — there is no path to a write that skips `setStatus`.
 
-Why this pattern is useful:
+:::note[Why reads are terminating helpers rather than a query builder]
+Returning the query builder would hand back `query().update()` and `query().delete()`, and narrowing
+it does **not** work: `Omit<FirestoreQueryBuilder<…>, 'update' | 'delete'>` blocks only the immediate
+call, because the chainable clause methods return `this` (typed as the full builder). A single
+`.where(...)` restores the write terminals:
 
-- It prevents accidental base-only writes because callers use your subclass methods, not the raw
-  repository methods.
-- It guarantees base + connected writes are atomic by committing them in one transaction.
-- The same structure applies to `bulkUpdate`/`bulkPatch`, and to create/delete paths when
-  denormalization must be enforced there as well.
+```typescript
+declare const q: Omit<FirestoreQueryBuilder<Order, Order, Order>, 'update' | 'delete'>;
+await q.update({ status: 'shipped' }); // ✗ blocked
+await q.where('status', '==', 'pending').update({ status: 'shipped' }); // ✓ compiles — leak
+```
+
+So expose terminating helpers (`count()`, `paginate()`, `get()` called inside the facade) and let no
+builder escape.
+:::
+
+### 2. Why not subclass and override the write methods?
+
+Because an override is reached by almost nothing. Overriding `update` intercepts `update()` and
+`patch()` (which delegates to it) — and **nothing else**:
+
+| Family   | Override is reached by | Bypassed                                                                                                                             |
+| -------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `update` | `update()`, `patch()`  | `upsert()`, `bulkUpdate()`, `bulkPatch()`, `query().update()`, `bulkWrite()`, `updateInTransaction()`, `patchInTransaction()`         |
+| `create` | `create()`             | `createWithId()`, `bulkCreate()`, `bulkCreateWithIds()`, `upsert()`, `createInTransaction()`, `createWithIdInTransaction()`, `bulkWrite()` |
+| `delete` | `delete()`            | `bulkDelete()`, `query().delete()`, `deleteInTransaction()`, `bulkWrite()`, `recursiveDelete()`, `recursiveDeleteCollection()`        |
+
+`upsert()` is the sharpest surprise: on an existing document it behaves as an update, but it does not
+route through `update()`, so an override never sees it. The transaction-scoped `repo` handed to
+`runInTransaction` is also a plain `FirestoreRepository`, not your subclass, so writes inside a
+transaction callback never re-enter an override either.
+
+Overriding is still the right tool for **adding** behavior to one entry point — see
+[Custom repository methods](#custom-repository-methods). It is not a mechanism for enforcing an
+invariant.
+
+### 3. Hooks: broad coverage, but not atomic
+
+A `before*` hook plus its `beforeBulk*` counterpart covers far more paths than an override, and
+`bulkWrite` **throws** rather than silently skipping when a bulk hook is registered:
+
+| Family   | Hooks to register                    | Coverage                                                                                      |
+| -------- | ------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `update` | `beforeUpdate` + `beforeBulkUpdate`  | all update paths; `bulkWrite` throws                                                          |
+| `create` | `beforeCreate` + `beforeBulkCreate`  | all create paths; `bulkWrite` throws                                                          |
+| `delete` | `beforeDelete` + `beforeBulkDelete`  | all delete paths; `bulkWrite` throws — **but `recursiveDelete()` and `recursiveDeleteCollection()` run no hooks and do not throw** |
+
+Two limits decide whether hooks are enough for you:
+
+- **A hook cannot join the caller's transaction.** `HookContext` carries `event`, `execution`,
+  `retryable` and `attempt` — no transaction handle — so a hook cannot write a sibling document
+  *atomically* with the primary write. Use hooks when eventual consistency is acceptable; use the
+  facade when it is not.
+- **On the delete side there is a silent gap.** The two recursive deletes fire no delete hooks at all
+  (see
+  [operations that run no hooks](/flintfire/guides/concepts/lifecycle-hooks/#operations-that-run-no-hooks)),
+  so a delete invariant enforced by hooks does not hold across them.
+
+### Choosing
+
+| You need                                            | Use                                                       |
+| --------------------------------------------------- | --------------------------------------------------------- |
+| A denormalized write that is **atomic** with its primary write | The facade (§1)                                  |
+| Broad coverage where eventual consistency is fine   | Hooks (§3), minding the recursive-delete gap              |
+| Extra behavior on one specific method               | A subclass override ([custom methods](#custom-repository-methods)) |

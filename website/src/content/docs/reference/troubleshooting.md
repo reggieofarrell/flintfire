@@ -44,8 +44,10 @@ The distinction:
 
 ```typescript
 const result = await repo.runInTransaction(async (tx, repo) => {
-  const doc = await repo.createInTransaction(tx, data);
-  return doc;
+  const { id } = await repo.createInTransaction(tx, data);
+  // A transaction cannot read a document back after writing it, so `createInTransaction`
+  // resolves to `{ id }` only. Return whatever the side effect needs alongside it.
+  return { id, email: data.email };
 });
 
 // Now run side effects (the transaction has committed)
