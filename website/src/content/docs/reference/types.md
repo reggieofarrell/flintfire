@@ -12,11 +12,18 @@ these types describe, see [FirestoreRepository](/flintfire/reference/repository/
 [Helpers & Utilities](/flintfire/reference/helpers/).
 
 - **`ID`** — `string` document-identifier alias.
-- **`RepositoryConstructorArgs<T, W, WO>`** — the positional constructor tuple for
+- **`RepositoryConstructorArgs<T, W, WO, S = any>`** — the positional constructor tuple for
   `FirestoreRepository`:
   `(db, collectionPath, validator?, parentPath?, readConverter?, schemas?, allowLegacyDatastoreIds?)`.
-  The validator is required when `WO` diverges from `W` and optional when they match. Returned by
-  `FirestoreRepository.withSchemaArgs` so subclasses can spread it into `super(...)` (ADR-0042).
+  The validator is required when `WO` diverges from `W` and optional when they match. `S` is the
+  stored (at-rest) type, carried in the `schemas` slot so a subclass's declared `S` is checked against
+  the `storedSchema` it passes. Returned by `FirestoreRepository.withSchemaArgs` so subclasses can
+  spread it into `super(...)` (ADR-0042).
+- **`RepositorySchemaSetFor<S = any>`** — the repository schema bundle
+  (`read` / `create` / `update` / `stored?`), parameterized by the stored type. `stored` is
+  `ZodObject<any> & ZodType<S>`, which is what makes the `S` check above possible.
+  **`RepositorySchemaSet`** is the erased alias (`RepositorySchemaSetFor<any>`) and is what the
+  `repo.schemas` getter returns — the stored type is checked on construction, not imposed on reads.
 - **`FirestoreDocument<T>`** — the flat read-result shape. For a concrete `T`, equivalent to
   `Omit<T, 'id'> & { readonly id: ID }`; for unresolved generics it is a **distributive
   conditional** so union read models narrow correctly (ADR-0028). Returned by every read (`getById`,

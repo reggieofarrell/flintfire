@@ -118,13 +118,14 @@ Design constraints for subclasses:
   positional `undefined`s. Calling `makeValidator(writeSchema)` alone and spreading that into
   `super(...)` is still possible (the constructor is public) but leaves `schemas.read` as the write
   overlay — read validation would then accept `FieldValue` sentinels a read should reject.
-- **You still declare the stored generic `S` yourself, and it is not checked.** `withSchemaArgs`
-  returns the constructor tuple, which carries no stored type — so `S` comes only from your
-  `extends FirestoreRepository<T, W, S, WO>` clause. If you pass a `storedSchema` whose shape differs
-  from the read model (a `readConverter` reshapes reads, say), set `S` to match it: `S` is what types
-  `collectionGroup()` and its field paths, and a mismatch compiles silently even though
-  `schemas.stored` is correct at runtime. Plain repositories, where the stored shape equals the read
-  shape, need nothing extra.
+- **Your declared stored generic `S` is checked against `storedSchema`.** If you pass a
+  `storedSchema` whose shape differs from the read model (because a `readConverter` reshapes reads,
+  say), the `S` in your `extends FirestoreRepository<T, W, S, WO>` clause has to agree with it — a
+  contradiction is a compile error at `super(...)`, not a silent mismatch. That matters because `S`
+  is what types `collectionGroup()` and its field paths. The check rejects an unrelated `S` and one
+  *wider* than the stored schema (which would invent field paths that nothing at rest has); a
+  *narrower* `S` is allowed, since it only under-reports. Plain repositories, where the stored shape
+  equals the read shape, need nothing extra.
 - **Subclassing adds methods; it does not enforce invariants.** Overriding a write method intercepts
   only that method — most write paths do not route through it. If you need a rule that holds on
   every write, see [Enforced denormalization](#enforced-denormalization).

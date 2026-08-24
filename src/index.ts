@@ -78,6 +78,7 @@ export type {
   CreateOutput,
   Validator,
   RepositorySchemaSet,
+  RepositorySchemaSetFor,
   SentinelPolicy,
   FieldValueKind,
 } from './core/Validation.js';

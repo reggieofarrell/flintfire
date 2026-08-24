@@ -92,8 +92,21 @@ spreading into `super(...)`.
    (`...subcollection(..., readSchema, ...)`) survives — every construction error the three
    factories can raise stays **byte-identical** to the pre-refactor wording, pinned by unit tests.
 
-5. **Additive.** A new static; no existing signature changes and no behavior change for existing
-   callers.
+5. **The subclass's declared stored generic `S` is checked, not trusted.**
+   `RepositoryConstructorArgs` takes a 4th parameter `S = any` and types its `schemas` slot
+   `RepositorySchemaSetFor<S>`, so `super(...)` rejects an `extends` clause that contradicts the
+   `storedSchema` passed alongside it. Without this the helper would fix the runtime bundle and
+   leave a silent type-level hole in the same place — a documented caveat instead of an unreachable
+   mistake, which is the outcome decision 3 exists to avoid. See Consequences for the direction the
+   check runs in and why.
+
+6. **Additive, with two backward-compatible type changes.** `withSchemaArgs` is a new static and no
+   runtime behavior changes for existing callers. Two exported _types_ do change shape, both
+   compatibly: `RepositoryConstructorArgs` gains a defaulted 4th parameter (its 3-argument form
+   keeps its previous meaning), and `RepositorySchemaSet` becomes the erased alias
+   `RepositorySchemaSetFor<any>` (identical for reading and for assigning a `ZodObject` into it).
+   The `schemas` getter still returns the erased form, so no consumer is forced to name a stored
+   type.
 
 ## Consequences
 
@@ -109,18 +122,36 @@ in the `extends` clause, which is the part that cannot be inferred.
 constructor directly and reintroduce the hole. This makes the correct path easy and obvious; it does
 not remove the incorrect one, because the constructor is public API.
 
-**The fix is a runtime fix; the stored generic `S` stays unchecked.**
-`RepositoryConstructorArgs<T, W, WO>` has no `S` slot — the constructor's `schemas` parameter is a
-plain `RepositorySchemaSet` — so a tuple-returning helper structurally cannot bind `S`. It comes
-only from the subclass's `extends` clause and is not cross-checked against `options.storedSchema`: a
-mismatch compiles silently even though `schemas.stored` is correct at runtime, and `S` is what types
-`collectionGroup()` and its field paths. `withSchema` does bind it (`z.output<SS>`) because it
-returns an instance. The `SS` type parameter is therefore inference-only on `withSchemaArgs`, kept
-for signature parity and commented as such so it is not "tidied away" on the assumption that `S`
-flows. Binding it would mean adding an `S` parameter to the now-public `RepositoryConstructorArgs`
-and to the constructor's `schemas` slot — a larger change than this ADR's scope, and deliberately
-deferred. Documented in the helper's JSDoc and in the repository reference and subclassing guide
-instead.
+**The stored generic `S` is checked too, not just the runtime bundle.** This was initially scoped
+out and then pulled in, because the alternative was shipping a runtime fix beside a _documented_
+type-level hole — the exact shape of problem this ADR argues against, and on a type
+(`RepositoryConstructorArgs`) that becomes public in the same change, where the arity is cheapest to
+get right once.
+
+`RepositoryConstructorArgs` gains a 4th parameter `S = any`, and its `schemas` slot is typed
+`RepositorySchemaSetFor<S>` — the existing `RepositorySchemaSet` becomes the erased alias
+`RepositorySchemaSetFor<any>`, so consumer annotations keep their previous meaning. The stored slot
+is `z.ZodObject<any> & z.ZodType<S>`: the `ZodObject` half preserves internal `.shape` access, the
+`ZodType<S>` half carries the type. A subclass whose `extends` clause contradicts the `storedSchema`
+it passes now fails at `super(...)`.
+
+The check is **directional, by design**. Zod 4 declares `ZodType<out Output>` covariantly, so:
+
+| Declared `S` vs `storedSchema` | Result       | Rationale                                              |
+| ------------------------------ | ------------ | ------------------------------------------------------ |
+| unrelated shape                | **rejected** | outright contradiction                                 |
+| wider (a field at rest lacks)  | **rejected** | would invent collection-group field paths              |
+| narrower (a subset)            | accepted     | under-reports paths only; unsound in neither direction |
+
+Both unsound directions are caught; the safe one is permitted. Pinned by `@ts-expect-error` guards
+in `src/tests/types/with-schema-args.type-test.ts`, including a deliberately un-guarded narrower
+case so the asymmetry is explicit rather than accidental.
+
+Costs: `RepositorySchemaSetFor` is one more exported type name, and `SS` on `withSchemaArgs` is now
+load-bearing rather than decorative — commented so it is not erased "for simplicity", which would
+silently return `S` to an unverified hand-declaration. The public _read_ surface is unchanged: the
+`schemas` getter still returns the erased `RepositorySchemaSet`, so the stored type is checked on
+the way in and not imposed on the way out.
 
 **Backward compatibility.** None at risk. Note the forward commitment: the returned tuple shape
 becomes public, so it must track `RepositoryConstructorArgs`. Deriving the return type from that

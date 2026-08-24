@@ -54,12 +54,14 @@ write overlay and `schemas.stored` is always populated.
 See [Advanced Patterns](/flintfire/guides/advanced/patterns/) (Custom repository methods).
 `withSchema` and `subcollection` call this internally (one assembly path).
 
-Two limits worth knowing. **The stored generic `S` is not checked against `storedSchema`.** The
-constructor tuple is `RepositoryConstructorArgs<T, W, WO>` and has no `S` slot, so `S` comes only
-from your `extends FirestoreRepository<T, W, S, WO>` clause — a mismatch compiles silently, and `S`
-is what types `collectionGroup()` and its field paths. Declare `S` to match the `storedSchema` you
-pass. (`withSchema` binds it as `z.output<SS>` because it returns an instance rather than a tuple.)
-And `parentPath` is a **marker**: only its presence is read, by `isSubcollection()` — `getParentId()`
+**The stored generic `S` is checked.** The returned tuple carries the stored type, so a subclass
+whose `extends FirestoreRepository<T, W, S, WO>` clause contradicts the `storedSchema` it passes
+fails to compile at the `super(...)` call — you cannot silently mis-declare the shape that types
+`collectionGroup()` and its field paths. The check is directional: an unrelated `S`, or one *wider*
+than the stored schema (claiming a field nothing at rest has), is rejected; a *narrower* `S` is
+accepted, since it only under-reports field paths.
+
+`parentPath` is a **marker**: only its presence is read, by `isSubcollection()` — `getParentId()`
 derives the id from the collection path — so pass the composed subcollection path, as
 `subcollection` does.
 

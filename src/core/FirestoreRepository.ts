@@ -11,6 +11,7 @@ import {
   CreateOutput,
   makeValidator,
   RepositorySchemaSet,
+  RepositorySchemaSetFor,
   SentinelPolicy,
   UpdateInput,
   Validator,
@@ -420,8 +421,18 @@ type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : fals
  *
  * Exported so {@link FirestoreRepository.withSchemaArgs}'s return type stays in lockstep with the
  * constructor (ADR-0042) — subclasses that spread the helper into `super(...)` name the same tuple.
+ *
+ * `S` is the **stored** (at-rest) type. It reaches the tuple through the `schemas` slot
+ * ({@link RepositorySchemaSetFor}), which is what makes a subclass's declared `S` checkable against
+ * the `storedSchema` it actually passes instead of being an unverified hand-declaration. Defaults to
+ * `any` so the erased 3-argument form keeps its previous meaning.
  */
-export type RepositoryConstructorArgs<T extends object, W extends object, WO extends object> =
+export type RepositoryConstructorArgs<
+  T extends object,
+  W extends object,
+  WO extends object,
+  S = any,
+> =
   MutuallyAssignable<W, WO> extends true
     ? [
         db: Firestore,
@@ -429,7 +440,7 @@ export type RepositoryConstructorArgs<T extends object, W extends object, WO ext
         validator?: Validator<W, WO>,
         parentPath?: string,
         readConverter?: ReadConverter<T>,
-        schemas?: RepositorySchemaSet,
+        schemas?: RepositorySchemaSetFor<S>,
         allowLegacyDatastoreIds?: boolean,
       ]
     : [
@@ -438,7 +449,7 @@ export type RepositoryConstructorArgs<T extends object, W extends object, WO ext
         validator: Validator<W, WO>,
         parentPath?: string,
         readConverter?: ReadConverter<T>,
-        schemas?: RepositorySchemaSet,
+        schemas?: RepositorySchemaSetFor<S>,
         allowLegacyDatastoreIds?: boolean,
       ];
 
@@ -461,10 +472,10 @@ export class FirestoreRepository<
   private validator?: Validator<W, WO>;
   private parentPath?: string;
   private readConverter?: ReadConverter<T>;
-  private schemasInternal?: RepositorySchemaSet;
+  private schemasInternal?: RepositorySchemaSetFor<S>;
   private allowLegacyDatastoreIds: boolean;
 
-  constructor(...args: RepositoryConstructorArgs<T, W, WO>) {
+  constructor(...args: RepositoryConstructorArgs<T, W, WO, S>) {
     const [
       db,
       collectionPath,
@@ -479,7 +490,7 @@ export class FirestoreRepository<
       Validator<W, WO>?,
       string?,
       ReadConverter<T>?,
-      RepositorySchemaSet?,
+      RepositorySchemaSetFor<S>?,
       boolean?,
     ];
     this.db = db;
@@ -770,13 +781,13 @@ export class FirestoreRepository<
    * only its presence is observed (by {@link isSubcollection}), and {@link getParentId} derives the
    * parent id from `collectionPath`. Pass the composed subcollection path, as `subcollection` does.
    *
-   * **Limitation — the stored generic `S` is not bound by this helper.** The constructor tuple is
-   * `RepositoryConstructorArgs<T, W, WO>`; it has no `S` slot, so `S` comes solely from the
-   * subclass's own `extends FirestoreRepository<T, W, S, WO>` clause and is NOT cross-checked
-   * against `options.storedSchema`. At runtime `schemas.stored` is always correct (that is what this
-   * helper fixes); at the type level a mismatched `S` compiles silently, and `S` is what types
-   * {@link collectionGroup} and its field paths. Declare `S` to match `storedSchema` yourself.
-   * `withSchema` does bind it (`z.output<SS>`) because it returns an instance rather than a tuple.
+   * **The stored generic `S` is checked, not merely assumed.** The returned tuple carries the stored
+   * type in its `schemas` slot ({@link RepositorySchemaSetFor}), so a subclass whose
+   * `extends FirestoreRepository<T, W, S, WO>` clause contradicts the `storedSchema` it passes fails
+   * to compile at the `super(...)` call. Because Zod 4 declares `ZodType<out Output>` covariantly,
+   * the check rejects an unrelated `S` and a *wider* one — the unsound directions, since `S` types
+   * {@link collectionGroup} and its field paths, and a wider `S` would invent paths that do not exist
+   * at rest — while permitting a narrower `S`, which only under-reports paths.
    *
    * @param db - Firestore database instance
    * @param collectionPath - Collection path (top-level or already-composed subcollection path)
@@ -798,12 +809,10 @@ export class FirestoreRepository<
    */
   // Overload 1 — no `readConverter`: `storedSchema` optional (mirrors withSchema).
   //
-  // `SS` is inference-only here and deliberately absent from the return type: the constructor tuple
-  // has no stored-type slot (see `RepositoryConstructorArgs`), so unlike `withSchema` — which returns
-  // an instance and can bind `z.output<SS>` as the repository's `S` — this helper cannot propagate
-  // it. It is kept for signature parity with `withSchema`/`subcollection` so the three option bags
-  // read identically. Do not "tidy" it away expecting `S` to start flowing; it cannot without adding
-  // an `S` parameter to `RepositoryConstructorArgs` and the constructor's `schemas` slot.
+  // `SS` is load-bearing: it becomes the tuple's stored type (`RepositoryConstructorArgs`'s 4th
+  // parameter), which is what lets `super(...)` reject a subclass whose declared `S` contradicts the
+  // `storedSchema` passed here. Do not erase it to `z.ZodObject<any>` "for simplicity" — that
+  // silently turns the stored generic back into an unverified hand-declaration.
   static withSchemaArgs<
     RS extends z.ZodObject<any>,
     WS extends z.ZodObject<any> = RS,
@@ -820,7 +829,7 @@ export class FirestoreRepository<
       parentPath?: string;
       readConverter?: undefined;
     },
-  ): RepositoryConstructorArgs<z.output<RS>, z.input<WS>, z.output<WS>>;
+  ): RepositoryConstructorArgs<z.output<RS>, z.input<WS>, z.output<WS>, z.output<SS>>;
   // Overload 2 — `readConverter` present: `storedSchema` REQUIRED (review A3 / ADR-0018).
   static withSchemaArgs<
     RS extends z.ZodObject<any>,
@@ -838,7 +847,7 @@ export class FirestoreRepository<
       allowLegacyDatastoreIds?: boolean;
       parentPath?: string;
     },
-  ): RepositoryConstructorArgs<z.output<RS>, z.input<WS>, z.output<WS>>;
+  ): RepositoryConstructorArgs<z.output<RS>, z.input<WS>, z.output<WS>, z.output<SS>>;
   static withSchemaArgs(
     db: Firestore,
     collectionPath: string,

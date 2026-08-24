@@ -112,3 +112,81 @@ export type OverlayArgs = RepositoryConstructorArgs<User, UserWriteIn, UserWrite
 export const namedArgs: OverlayArgs = FirestoreRepository.withSchemaArgs(db, 'users', userRead, {
   writeSchema: userWrite,
 });
+
+// ── E) The stored generic `S` is CHECKED against `storedSchema` (ADR-0042) ──────────────────────
+// The tuple carries the stored type in its `schemas` slot, so a subclass whose `extends` clause
+// contradicts the `storedSchema` it passes cannot compile. Zod 4's `ZodType<out Output>` covariance
+// decides the direction: unrelated and wider are rejected (they would invent collection-group field
+// paths that do not exist at rest); narrower is permitted (it only under-reports paths).
+const storedShape = z.object({ name: z.string(), scoreCents: z.number() });
+type StoredShape = z.output<typeof storedShape>;
+declare const storedConverter: (snap: FirebaseFirestore.QueryDocumentSnapshot) => User;
+
+// E1 — matching S: compiles.
+class MatchingStored extends FirestoreRepository<User, User, StoredShape, User> {
+  constructor() {
+    super(
+      ...FirestoreRepository.withSchemaArgs(db, 'users', userRead, {
+        storedSchema: storedShape,
+        readConverter: storedConverter,
+      }),
+    );
+  }
+}
+export const matchingStored = new MatchingStored();
+
+// E2 — unrelated S: rejected.
+class UnrelatedStored extends FirestoreRepository<User, User, { totallyUnrelated: boolean }, User> {
+  constructor() {
+    super(
+      // @ts-expect-error declared S contradicts the storedSchema passed here
+      ...FirestoreRepository.withSchemaArgs(db, 'users', userRead, {
+        storedSchema: storedShape,
+        readConverter: storedConverter,
+      }),
+    );
+  }
+}
+export const unrelatedStored = new UnrelatedStored();
+
+// E3 — WIDER S: rejected. This is the dangerous direction — `extra` would become a queryable
+// collection-group field path with nothing at rest behind it.
+class WiderStored extends FirestoreRepository<
+  User,
+  User,
+  { name: string; scoreCents: number; extra: boolean },
+  User
+> {
+  constructor() {
+    super(
+      // @ts-expect-error declared S claims a field the stored schema does not have
+      ...FirestoreRepository.withSchemaArgs(db, 'users', userRead, {
+        storedSchema: storedShape,
+        readConverter: storedConverter,
+      }),
+    );
+  }
+}
+export const widerStored = new WiderStored();
+
+// E4 — narrower S: permitted (under-permissive only). NO @ts-expect-error here on purpose; this
+// line compiling is the documented, intended asymmetry.
+class NarrowerStored extends FirestoreRepository<User, User, { name: string }, User> {
+  constructor() {
+    super(
+      ...FirestoreRepository.withSchemaArgs(db, 'users', userRead, {
+        storedSchema: storedShape,
+        readConverter: storedConverter,
+      }),
+    );
+  }
+}
+export const narrowerStored = new NarrowerStored();
+
+// E5 — plain repository (no storedSchema): S defaults to T, still compiles with nothing extra.
+class PlainStored extends FirestoreRepository<User> {
+  constructor() {
+    super(...FirestoreRepository.withSchemaArgs(db, 'users', userRead));
+  }
+}
+export const plainStored = new PlainStored();
