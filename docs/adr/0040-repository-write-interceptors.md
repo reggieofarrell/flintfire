@@ -211,12 +211,14 @@ teardown.
 - **Expose the transaction handle on `HookContext`.** Cheap — `buildHookContext` already has a
   transaction branch — and worth doing on its own merits, but insufficient as the answer: it only
   helps callers already inside a transaction, so a plain `update()` remains unprotected.
-- **A composition facade as a library feature.** Kept as a _documented pattern_, rejected as a
-  feature. It enforces by construction, but it cannot compose with the bulk helpers, and narrowing
-  the query builder does not hold: `Omit<FirestoreQueryBuilder<…>, 'update' | 'delete'>` is defeated
-  by the fluent `this` return type, so one `.where(...)` hands the write terminals back. A facade
-  must therefore hide the builder entirely, which is appropriate for an application but not for a
-  library primitive.
+- **A composition facade as a library feature.** Kept as a _documented pattern_, rejected as the
+  enforcement primitive: it enforces by construction, but it cannot compose with the bulk helpers,
+  so it narrows the surface rather than guaranteeing the invariant. Note that one obstacle
+  originally cited here is **not** real: `Omit<FirestoreQueryBuilder<…>, 'update' | 'delete'>` is
+  indeed defeated by the fluent `this` return type, but a **self-returning** read-only builder type
+  holds at any chain depth, so a facade does not have to hide the query builder. See the
+  `ReadOnlyQuery` follow-up in the [docs audit](../audits/2026-08-23-website-docs-audit.md) — that
+  is an independent, additive type-level improvement, not a prerequisite for this ADR.
 - **An opt-in atomic-boundary write API** (`updateAtomic(id, data, ({ tx, repo }) => …)`). Honest
   and general, but opt-in per call site — convenient, not enforcing. Worth adding later as sugar
   over interceptors.

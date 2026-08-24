@@ -138,10 +138,10 @@ Keep the surrounding structure; replace the example. The facade holds the reposi
 so the only reachable writes are the ones it declares, and each wraps the primary write plus its
 denormalized sibling in one `runInTransaction`.
 
-**Non-obvious constraint the new section must state:** the facade must **not** expose the query
-builder. `Omit<FirestoreQueryBuilder<…>, 'update' | 'delete'>` does **not** hold — clause methods
-return `this` (typed as the full builder), so a single `.where(...)` hands the write terminals
-straight back. Verified:
+**Non-obvious constraint — and it is preventable, see the follow-up below.**
+`Omit<FirestoreQueryBuilder<…>, 'update' | 'delete'>` does **not** hold: clause methods return
+`this` (typed as the full builder), so a single `.where(...)` hands the write terminals straight
+back. Verified:
 
 ```typescript
 declare const q: Omit<FirestoreQueryBuilder<O, O, O>, 'update' | 'delete'>;
@@ -150,8 +150,11 @@ await q.where('status', '==', 'pending').update({ status: 'shipped' }); // ✓ C
 await q.orderBy('status').delete(); // ✓ COMPILES — leak
 ```
 
-Expose **terminating** read helpers instead (`getById`, `countByStatus`, `listByStatus` → `count()`
-/ `paginate()` internally), so no builder escapes.
+**Until the library ships a read-only builder type** (follow-up L-A below), the section must expose
+**terminating** read helpers instead (`getById`, `countByStatus`, `listByStatus` → `count()` /
+`paginate()` internally) so no builder escapes. Once that type exists, the section can hand back a
+real query builder and this caveat is deleted rather than maintained — so write the read-helper
+paragraph as a self-contained block that can be swapped out.
 
 The replacement example was written and type-checked against real source: every read/write helper
 compiles, and **all 12** bypass paths — `update`, `patch`, `upsert`, `createWithId`, `bulkUpdate`,
@@ -177,6 +180,40 @@ the build).
    finding existed because no doc snippet is currently compiled by any gate.
 
 ### Library follow-up (out of scope for the docs fix)
+
+**L-A — ship a `ReadOnlyQuery` builder type so the `Omit` leak above is impossible.** Small,
+additive, and independent of everything else here. Two shapes were compiled against real source and
+**both hold at any chain depth**:
+
+- **Export the existing `FirestoreQueryBuilderBase`.** Nearly free — it is already write-free
+  (`update` / `delete` live only on the concrete subclass) and is simply not exported. `this` types
+  resolve to the _declared_ type of the receiver, not the runtime class, so a base-typed variable
+  never regains the write terminals. **But it is lossy:** `whereFilter`, `select`, `whereId`,
+  `orderById`, and `collectionCount` live on the concrete class (their types differ between the
+  collection and collection-group builders, which is why they are not on the base), so a facade
+  would lose five read methods.
+- **A self-returning `ReadOnlyQuery<…>` type (recommended).** Chainable methods return
+  `ReadOnlyQuery` instead of `this`, so narrowing survives every clause call _and_ through
+  `select()`'s `DeepPartial` narrowing. `repo.query()` is assignable to it structurally, **with no
+  cast**. It can include all five concrete-class read methods, so nothing is lost.
+
+Two details that make the recommended shape maintainable:
+
+- **Derive parameters from the real builder** —
+  `where(...a: Parameters<QB['where']>): ReadOnlyQuery<…>` — so only the _return_ type is overridden
+  and parameter drift is impossible.
+- **Add a drift guard** so a read method added to the builder cannot silently go missing:
+
+  ```typescript
+  type Missing = Exclude<keyof QB, keyof ReadOnlyQuery<…> | 'update' | 'delete'>;
+  // must be `never`; assert it in src/tests/types/
+  ```
+
+  Verified to fire correctly on a deliberately incomplete `ReadOnlyQuery`.
+
+Caveat to document: this is **type-level only**. A cast still reaches `update()` / `delete()`. A
+runtime `Proxy` wrapper could close that, but it is likely not worth the surface — the facade's
+purpose is compile-time enforcement.
 
 Recorded here because the docs fix documents a workaround, not a capability. Enforced
 denormalization and the planned transactional outbox want the **same** missing primitive: _a write
