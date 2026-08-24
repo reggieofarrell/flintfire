@@ -15,10 +15,10 @@
  *    as the guide shows them.
  *  - EVERY write path is unreachable through the facade. The repositories are `private`, so each
  *    bypass below is a compile error rather than a silent write that skips the denormalized sibling.
- *  - The facade does NOT hand back a query builder. `Omit<FirestoreQueryBuilder, 'update'|'delete'>`
- *    does not hold — clause methods return `this` (the full builder), so one `.where(...)` restores
- *    the write terminals. The `leakIsReal` guard below pins that fact, so if a future change makes
- *    `Omit` sufficient (see ADR-0041) this test fails loudly and the guide can be simplified.
+ *  - The facade DOES hand back a `ReadOnlyQuery`. That type keeps `update()` / `delete()` absent at
+ *    every chain depth (ADR-0041). `Omit<FirestoreQueryBuilder, 'update'|'delete'>` still leaks after
+ *    one `.where(...)` — that fact stays pinned below as the reason `ReadOnlyQuery` exists. The
+ *    read-only contract itself lives in `src/tests/types/read-only-query.type-test.ts`.
  *
  * Each `@ts-expect-error` FAILS the type-check if the line below it stops being an error; every
  * un-annotated call must type-check.
@@ -26,7 +26,7 @@
 import { z } from 'zod';
 import { Firestore } from 'firebase-admin/firestore';
 import { FirestoreRepository, FirestoreQueryBuilder } from '../../index.js';
-import type { DataOf, ID, UpdateInput } from '../../index.js';
+import type { DataOf, ID, ReadOnlyQuery, UpdateInput } from '../../index.js';
 
 declare const db: Firestore;
 
@@ -53,6 +53,10 @@ class OrderService {
 
   getById(id: ID) {
     return this.orders.getById(id);
+  }
+  /** Hand the fluent builder across the boundary without its write terminals (ADR-0041). */
+  query(): ReadOnlyQuery<Order> {
+    return this.orders.query();
   }
   countByStatus(status: Order['status']) {
     return this.orders.query().where('status', '==', status).count();
@@ -91,11 +95,13 @@ async function documentedSurfaceCompiles() {
   const doc = await orders.getById('o1');
   const total: number = await orders.countByStatus('pending');
   const page = await orders.listByStatus('pending', 20);
+  // The new accessor: chain through ReadOnlyQuery without reaching update/delete.
+  const pending = await orders.query().where('status', '==', 'pending').orderBy('updatedAt').get();
   const written: { id: ID } = await orders.setStatus('o1', 'shipped');
-  return [doc, total, page.items, page.nextCursor, written];
+  return [doc, total, page.items, page.nextCursor, pending, written];
 }
 
-/** Every write path must be unreachable — twelve guards, one per bypass. */
+/** Every write path must be unreachable — twelve facade-level guards plus two query-chain guards. */
 async function everyWritePathIsBlocked() {
   // @ts-expect-error  update() is not on the facade
   await orders.update('o1', { status: 'shipped' });
@@ -121,14 +127,17 @@ async function everyWritePathIsBlocked() {
   await orders.recursiveDelete('o1');
   // @ts-expect-error  recursiveDeleteCollection() is not on the facade
   await orders.recursiveDeleteCollection();
-  // @ts-expect-error  no query builder escapes, so query().update()/delete() are unreachable
-  await orders.query();
+  // @ts-expect-error  ReadOnlyQuery withholds update() on the immediate builder
+  await orders.query().update({ status: 'shipped' });
+  // @ts-expect-error  and after a clause call — the leak `Omit` would reopen here
+  await orders.query().where('status', '==', 'pending').delete();
 }
 
 /**
- * Pins WHY the facade exposes terminating read helpers instead of the builder: `Omit` narrowing is
- * defeated by the fluent `this` return type. If ADR-0041 lands a self-returning read-only type,
- * the second assertion here starts failing — which is the signal to update the guide.
+ * Pins WHY `ReadOnlyQuery` exists: a bare `Omit` of the write terminals is defeated by the fluent
+ * `this` return type. This assertion must KEEP passing — it documents the anti-pattern, not a
+ * signal that ADR-0041 will flip. The positive read-only contract is in
+ * `src/tests/types/read-only-query.type-test.ts`.
  */
 async function omitNarrowingLeakIsReal() {
   type Narrowed = Omit<FirestoreQueryBuilder<Order, Order, Order>, 'update' | 'delete'>;

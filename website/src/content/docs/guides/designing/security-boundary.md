@@ -64,6 +64,21 @@ Both require a schema-configured repository. See
 boundary and [Schema Validation](/flintfire/guides/concepts/schema-validation/) for the
 read-validation contract.
 
+## Withholding query write terminals
+
+When a facade should expose filtering, ordering, and terminal reads but not `query().update()` /
+`query().delete()`, annotate the accessor as `ReadOnlyQuery` — `repository.query()` is assignable
+with no cast, and the write terminals stay absent at every chain depth. See
+[Enforced denormalization](/flintfire/guides/advanced/patterns/#enforced-denormalization) for the
+facade pattern and
+[Read-only view](/flintfire/reference/query-builder/#read-only-view) for the type contract.
+
+```typescript
+query(): ReadOnlyQuery<Order> {
+  return this.orders.query();
+}
+```
+
 ## Out of scope
 
 The ORM does not manage Firestore security rules, IAM, or authentication — those live in your

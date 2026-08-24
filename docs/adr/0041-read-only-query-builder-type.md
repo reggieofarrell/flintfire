@@ -1,6 +1,6 @@
 # ADR-0041: Export a read-only query builder type (`ReadOnlyQuery`)
 
-- **Status:** Proposed
+- **Status:** Accepted (v3.x, pending merge/release)
 - **Date:** 2026-08-23
 - **Deciders:** Reggie O'Farrell
 - **Related:** Issue [#100](https://github.com/reggieofarrell/flintfire/issues/100);
@@ -58,23 +58,44 @@ concrete class — and excluding `update` and `delete`.
    facade annotates its return type and is done. No wrapper object, no runtime cost, no new
    construction seam.
 
-3. **Parameters are derived from the real builder, not restated.**
+3. **Clause parameters are derived from the real builder; terminals are inherited.** For the 13
+   chainable clause members, only the _return_ type is overridden:
 
    ```typescript
    where(...a: Parameters<QB['where']>): ReadOnlyQuery<…>;
    ```
 
-   Only the _return_ type is overridden, so a signature change on `FirestoreQueryBuilder` propagates
-   automatically and parameter drift is structurally impossible.
+   so a _change_ to an existing signature on `FirestoreQueryBuilder` propagates automatically and
+   parameter drift of that kind is structurally impossible. **Do not** apply `Parameters` /
+   `ReturnType` to terminal reads (`get`, `getOne`, `stream`, `paginate`, `offsetPaginate`,
+   `paginateWithCount`, `aggregate`, `distinctValues`, …): those utilities resolve an overloaded
+   member to its **last** signature and erase type parameters. Measured casualties: `whereId`'s
+   comparison overload disappears; `{ withMetadata: true }` overloads disappear; `aggregate` /
+   `distinctValues` lose their generics. Terminals are therefore inherited **verbatim** through
+   `Omit`, which is a homomorphic mapped type and copies overloads and generics unchanged. `whereId`
+   itself is hand-written as two overloads for the same reason.
 
-4. **A drift guard pins the member set**, asserted in `src/tests/types/`:
+   **Standing obligation:** deriving with `Parameters` does **not** protect against a _newly added_
+   overload. `Parameters` still resolves the last signature, so inserting e.g.
+   `where(filter: Filter): this` before the existing 3-arg form on the concrete builder would leave
+   `ReadOnlyQuery.where` on the old shape while the key-set / `NoWrites` guards stay green. Adding
+   an overload to a chainable clause requires hand-writing that clause on `ReadOnlyQuery`, the way
+   `whereId` already is. A parameter-equality assert is a tautology and catches nothing.
+
+4. **A two-sided, asserted drift guard pins the member set**, in
+   `src/tests/types/read-only-query.type-test.ts`:
 
    ```typescript
-   type Missing = Exclude<keyof QB, keyof ReadOnlyQuery<…> | 'update' | 'delete'>; // must be `never`
+   type Missing = Exclude<keyof QB, keyof ReadOnlyQuery<…> | 'update' | 'delete'>;
+   type Extra = Exclude<keyof ReadOnlyQuery<…>, keyof QB>;
+   type _ = AssertTrue<ExpectEqual<Missing, never>>;
+   type __ = AssertTrue<ExpectEqual<Extra, never>>;
    ```
 
-   A read method added to the builder but not to `ReadOnlyQuery` fails the type gate. This was
-   verified to fire on a deliberately incomplete `ReadOnlyQuery`.
+   A bare `type Missing = …` alias emits **no** diagnostic even when `Missing` resolves to a real
+   key — measured. The guard must terminate in `AssertTrue`, and it must be two-sided (`Extra` as
+   well), or a stray/misspelled member on `ReadOnlyQuery` goes unnoticed. A separate per-clause
+   `NoWrites` matrix catches a wrong return type that the key-set guards are blind to.
 
 5. **Type-level only, stated as such.** A cast still reaches `update()`. We will not ship a runtime
    `Proxy` wrapper: the purpose is compile-time enforcement of an application's own boundary, and a
@@ -82,6 +103,17 @@ concrete class — and excluding `update` and `delete`.
    against a caller who is deliberately casting.
 
 6. **Additive.** A new exported type; no existing signature changes, no behavior changes.
+
+7. **Exported as an `interface`, not a type alias.** Both shapes compile and behave identically for
+   assignability, but an alias prints a multi-thousand-character `Omit<…> & { where(…): …; … }`
+   intersection in every hover and every error message. For a type whose product is a legible
+   compile error, that is disqualifying — the interface form prints `ReadOnlyQuery<…>`.
+
+8. **Parameter list is `<T, W = T, S = T, R = FirestoreDocument<T>>`**, positionally identical to
+   `FirestoreQueryBuilder`. `W` is a documented phantom: no read member references it, so it does
+   not affect assignability, but dropping it makes the ubiquitous three-argument form
+   `ReadOnlyQuery<Order, Order, Order>` silently re-bind `R = Order` (rows without `id`) and still
+   compile.
 
 ## Consequences
 
@@ -92,22 +124,27 @@ terminating read helpers such as `countByStatus` / `listByStatus` so no builder 
 audit finding H1's caveat be **deleted** rather than maintained.
 
 **Harder / costs.** `ReadOnlyQuery` is a parallel surface over the query builder, so it is a drift
-risk by construction. Decisions 3 and 4 exist specifically to bound that: parameters cannot drift at
-all, and a missing member fails the type gate. What remains unguarded is a _newly added_ read method
-being added to both places with mismatched intent, which review must catch.
+risk by construction. Decisions 3 and 4 exist specifically to bound that: an existing signature
+change cannot drift via `Parameters`, and a missing member fails the type gate; a _new_ clause
+overload still requires a hand-written redeclaration (decision 3's standing obligation). What
+remains unguarded is a _newly added_ read method being added to both places with mismatched intent,
+which review must catch.
 
-**A maintenance note for future readers.** The `Missing` guard looks like inert type noise. It is
-not: without it, `ReadOnlyQuery` silently falls behind the builder. And `ReadOnlyQuery` must not be
-"simplified" back to `Omit<FirestoreQueryBuilder<…>, 'update' | 'delete'>` — that reintroduces the
-leak this ADR exists to close, and it does so silently, because the `Omit` still blocks the
-immediate call.
+**A maintenance note for future readers.** The asserted `Missing` / `Extra` guards look like inert
+type noise. They are not: without them, `ReadOnlyQuery` silently falls behind the builder. And
+`ReadOnlyQuery` must not be "simplified" back to
+`Omit<FirestoreQueryBuilder<…>, 'update' | 'delete'>` — that reintroduces the leak this ADR exists
+to close, and it does so silently, because the `Omit` still blocks the immediate call.
 
 **Backward compatibility.** None at risk on arrival. Note the forward commitment, though: once
 consumers annotate facades with `ReadOnlyQuery`, its shape is a public contract, and removing a
 member from it is a breaking change.
 
-**Scope left open.** Whether the collection-group builder wants the same treatment — it declares no
-`update` / `delete` at all, so it may need nothing.
+**Collection-group and vector builders need nothing.** `keyof FirestoreCollectionGroupQueryBuilder`
+contains neither `update` nor `delete` (31 public members); `keyof VectorQueryBuilder` is ten read
+members with no writes. `ReadOnlyQuery` is nonetheless re-exported from the `/vector` barrel,
+because `withVectorSearch` proxies `query()` unchanged and `core/QueryBuilder` has no export-map
+subpath — a facade over a vector-enabled repository still needs the name from that specifier.
 
 ## Alternatives considered
 
@@ -130,6 +167,8 @@ member from it is a breaking change.
 - **Document the leak and prescribe terminating read helpers.** This is the interim state and what
   the audit currently specifies. Rejected as the end state: it asks every consumer to give up the
   query builder because of a type-system detail the library can fix once.
+- **Drop the `W` type parameter "because it is unused".** Rejected — see decision 8.
+- **A recursive `type` alias instead of an `interface`.** Rejected — see decision 7.
 
 ## References
 
@@ -137,7 +176,10 @@ member from it is a breaking change.
 - [v3 docs audit](https://github.com/reggieofarrell/flintfire/blob/0ef66cb3888496d0959a82ec2068546265be5928/docs/audits/2026-08-23-website-docs-audit.md)
   — finding H1 (the facade rewrite that surfaced this) and follow-up L-A (the verified shapes). The
   audit was working material, removed in `80ece9a`; permalinked at `0ef66cb`.
-- `src/core/QueryBuilder.ts` — `FirestoreQueryBuilderBase` vs `FirestoreQueryBuilder` member split
+- `src/core/QueryBuilder.ts` — `FirestoreQueryBuilderBase` vs `FirestoreQueryBuilder` member split;
+  `ReadOnlyQuery` declaration
+- `src/tests/types/read-only-query.type-test.ts` — asserted two-sided drift guards, per-clause
+  `NoWrites` matrix, overload/generic survival, facade assignability
 - [ADR-0028](0028-distributive-omit-id.md) — precedent for a purely type-level exported-helper
   decision
 - [TypeScript: polymorphic `this` types](https://www.typescriptlang.org/docs/handbook/2/classes.html#this-types)

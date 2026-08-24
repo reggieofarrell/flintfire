@@ -2290,6 +2290,142 @@ export class FirestoreQueryBuilder<
 }
 
 /**
+ * The chainable clause members of {@link FirestoreQueryBuilder} — every member whose declared return
+ * type is `this`, plus `select`, which returns a re-parameterized builder. This is exactly the set
+ * {@link ReadOnlyQuery} must re-declare: an `Omit` keeps the member but leaves its return type
+ * pointing at the full builder, which is the leak ADR-0041 exists to close.
+ *
+ * Do NOT replace this with a conditional type that derives the set from `keyof`. The list is short,
+ * `src/tests/types/read-only-query.type-test.ts` checks it from both sides, and a derived version
+ * reads as clever while catching nothing extra.
+ *
+ * Do NOT mark this helper for stripInternal (the TypeScript JSDoc tag that removes declarations from
+ * `.d.ts` emit — trap T5). `tsconfig` sets `stripInternal: true`; applying that tag here would strip
+ * this declaration and leave a dangling reference in the published `.d.ts`. The packed-consumer check
+ * names `ReadOnlyQuery` and asserts write keys stay absent so that regression fails CI.
+ *
+ * (Avoid writing the stripInternal tag name with a leading "@" anywhere in this block — TypeScript
+ * parses it as the tag and would strip this helper the same way.)
+ */
+type ReadOnlyQueryClauseKeys =
+  | 'where'
+  | 'whereFilter'
+  | 'whereId'
+  | 'orderBy'
+  | 'orderById'
+  | 'limit'
+  | 'limitToLast'
+  | 'offset'
+  | 'startAt'
+  | 'startAfter'
+  | 'endAt'
+  | 'endBefore'
+  | 'select';
+
+/**
+ * A **read-only view** of {@link FirestoreQueryBuilder}: the entire read surface — filtering,
+ * composite filters, document-name queries, ordering, projection, bounds, aggregation, pagination,
+ * streaming, listeners, explain — with `update()` and `delete()` absent **at every chain depth**
+ * (ADR-0041).
+ *
+ * Hand this out from a facade that owns its own write paths. `repository.query()` is assignable with
+ * **no cast** — annotate the return type and you are done. There is no wrapper object and no runtime
+ * cost; this type erases completely.
+ *
+ * @example
+ * class OrderService {
+ *   constructor(private readonly orders: typeof orderRepo) {}
+ *   query(): ReadOnlyQuery<Order> {
+ *     return this.orders.query(); // structural — no cast
+ *   }
+ * }
+ *
+ * await svc.query().where('status', '==', 'pending').orderBy('updatedAt').get(); // ✓
+ * await svc.query().where('status', '==', 'pending').update({ status: 'shipped' }); // ✗ TS2339
+ *
+ * @remarks
+ * **Why not `Omit<FirestoreQueryBuilder<…>, 'update' | 'delete'>`?** TypeScript resolves a `this`
+ * return type against the *declared* type of the receiver. The `Omit` blocks the immediate call and
+ * then hands the full builder back from the first `.where(...)`, so the narrowing survives exactly
+ * one expression. Every clause member below returns `ReadOnlyQuery` instead, so it survives
+ * transitively. Never "simplify" this back to an `Omit`: that reintroduces the leak *silently*,
+ * because the blocked immediate call still looks like proof.
+ *
+ * **Type-level only.** A deliberate cast back to `FirestoreQueryBuilder` still reaches `update()`.
+ * The purpose is compile-time enforcement of an application's own boundary (ADR-0041, decision 5).
+ *
+ * @template T - **read data** (no `id`) — same meaning as on {@link FirestoreQueryBuilder}.
+ * @template W - **write model.** Accepted for positional parity with
+ *   {@link FirestoreQueryBuilder}`<T, W, S, R>`, so a signature can be copied across without
+ *   silently re-binding `S` / `R`. No read member references it, so it does not affect assignability.
+ * @template S - **stored data** — the source of query FIELD PATHS.
+ * @template R - the current result shape of terminal reads; `select(...)` narrows it exactly as on
+ *   the concrete builder.
+ */
+export interface ReadOnlyQuery<
+  T extends object,
+  W extends object = T,
+  S extends object = T,
+  R = FirestoreDocument<T>,
+> extends Omit<FirestoreQueryBuilder<T, W, S, R>, 'update' | 'delete' | ReadOnlyQueryClauseKeys> {
+  // Every terminal read (`get`, `getOne`, `count`, `exists`, `sum`, `average`, `aggregate`,
+  // `distinctValues`, `paginate`, `offsetPaginate`, `paginateWithCount`, `stream`, `onSnapshot`,
+  // `onSnapshotDetailed`, `explain`, `explainStream`, `collectionCount`, `getUnderlyingQuery`) is
+  // INHERITED from the `Omit` above and must stay that way. Restating one as
+  // `(...a: Parameters<QB[k]>): ReturnType<QB[k]>` breaks it silently: `Parameters` / `ReturnType`
+  // resolve an overloaded member to its LAST signature and erase type parameters, so
+  // `get({ withMetadata: true })` would lose its `WithMetadata` overload and `aggregate` /
+  // `distinctValues` would lose their generics. `Omit` is a homomorphic mapped type and copies the
+  // property type verbatim, overloads and generics included.
+  //
+  // Only the clause members below are re-declared, and only their RETURN type is written by hand;
+  // parameters are derived from the real builder so a *change* to an existing signature cannot
+  // drift (ADR-0041, decision 3). That is NOT proof against a *newly added* overload: `Parameters`
+  // still resolves the last signature, so adding e.g. `where(filter: Filter): this` before the
+  // 3-arg form on the concrete builder would leave `ReadOnlyQuery.where` on the old shape while
+  // T-1/T-2/T-3 stay green. Adding an overload to a chainable clause requires hand-writing that
+  // clause on `ReadOnlyQuery`, the way `whereId` already is.
+  where(...a: Parameters<FirestoreQueryBuilder<T, W, S, R>['where']>): ReadOnlyQuery<T, W, S, R>;
+  whereFilter(
+    ...a: Parameters<FirestoreQueryBuilder<T, W, S, R>['whereFilter']>
+  ): ReadOnlyQuery<T, W, S, R>;
+  // Spelled out rather than derived: `whereId` is overloaded, and `Parameters<…>` collapses it to
+  // the last signature — which would leave only `in` / `not-in` and reject `whereId('==', id)`.
+  whereId(op: '<' | '<=' | '==' | '!=' | '>=' | '>', value: string): ReadOnlyQuery<T, W, S, R>;
+  whereId(op: 'in' | 'not-in', value: readonly string[]): ReadOnlyQuery<T, W, S, R>;
+  orderBy(
+    ...a: Parameters<FirestoreQueryBuilder<T, W, S, R>['orderBy']>
+  ): ReadOnlyQuery<T, W, S, R>;
+  orderById(
+    ...a: Parameters<FirestoreQueryBuilder<T, W, S, R>['orderById']>
+  ): ReadOnlyQuery<T, W, S, R>;
+  limit(...a: Parameters<FirestoreQueryBuilder<T, W, S, R>['limit']>): ReadOnlyQuery<T, W, S, R>;
+  limitToLast(
+    ...a: Parameters<FirestoreQueryBuilder<T, W, S, R>['limitToLast']>
+  ): ReadOnlyQuery<T, W, S, R>;
+  offset(...a: Parameters<FirestoreQueryBuilder<T, W, S, R>['offset']>): ReadOnlyQuery<T, W, S, R>;
+  // The four bound members are overloaded too, but their LAST overload is the permissive
+  // `(...fieldValues: unknown[])`, which also accepts the `DocumentSnapshot` form — so deriving is
+  // lossless for today's overload sets. Same standing obligation as above: a *new* overload added
+  // ahead of the rest form must be hand-written on `ReadOnlyQuery` (it is not caught by Parameters).
+  startAt(
+    ...a: Parameters<FirestoreQueryBuilder<T, W, S, R>['startAt']>
+  ): ReadOnlyQuery<T, W, S, R>;
+  startAfter(
+    ...a: Parameters<FirestoreQueryBuilder<T, W, S, R>['startAfter']>
+  ): ReadOnlyQuery<T, W, S, R>;
+  endAt(...a: Parameters<FirestoreQueryBuilder<T, W, S, R>['endAt']>): ReadOnlyQuery<T, W, S, R>;
+  endBefore(
+    ...a: Parameters<FirestoreQueryBuilder<T, W, S, R>['endBefore']>
+  ): ReadOnlyQuery<T, W, S, R>;
+  // Mirrors the concrete builder's projection narrowing, re-parameterized on ReadOnlyQuery so the
+  // read-only guarantee survives a `select()` too.
+  select(
+    ...a: Parameters<FirestoreQueryBuilder<T, W, S, R>['select']>
+  ): ReadOnlyQuery<T, W, S, FirestoreDocument<DeepPartial<T>>>;
+}
+
+/**
  * Returns the underlying Firestore Query for package-internal composition.
  * Used by the vector search extension (`flintfire/vector`).
  */
