@@ -211,6 +211,10 @@ the build).
      `withSchema` does internally.
    - `schemas.stored` is not set by the fallback; only `collectionGroup()` consults it.
 
+   The overlay hole is a silent correctness failure rather than an inconvenience, so it is tracked
+   for a library fix: [ADR-0042](../adr/0042-subclass-schema-argument-assembly.md) /
+   [#102](https://github.com/reggieofarrell/flintfire/issues/102).
+
    Method note: this finding was originally inferred from the constructor's parameter list without
    reading its body — the exact failure mode this audit criticizes elsewhere. It is the one entry
    here that was not verified against behavior before being written.
