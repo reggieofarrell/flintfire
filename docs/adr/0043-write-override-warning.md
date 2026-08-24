@@ -14,10 +14,10 @@
 Subclassing `FirestoreRepository` and overriding a write method (`update`, `create`, `delete`, …)
 compiles and looks like an enforced invariant. It is not. Sibling write paths do not self-delegate
 through the override: only a minority of entry points reach a given override (roughly 2/9 update,
-1/8 create, 1/7 delete on the audited matrix). `patch` is the notable exception — it delegates to
-`this.update`, so an `update` override _is_ reached by `patch()`. Factory helpers (`withSchema`,
-`subcollection`) and the transaction-scoped repo allocate a plain `FirestoreRepository`, dropping
-subclass identity entirely.
+1/8 create, 1/7 delete on the audited matrix). `patch` / `patchInTransaction` are the notable
+exceptions — they self-delegate to `this.update` / `this.updateInTransaction`, so those overrides
+_are_ reached by the aliases. Factory helpers (`withSchema`, `subcollection`) and the
+transaction-scoped repo allocate a plain `FirestoreRepository`, dropping subclass identity entirely.
 
 Docs already warn against override-as-enforcement (PR #101 / patterns guide). TypeScript already
 rejects _narrowing_ overrides via TS2416. The remaining hole is silent: a developer who overrides
@@ -48,7 +48,9 @@ one or more of the 19 public write methods:
 5. **Drift guard:** a type-test partitions `keyof FirestoreRepository` into Write ∪ NonWrite with
    asserted `Missing` / `Extra*` = `never`. The runtime const stays internal (not re-exported from
    `src/index.ts`).
-6. **`BYPASS_PATHS.update` omits `patch()`** because `patch` delegates to `this.update`.
+6. **Self-delegate omissions in `BYPASS_PATHS`:** `update` omits `patch()` (`patch` →
+   `this.update`); `updateInTransaction` omits `patchInTransaction()` (`patchInTransaction` →
+   `this.updateInTransaction`). Listing either alias as a bypass of its target would invent a leak.
 
 ## Consequences
 

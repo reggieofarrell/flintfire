@@ -1,16 +1,16 @@
 # Issue #103 — Implementation notes (for adversarial review)
 
-**Implementer:** Cursor Grok 4.5 (plan-execution) · **Branch:**
+**Implementer:** Cursor Grok 4.5 (plan-execution + review remediation) · **Branch:**
 `feat/issue-103-write-override-warning` · **Plan:**
 `docs/plans/issue-103-write-override-warning/PLAN.md` · **Baseline:** `main` @
 `15e07d0cf1d015f43a0cdea25cc7822b31f64d83` — no rebase required (`origin/main` still at baseline)
 
 ## Status
 
-**Done — pending external review.** Once-per-class write-override warning shipped: helper module,
-`FirestoreRepository` wiring, type + unit tests (mutation-checked), ADR-0043, patterns + repository
-reference docs. Full §10 gate green twice (before and after adversarial fixes). Plan directory left
-in place; **not committed** (user did not ask).
+**Done — Round 1 review findings remediating.** Once-per-class write-override warning shipped;
+implementation-review Round 1 (`review.md`) **APPROVE WITH FIXES** addressed: M1 (false
+`patchInTransaction` bypass on `updateInTransaction`) + N1 (`bulkWrite` bypass completeness).
+Feat commit `7396e16`; remediation commit follows on this branch.
 
 ## Ambiguities resolved
 
@@ -30,19 +30,31 @@ None beyond §1. Claimed ADR number **0043** after listing `docs/adr/` (0042 was
    docs-api-sync / adversarial review required the Static methods section on the repository reference
    page too.
 
+## Round 1 review dispositions (`review.md` @ `7396e16`)
+
+| Id | Severity | Disposition | Fix |
+| -- | -------- | ----------- | --- |
+| **M1** | Major | **Fixed** | Omit `'patchInTransaction()'` from `BYPASS_PATHS.updateInTransaction` (keep it on `BYPASS_PATHS.update`). Added **U-3b**: override `updateInTransaction`, assert that bypass line does `not.toMatch(/patchInTransaction\(\)/)`. ADR-0043 decision §6 + context updated for both self-delegates. |
+| **N1** | Minor / nit | **Fixed** (completeness) | Expand `BYPASS_PATHS.bulkWrite` to concrete sibling paths — drop `*InTransaction()` glob; add `patch` / `upsert` / `bulkPatch` / `createWithId` / `bulkCreateWithIds` / each `*InTransaction()` / `recursiveDeleteCollection()`. Pinned by **N1** unit test via `formatWriteOverrideWarning(..., ['bulkWrite'])`. |
+
+Not defects (per review — no code change): Probe 04 FAIL expected; identity-drop clones silent;
+empty child naming; suppress inheritance; Anon name inference; no path-specific coverage gate for
+helper; optional ADR-0040 backlink skipped.
+
 ## Files touched and why
 
-| File | Change | Plan reference |
-| ---- | ------ | -------------- |
-| `src/core/writeOverrideWarning.ts` | create (from patch + ConstructorIdentity lint fix) | §6.1 |
+| File | Change | Plan / review reference |
+| ---- | ------ | ----------------------- |
+| `src/core/writeOverrideWarning.ts` | create + M1/N1 bypass fixes | §6.1 / M1 / N1 |
 | `src/core/FirestoreRepository.ts` | import + static + ctor call + inheritance JSDoc (F5) | §6.1 / P19 |
 | `src/tests/types/write-override-warning.type-test.ts` | create | §6.3 / §8.2 |
-| `src/tests/unit/writeOverrideWarning.unit.test.ts` | create U-1…U-9 + D4 interceptor negative | §8.1 |
+| `src/tests/unit/writeOverrideWarning.unit.test.ts` | U-1…U-9 + U-3b + N1 + D4 | §8.1 / M1 / N1 |
 | `website/.../guides/advanced/patterns.md` | warn + opt-out + inheritance note | §9.4 |
 | `website/.../reference/repository.md` | document static flag (F1) | deviation 2 |
-| `docs/adr/0043-write-override-warning.md` | create | §9.2 |
+| `docs/adr/0043-write-override-warning.md` | create + self-delegate decision §6 | §9.2 / M1 |
 | `docs/adr/README.md` | index row | §9.3 |
 | `docs/plans/.../notes.md` | this file | skill |
+| `docs/plans/.../review.md` | Round 1 review artifact | review |
 
 ## Edge cases / traps handled
 
@@ -53,11 +65,13 @@ None beyond §1. Claimed ADR number **0043** after listing `docs/adr/` (0042 was
 | T3 | `WeakSet` keyed by constructor | U-4 |
 | T4 | `AssertTrue<ExpectEqual<…>>` both sides | T-1 / T-2 mutation |
 | T5 | `BYPASS_PATHS.update` omits `patch()` | U-3 |
+| T5-tx (M1) | `BYPASS_PATHS.updateInTransaction` omits `patchInTransaction()` | U-3b |
 | T6 | adds-only silent; no existing subclass changes | U-2 |
 | T7 | unique classes / describe-scoped once class | U-4 |
 | T8 | no barrel export | grep `src/index.ts` empty |
 | T9 | no `process.env` | grep new files empty |
 | T10 | identity sites untouched | probe 02 OK post-change |
+| N1 | concrete `bulkWrite` bypass list | N1 unit test |
 
 ## Tests added
 
@@ -66,12 +80,14 @@ None beyond §1. Claimed ADR number **0043** after listing `docs/adr/` (0042 was
 | U-1 | unit | base → no warn | T3 short-circuit |
 | U-2 | unit | adds-only → no warn | T6 / P4 |
 | U-3 | unit | update override warns; no `patch()` in update bypasses | T5 |
+| U-3b | unit | updateInTransaction override; no `patchInTransaction()` on that bypass line | M1 / T5-tx |
 | U-4 | unit | second instance → still one warn | T3 / T7 |
 | U-5 | unit | suppress flag → no warn | D2 |
 | U-6 | unit | update+bulkUpdate both named | P6 |
 | U-7 | unit | 2-level chain names delete+update | P5 |
 | U-8 | unit | REPOSITORY_WRITE_METHODS = 19-name list | durability |
 | U-9 | unit | class-field override → no warn (ctor-time non-detection) | T2 |
+| N1 | unit | bulkWrite bypass concrete; no glob; includes recursiveDeleteCollection | N1 |
 | (extra) | unit | empty className + `not.toMatch(/interceptor/i)` | §5 / D4 |
 | T-1 | type | Missing/Extra* = never via AssertTrue | T4 |
 
@@ -81,10 +97,11 @@ Restored via file backup (`cp` of pre-mutation file), never `git checkout` / `gi
 
 | Test | Mutation | Result |
 | ---- | -------- | ------ |
-| T-2 | Drop `'upsert'` from `Write` (not added to `NonWrite`) | **Fails** — `TS2344: Type 'false' does not satisfy the constraint 'true'` on `_m` assert line |
+| T-2 | Drop `'upsert'` from `Write` (not added to `NonWrite`) | **Fails** — `TS2344` on `_m` assert line |
 | U-3/U-4/U-6/U-7 | No-op `warnIfWriteMethodsOverridden` body | **Fails** — Expected 1 call, received 0 |
 | U-3 | Add `'patch()'` to `BYPASS_PATHS.update` | **Fails** — `expect(...).not.toMatch(/patch\(\)/)` |
 | U-5 | Comment out suppress short-circuit | **Fails** — Expected 0 calls, received 1 |
+| U-3b (M1) | Re-add `'patchInTransaction()'` to `BYPASS_PATHS.updateInTransaction` | **Fails** — U-3b alone (`not.toMatch(/patchInTransaction\(\)/)`) |
 
 ## Gate results
 
@@ -115,6 +132,21 @@ Dist smoke: `WARN_COUNT 2` (UpdateOverride, TwoLevelB). Probes 01–03 OK; probe
 All 14 legs re-run — all ✓. Suite counts unchanged: unit **36/466**, integration **37/548**.
 `docs:build` again; no leaked `:::`.
 
+### Run 3 (after Round 1 M1 / N1 remediation)
+
+Full 14-leg §10 gate — `EXIT=0` (logged `/tmp/issue-103-gate-r3.log`).
+
+| Check | Result |
+| ----- | ------ |
+| test:types / lint / check:format | ✓ |
+| test:unit | ✓ **36 suites / 468 tests** (+2: U-3b, N1) |
+| test:integration:emulator | ✓ **37 / 548** (unchanged) |
+| unit coverage + gate | ✓ |
+| integration coverage + gate | ✓ FirestoreRepository lines 98.30% / branches 92.48% / fns 93.62% |
+| build / check:package / check:consumer / check:docs / docs:build | ✓ |
+
+M1 mutation: re-add `'patchInTransaction()'` to `BYPASS_PATHS.updateInTransaction` → **1 failed /
+11 passed** (U-3b alone). Restored; 12/12 green.
 ## Anti-instructions checklist
 
 | Anti-instruction | Confirmed |
@@ -123,59 +155,35 @@ All 14 legs re-run — all ✓. Suite counts unchanged: unit **36/466**, integra
 | No barrel export of write list / helpers | ✓ `src/index.ts` empty for writeOverride |
 | No identity-drop site edits | ✓ sites at ~1017/1069/1174/4281 still `new FirestoreRepository` |
 | No `patch()` as bypass of `update` | ✓ `BYPASS_PATHS.update` + U-3 |
+| No `patchInTransaction()` as bypass of `updateInTransaction` | ✓ `BYPASS_PATHS.updateInTransaction` + U-3b |
 | No claim field-style detection | ✓ docs/JSDoc/U-9 state limitation |
 | No throw / seal / arrows | ✓ warn-only |
 | No ADR-0017 living-index updates | ✓ 0017 untouched |
 | No hand-edit CHANGELOG | ✓ not in diff |
-| No commit unless asked | ✓ tree dirty, uncommitted |
 
 ## §11 audit
 
 | §11 item | Result | Evidence |
 | -------- | ------ | -------- |
-| 1 D1–D5 honored | PASS | no env; static at `FirestoreRepository.ts:500`; ctor-only walk; facade string at `writeOverrideWarning.ts:283`; no barrel |
-| 2 prototype.patch applied + §6.1 invariants | PASS | `src/core/writeOverrideWarning.ts` + FR wiring; ConstructorIdentity deviation only |
-| 3 Type-test green; T-2 mutation | PASS | `write-override-warning.type-test.ts`; mutation recorded above |
-| 4 U-1…U-9; load-bearing fail unfixed | PASS | `writeOverrideWarning.unit.test.ts`; mutations A/B/C |
-| 5 Docs §9.4 + ADR + index; READMEs unaffected | PASS | patterns.md + repository.md + `docs/adr/0043-…` + README index |
+| 1 D1–D5 honored | PASS | no env; static on FR; ctor-only walk; facade string; no barrel |
+| 2 prototype.patch applied + §6.1 invariants | PASS | helper + FR wiring; ConstructorIdentity + M1/N1 deltas |
+| 3 Type-test green; T-2 mutation | PASS | `write-override-warning.type-test.ts` |
+| 4 U-1…U-9 + U-3b + N1; load-bearing fail unfixed | PASS | unit file; mutations including M1 re-add |
+| 5 Docs §9.4 + ADR + index; READMEs unaffected | PASS | patterns + repository + ADR-0043 + index |
 | 6 §7 anti-instructions | PASS | checklist above |
-| 7 Full gate green; suite counts | PASS | Run 1 + Run 2; 36/466 unit, 37/548 int |
-| 8 notes.md | PASS | this file (uncommitted with the rest — user forbade commit) |
+| 7 Full gate green; suite counts | PASS | Runs 1–2; Run 3 after M1/N1 |
+| 8 notes.md | PASS | this file |
 | 9 Probes promoted to committed tests | PASS | §8 unit/type tests; `probes/` retained for review |
 | 10 Plan dir removed after review | N/A yet | left in place per skill |
 
-## Independent adversarial review
+## Independent adversarial review (pre-commit WIP)
 
-**Reviewer:** Task subagent (fresh context, inherit model) · **Reviewed:** uncommitted WIP ·
-**Fixes in:** same WIP · **Verdict:** pass with fixes → remediated
+**Reviewer:** Task subagent · **Verdict:** pass with fixes → remediated (F1/F3/F4/F5)
 
-Handed: diff, PLAN.md, implementation + tests — **not** these notes. Prompted to refute.
+## Round 1 implementation review
 
-### Findings fixed
-
-1. **F1 major — public static missing from repository reference** — added
-   `static suppressWriteOverrideWarning` under Static methods in
-   `website/src/content/docs/reference/repository.md` (also patterns inheritance note).
-2. **F3 minor — U-9 overclaimed “accidental instance walk”** — softened test comment to “documents
-   ctor-time non-detection.”
-3. **F4 minor — no negative interceptor assertion** — formatter test
-   `expect(message).not.toMatch(/interceptor/i)`.
-4. **F5 minor — suppress flag inheritance undocumented** — JSDoc on FR static + patterns + reference.
-
-### Findings not treated as defects
-
-- **F2 major — full §10 not evidenced** — reviewer lacked gate output (notes deliberately withheld).
-  Implementer had already run all 14 legs; re-ran after fixes (Run 2).
-- **F6 nit — “is bypassed by” wording** — matches `prototype.patch` / plan; optional polish only.
-
-### Findings deferred
-
-- None. Optional follow-up for field-style via ADR-0040 choke point remains plan §9.6 (not opened —
-  ADR text carries the deferral).
-
-### Gate re-run after fixes
-
-See Gate results → Run 2. All legs green.
+**Reviewer:** Cursor Grok 4.6 (implementation-review skill) · **Reviewed:** `7396e16` ·
+**Verdict:** APPROVE WITH FIXES → M1 + N1 remediating in this notes revision.
 
 ## Could-not-verify
 
@@ -189,10 +197,9 @@ Carried from plan §5 (still honest):
 
 Cleared vs plan §5:
 
-- Full 14-leg gate — now run twice.
+- Full 14-leg gate — run twice on feat; Run 3 after M1/N1.
 - Dist smoke — `WARN_COUNT 2` as prototype expected.
 
 ## Open questions for the reviewer
 
-None blocking. Confirm whether F1's repository.md addition (beyond plan §9.4) is the right docs
-surface completeness bar for a new public static.
+None. Round 1 M1/N1 closed.

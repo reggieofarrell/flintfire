@@ -4,12 +4,16 @@
  * constructor call and the helper. Verification points:
  *   1. Plain `FirestoreRepository` and adds-only subclasses emit zero warns (T3 / T6 / P4).
  *   2. Method-style write overrides warn once per constructor; message names the methods and
- *      omits `patch()` from the `update` bypass list (T5).
- *   3. Second instance of the same overriding class stays silent (WeakSet keyed by ctor — T3/T7).
- *   4. `static suppressWriteOverrideWarning = true` silences deliberate overrides (D2).
- *   5. Multi-override and two-level chains list every overridden write (P5 / P6).
- *   6. `REPOSITORY_WRITE_METHODS` matches the authoritative 19-name list.
- *   7. Class-field overrides are **not** detected today (characterization of T2 / D3).
+ *      omits `patch()` from the `update` bypass list (T5 / U-3).
+ *   3. `updateInTransaction` overrides omit `patchInTransaction()` from that method's bypass
+ *      line (M1 / U-3b — transactional self-delegate mirror of T5).
+ *   4. Second instance of the same overriding class stays silent (WeakSet keyed by ctor — T3/T7).
+ *   5. `static suppressWriteOverrideWarning = true` silences deliberate overrides (D2).
+ *   6. Multi-override and two-level chains list every overridden write (P5 / P6).
+ *   7. `REPOSITORY_WRITE_METHODS` matches the authoritative 19-name list.
+ *   8. Class-field overrides are **not** detected today (characterization of T2 / D3).
+ *   9. `bulkWrite` bypass text lists concrete paths (no `*InTransaction()` glob; includes
+ *      `recursiveDeleteCollection()` — N1 completeness).
  *
  * Coverage of `FirestoreRepository.ts` is owned by the integration gate; this helper file has no
  * path-specific gate (§5) — unit coverage here is still mandatory.
@@ -94,12 +98,38 @@ describe('writeOverrideWarning', () => {
     expect(message).toContain('UpdateOverrideRepo');
     expect(message).toContain('update()');
     // The update bypass line must not list patch() — patch delegates to this.update.
+    // Use /patch\(\)/ (not a substring of patchInTransaction) so a false "patch()" entry fails.
     const updateBypassLine = message
       .split('\n')
       .find(line => line.includes('update() is bypassed by:'));
     expect(updateBypassLine).toBeDefined();
     expect(updateBypassLine).not.toMatch(/patch\(\)/);
     expect(message).toContain('static suppressWriteOverrideWarning = true');
+  });
+
+  // U-3b — transactional self-delegate mirror of U-3 / T5 (review M1).
+  // patchInTransaction → this.updateInTransaction, so listing patchInTransaction() as a bypass of
+  // updateInTransaction would invent a leak. Mutation: adding it back must fail this test alone.
+  it('U-3b: subclass overriding updateInTransaction omits patchInTransaction() from that bypass line', () => {
+    class TxUpdateOverrideRepo extends FirestoreRepository<Doc> {
+      override async updateInTransaction(
+        ...args: Parameters<FirestoreRepository<Doc>['updateInTransaction']>
+      ): ReturnType<FirestoreRepository<Doc>['updateInTransaction']> {
+        return super.updateInTransaction(...args);
+      }
+    }
+    new TxUpdateOverrideRepo(db, 'users');
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const message = String(warnSpy.mock.calls[0]?.[0] ?? '');
+    expect(message).toContain('TxUpdateOverrideRepo');
+    expect(message).toContain('updateInTransaction()');
+    // Isolate the updateInTransaction bypass line — patchInTransaction() must not appear on it.
+    // Keep patchInTransaction() on BYPASS_PATHS.update (true non-tx leak); only this line is pinned.
+    const txBypassLine = message
+      .split('\n')
+      .find(line => line.includes('updateInTransaction() is bypassed by:'));
+    expect(txBypassLine).toBeDefined();
+    expect(txBypassLine).not.toMatch(/patchInTransaction\(\)/);
   });
 
   // U-4 — WeakSet is keyed by constructor, not instance (T3 / T7).
@@ -208,5 +238,22 @@ describe('writeOverrideWarning', () => {
     expect(message).toContain('Enforced denormalization');
     // D4 durability: do not point at unshipped ADR-0040 interceptors.
     expect(message).not.toMatch(/interceptor/i);
+  });
+
+  // N1 — bulkWrite bypass text must enumerate concrete sibling paths (no glob understatement).
+  it('N1: bulkWrite bypass list is concrete (no *InTransaction glob; includes recursiveDeleteCollection)', () => {
+    const message = formatWriteOverrideWarning('BulkWriteOverride', ['bulkWrite']);
+    const bulkWriteBypassLine = message
+      .split('\n')
+      .find(line => line.includes('bulkWrite() is bypassed by:'));
+    expect(bulkWriteBypassLine).toBeDefined();
+    // Glob understatement from the prototype — pin that it is gone.
+    expect(bulkWriteBypassLine).not.toMatch(/\*InTransaction\(\)/);
+    // Representative omissions the review called out — must appear as concrete names.
+    expect(bulkWriteBypassLine).toContain('patch()');
+    expect(bulkWriteBypassLine).toContain('upsert()');
+    expect(bulkWriteBypassLine).toContain('bulkPatch()');
+    expect(bulkWriteBypassLine).toContain('patchInTransaction()');
+    expect(bulkWriteBypassLine).toContain('recursiveDeleteCollection()');
   });
 });

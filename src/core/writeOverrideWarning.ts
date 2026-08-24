@@ -47,7 +47,14 @@ export type RepositoryWriteMethod = (typeof REPOSITORY_WRITE_METHODS)[number];
  * Sibling paths that bypass a given write override. Used only in the warning text so the message
  * names concrete leaks rather than a generic "other methods may bypass".
  *
- * `patch` is omitted from the `update` bypass list because `patch` delegates to `this.update`.
+ * Self-delegates are omitted from their target's bypass list so the warning does not invent a
+ * leak that does not exist:
+ * - `patch` → `this.update` — omit `patch()` from the `update` list
+ * - `patchInTransaction` → `this.updateInTransaction` — omit `patchInTransaction()` from the
+ *   `updateInTransaction` list
+ *
+ * Keep `patchInTransaction()` on the `update` list: non-transactional `update` overrides are
+ * still bypassed by the transactional patch alias (true leak).
  */
 const BYPASS_PATHS: Record<RepositoryWriteMethod, readonly string[]> = {
   update: [
@@ -142,17 +149,29 @@ const BYPASS_PATHS: Record<RepositoryWriteMethod, readonly string[]> = {
     'recursiveDelete()',
     'recursiveDeleteCollection()',
   ],
+  // Every other write path bypasses a bulkWrite override — list them concretely (no globs) so the
+  // message does not understate leaks such as patch / upsert / recursiveDeleteCollection.
   bulkWrite: [
     'create()',
+    'createWithId()',
     'update()',
+    'patch()',
     'delete()',
+    'upsert()',
     'bulkCreate()',
+    'bulkCreateWithIds()',
     'bulkUpdate()',
+    'bulkPatch()',
     'bulkDelete()',
     'query().update()',
     'query().delete()',
-    '*InTransaction()',
+    'createInTransaction()',
+    'createWithIdInTransaction()',
+    'updateInTransaction()',
+    'patchInTransaction()',
+    'deleteInTransaction()',
     'recursiveDelete()',
+    'recursiveDeleteCollection()',
   ],
   upsert: [
     'create()',
@@ -164,6 +183,8 @@ const BYPASS_PATHS: Record<RepositoryWriteMethod, readonly string[]> = {
     'updateInTransaction()',
     'bulkWrite()',
   ],
+  // patchInTransaction() is omitted — it self-delegates to this.updateInTransaction (same shape as
+  // patch → update). Listing it here would be a T5-class false bypass (review M1).
   updateInTransaction: [
     'update()',
     'patch()',
@@ -171,7 +192,6 @@ const BYPASS_PATHS: Record<RepositoryWriteMethod, readonly string[]> = {
     'bulkUpdate()',
     'query().update()',
     'bulkWrite()',
-    'patchInTransaction()',
   ],
   patchInTransaction: [
     'update()',
