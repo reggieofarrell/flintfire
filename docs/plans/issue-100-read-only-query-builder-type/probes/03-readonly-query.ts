@@ -1,9 +1,16 @@
 /**
  * PROBE 03 — proves §3.3 (V1–V6, V9): the prescribed §6.1 block, verbatim, with every §8.1 assertion.
  *
- * The block between the BEGIN/END markers below is byte-identical to PLAN.md §6.1 (modulo the
- * `export` keyword, which a probe does not need). Keep it that way: this file is the evidence that
- * §6 compiles as written, so editing one without the other destroys the guarantee.
+ * The DECLARATIONS between the BEGIN/END markers below are identical to PLAN.md §6.1 — same clause-key
+ * union, same interface header, same 14 member signatures, same formatting. Two deliberate
+ * differences, neither of which can affect type resolution: the probe drops the `export` keyword
+ * (nothing imports this file) and the JSDoc/`@template` blocks (comments). Keep the declarations in
+ * sync: this file is the evidence that §6 compiles as written, so editing one without the other
+ * destroys the guarantee.
+ *
+ * To re-confirm they still match, diff the two with comments stripped — e.g. extract from
+ * `type ReadOnlyQueryClauseKeys =` to the closing brace in each and compare after removing `/** … *\/`
+ * blocks and the `export ` prefix. Anything beyond those two differences is drift.
  *
  * Run: node docs/plans/issue-100-read-only-query-builder-type/probes/harness.cjs \
  *        docs/plans/issue-100-read-only-query-builder-type/probes/03-readonly-query.ts
