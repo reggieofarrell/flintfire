@@ -64,6 +64,7 @@ type NonWrite =
   | 'on'
   | 'query'
   | 'readSchema'
+  | 'registerWriteInterceptor'
   | 'runInTransaction'
   | 'runReadOnlyAt'
   | 'safeValidate'

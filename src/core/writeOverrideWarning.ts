@@ -7,7 +7,10 @@
  * ctor-body assignments are invisible until after `super()` returns (see issue #103).
  *
  * @see ADR-0043 — write-override warning (issue #103)
- * @see ADR-0040 — future choke-point extension for field-style overrides
+ * @see ADR-0040 — write interceptors (issue #108), the enforcement mechanism this warning now
+ *   redirects to. Wiring the lazy field-style/ctor-body check into that choke point is still
+ *   outstanding; interceptors do not remove the blind spot, they give the warning somewhere correct
+ *   to point.
  */
 
 /**
@@ -283,8 +286,15 @@ export function collectOverriddenWriteMethods(
 }
 
 /**
- * Build the once-per-class warning string. Points at the facade pattern (the mechanism that works
- * today); when ADR-0040 interceptors ship, only the redirect half of this string needs editing.
+ * Build the once-per-class warning string.
+ *
+ * The redirect points at `registerWriteInterceptor` first (ADR-0040, shipped in 3.0.0): it is the
+ * only mechanism that actually enforces an invariant across every write path, which is what a
+ * write-method override looks like it does and does not. The facade stays as the fallback, because
+ * it is still the right answer when the invariant needs composition or a narrowed public surface
+ * rather than an atomic sibling write.
+ *
+ * The warning itself stays: interceptors add a correct path, they do not remove the wrong one.
  */
 export function formatWriteOverrideWarning(
   className: string,
@@ -300,7 +310,10 @@ export function formatWriteOverrideWarning(
   return (
     `[flintfire] ${displayName} overrides write method(s) that do not enforce an invariant across ` +
     `sibling write paths.\n${details}\n` +
-    `Prefer a facade that owns the write paths (see "Enforced denormalization" in the docs). ` +
+    `Prefer repo.registerWriteInterceptor({ name, write }), which the repository guarantees runs in ` +
+    `the same atomic boundary as every write above (or refuses the write) — or a facade that owns ` +
+    `the write paths, when the invariant needs composition rather than an atomic sibling write. ` +
+    `See "Enforced denormalization" in the docs. ` +
     `To silence this warning deliberately, set \`static suppressWriteOverrideWarning = true\` on the subclass.`
   );
 }

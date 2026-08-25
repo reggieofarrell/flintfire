@@ -34,6 +34,7 @@ import {
   WhereFilterOp,
 } from 'firebase-admin/firestore';
 import { z } from 'zod';
+import type { StagingTarget, WriteGroup } from './FirestoreRepository.js';
 
 // Bound repository helpers. commitInChunks returns the Admin SDK WriteResult[] for each successfully
 // committed action (in enqueue order across 500-op chunks). Query update/delete ignore the array and
@@ -41,7 +42,8 @@ import { z } from 'zod';
 // runHooks accepts an optional third execution argument — query writes always use the dispatcher
 // default (direct).
 type FirestoreWriteBatch = (
-  actions: ((batch: FirebaseFirestore.WriteBatch) => void)[],
+  groups: WriteGroup[],
+  operation: string,
 ) => Promise<FirebaseFirestore.WriteResult[]>;
 /**
  * Event-correlated bound signature matching {@link FirestoreRepository}'s dispatcher (review N1).
@@ -56,6 +58,30 @@ type RunHook<T extends object = object, W extends object = T, WO extends object 
   execution?: HookExecution,
 ) => Promise<void>;
 type ValidateUpdate<W> = (data: UpdateInput<W>) => UpdateInput<W>;
+/**
+ * Bound repository collector for the write-interceptor writes that must land in the same batch as
+ * each query-terminal domain write (ADR-0040).
+ *
+ * Narrower than the repository's own `InterceptedWrite` union by design: a query write terminal is
+ * only ever an update or a delete, never a create, so this signature never needs the repository's
+ * `WO` (create-output) parameter. Contravariance makes the repository's wider method assignable.
+ *
+ * The query terminals are **batch-only** — `commitInChunks` refuses a read-capable interceptor — so
+ * there is no read phase to thread through and no `reads` argument.
+ */
+/**
+ * Bound repository guard refusing a query write terminal while a **read-capable** write interceptor
+ * is registered: a transaction cannot be chunked, so these paths have no boundary to host one.
+ *
+ * Called as the first statement of `update()` / `delete()`, ahead of the query read and the
+ * `beforeBulk*` hooks, so a refused call performs no I/O and fires no hooks.
+ */
+type AssertBatchWritesAllowed = (operation: string) => void;
+type CollectInterceptorWrites<T extends object, W extends object> = (
+  write:
+    | { readonly kind: 'update'; readonly id: ID; readonly data: UpdateInput<W> }
+    | { readonly kind: 'delete'; readonly id: ID; readonly document: FirestoreDocument<T> },
+) => ((target: StagingTarget) => void)[];
 
 /**
  * Defines the repository-owned `id` as non-writable/non-configurable on a before-hook payload so a
@@ -1867,6 +1893,11 @@ export class FirestoreQueryBuilder<
     private runHooks: RunHook<T, W>,
     private validateUpdate?: ValidateUpdate<W>,
     allowLegacyDatastoreIds = false,
+    // Appended last so every existing positional construction keeps its meaning. Absent only for a
+    // directly-constructed builder (`repo.query()` always supplies both), which then stages no
+    // interceptor writes and refuses nothing — the same result as a repository with none registered.
+    private collectInterceptorWrites?: CollectInterceptorWrites<T, W>,
+    private assertBatchWritesAllowed?: AssertBatchWritesAllowed,
   ) {
     super(baseQuery, db, allowLegacyDatastoreIds);
   }
@@ -2039,6 +2070,10 @@ export class FirestoreQueryBuilder<
       // fell back to the `false` default, so a post-select whereId()/whereFilter(f.whereId(...)) on a
       // repository that opted into legacy Datastore ids wrongly threw InvalidDocumentIdError.
       this.allowLegacyDatastoreIds,
+      // Carry the interceptor collector and guard too: update() is still reachable on a projected
+      // builder, and dropping them would silently skip every interceptor there.
+      this.collectInterceptorWrites,
+      this.assertBatchWritesAllowed,
     );
     next.query = this.query.select(...(fields as (string | FieldPath)[]));
     next.hasOrderBy = this.hasOrderBy;
@@ -2150,6 +2185,9 @@ export class FirestoreQueryBuilder<
    *   });
    */
   async update(data: UpdateInput<W>): Promise<number> {
+    // Ahead of the query read and the beforeBulkUpdate hook: a call that cannot proceed should not
+    // first read the collection and fire user hooks.
+    this.assertBatchWritesAllowed?.('query().update()');
     try {
       const snapshot = await this.query.get();
 
@@ -2192,7 +2230,7 @@ export class FirestoreQueryBuilder<
       // data mutation still reaches the write.
       Object.freeze(updates);
       await this.runHooks('beforeBulkUpdate', updates);
-      const actions: ((batch: FirebaseFirestore.WriteBatch) => void)[] = [];
+      const actions: WriteGroup[] = [];
       const writtenIds: ID[] = [];
 
       for (const { ref, id, entry } of work) {
@@ -2201,11 +2239,15 @@ export class FirestoreQueryBuilder<
         // Reject an empty patch (consistent with the repository update surfaces). Because the same
         // data is applied to every matched doc, this is uniform across the result set.
         this.assertNonEmptyUpdatePayload(sanitizedData as Record<string, any>);
-        actions.push(batch => batch.update(ref, sanitizedData as any));
+        actions.push({
+          domain: (target: StagingTarget) => target.update(ref, sanitizedData as any),
+          interceptor:
+            this.collectInterceptorWrites?.({ kind: 'update', id, data: validData }) ?? [],
+        });
         writtenIds.push(id);
       }
 
-      await this.commitInChunks(actions);
+      await this.commitInChunks(actions, 'query().update()');
       // Freeze the whole envelope (review R2): a first hook cannot reassign `ids` to a forged array
       // that a second hook would then observe.
       await this.runHooks(
@@ -2241,6 +2283,8 @@ export class FirestoreQueryBuilder<
    *   .delete();
    */
   async delete(): Promise<number> {
+    // Ahead of the query read and the beforeBulkDelete hook, for the same reason as update().
+    this.assertBatchWritesAllowed?.('query().delete()');
     // Destructive-after-projection guard (review D2): a projected query only materializes the
     // selected fields, so the delete hooks would observe incomplete documents. Reject locally.
     if (this.hasSelect) {
@@ -2273,11 +2317,19 @@ export class FirestoreQueryBuilder<
         Object.freeze({ ids: capturedIds, documents: docsData }),
       );
 
-      const actions = deleteRefs.map(
-        ref => (batch: FirebaseFirestore.WriteBatch) => batch.delete(ref),
-      );
+      // `docsData` is built from the same `snapshot.docs` in the same order as `deleteRefs`, so index
+      // alignment hands each interceptor the document actually being deleted.
+      const actions: WriteGroup[] = deleteRefs.map((ref, index) => ({
+        domain: (target: StagingTarget) => target.delete(ref),
+        interceptor:
+          this.collectInterceptorWrites?.({
+            kind: 'delete',
+            id: ref.id,
+            document: docsData[index]!,
+          }) ?? [],
+      }));
 
-      await this.commitInChunks(actions);
+      await this.commitInChunks(actions, 'query().delete()');
       await this.runHooks(
         'afterBulkDelete',
         Object.freeze({ ids: capturedIds, documents: docsData }),

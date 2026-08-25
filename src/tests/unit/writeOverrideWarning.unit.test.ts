@@ -231,13 +231,22 @@ describe('writeOverrideWarning', () => {
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  // Formatter unit — anonymous display name fallback + D4 redirect (facade, not interceptors).
-  it('formatWriteOverrideWarning falls back for empty class names and avoids interceptor redirect', () => {
+  // Formatter unit — anonymous display name fallback + the redirect's content.
+  //
+  // This assertion was previously inverted (`not.toMatch(/interceptor/i)`) because ADR-0040
+  // interceptors had not shipped and pointing at them would have been a dead end. They shipped in
+  // 3.0.0 (issue #108), so the redirect now names `registerWriteInterceptor` FIRST and keeps the
+  // facade as the fallback. This is the only guard on the redirect's content — it must keep
+  // asserting what the string says, not merely that a string exists.
+  it('formatWriteOverrideWarning falls back for empty class names and redirects to interceptors', () => {
     const message = formatWriteOverrideWarning('', ['update']);
     expect(message).toContain('(anonymous subclass)');
     expect(message).toContain('Enforced denormalization');
-    // D4 durability: do not point at unshipped ADR-0040 interceptors.
-    expect(message).not.toMatch(/interceptor/i);
+    // The shipped enforcement mechanism, named as the first recommendation.
+    expect(message).toContain('registerWriteInterceptor');
+    // The facade survives as the fallback for composition / surface-narrowing cases.
+    expect(message).toContain('facade');
+    expect(message.indexOf('registerWriteInterceptor')).toBeLessThan(message.indexOf('facade'));
   });
 
   // N1 — bulkWrite bypass text must enumerate concrete sibling paths (no glob understatement).

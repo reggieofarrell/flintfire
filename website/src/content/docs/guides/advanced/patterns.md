@@ -486,11 +486,207 @@ When a denormalized field must never drift — an order's status mirrored onto i
 has to match its source — you need the rule to hold on **every** write, not just the one you
 remembered to route. This section is about that guarantee.
 
-### 1. Use a facade that owns the write paths
+### 1. Register a write interceptor
 
-Hold the repositories **private** inside a service and expose only the operations you have written.
-Each one wraps the primary write and its denormalized sibling in a single transaction, so they commit
-together or not at all. The bypass paths are not intercepted — they are simply **unreachable**.
+`registerWriteInterceptor` is the only mechanism in the library that **guarantees** the denormalized
+write lands in the same atomic boundary as the write that triggered it — on every path it supports,
+and a refusal on every path it does not. Registration is per repository instance and lasts for the
+life of the process.
+
+```typescript
+import { FirestoreRepository } from 'flintfire';
+
+const orderRepo = FirestoreRepository.withSchema(db, 'orders', orderSchema);
+const userRepo = FirestoreRepository.withSchema(db, 'users', userSchema);
+
+orderRepo.registerWriteInterceptor({
+  name: 'mirror-order-status-onto-user',
+  write: ({ write, writer }) => {
+    // `write` is discriminated on `kind`: 'create' | 'update' | 'delete'.
+    if (write.kind === 'delete') {
+      // A delete hands over the whole STORED document, so the owning user is always known.
+      writer.update(userRepo, write.document.userId, { lastOrderStatus: 'deleted' });
+      return;
+    }
+    if (write.kind === 'create') {
+      // A create carries the full validated document.
+      writer.set(
+        userRepo,
+        write.data.userId,
+        { lastOrderId: write.id, lastOrderStatus: write.data.status },
+        { merge: true },
+      );
+      return;
+    }
+    // An UPDATE payload carries only the fields being written, so both are optional here — the
+    // types say so, rather than letting you address `undefined`. A write-only interceptor can mirror
+    // only what the caller actually supplied; to fill the gap, read the order (next example).
+    const { userId, status } = write.data;
+    if (typeof userId === 'string' && typeof status === 'string') {
+      writer.set(
+        userRepo,
+        userId,
+        { lastOrderId: write.id, lastOrderStatus: status },
+        { merge: true },
+      );
+    }
+  },
+});
+
+// Every one of these now commits the user mirror in the same batch, or commits nothing:
+await orderRepo.update('order-1', { status: 'shipped' });
+await orderRepo.upsert('order-2', { userId: 'user-1', status: 'pending' });
+await orderRepo.bulkUpdate([{ id: 'order-3', data: { status: 'shipped' } }]);
+await orderRepo.query().where('status', '==', 'pending').update({ status: 'shipped' });
+```
+
+The writer can only **stage** writes — `createWithId`, `set`, `update`, `patch`, `delete`, each
+taking the target repository positionally. Every one but `set` is the repository method of the same
+name, staged instead of executed. It cannot commit, cannot reach the underlying batch or transaction, and the
+payload is validated by the **target** repository's own schema, so a sibling write is checked exactly
+as a direct call to that repository would be.
+
+**Which member to reach for** comes down to one question: can the sibling be missing?
+
+- `set(repo, id, completeData)` — writes the sibling whether or not it exists. `{ merge: true }`
+  keeps fields the payload does not mention. The payload is the target's **complete** write model
+  either way, because a `set` creates the document when it is absent and a partial payload cannot
+  produce a valid one.
+- `update(repo, id, partialData)` — touches a subset of fields, and **fails the whole write if the
+  sibling is missing**. That is the right tool for mirroring onto an entity that should already
+  exist, and the failure is deliberate: an order write should not conjure a half-formed user record
+  with no name or email.
+
+```typescript
+// Mirror one field onto a member that must already exist.
+writer.update(memberRepo, order.userId, { lastOrderStatus: 'shipped' });
+
+// Seed or overwrite a counter document, which may not exist yet — complete payload.
+writer.set(statsRepo, 'orders', { total: FieldValue.increment(1) }, { merge: true });
+```
+
+#### The mode is inferred, not declared
+
+Declare a `read` phase and the repository needs a transaction; declare none and it uses a write
+batch. The mode is a **union over every registration** on that repository — one read-capable
+interceptor promotes them all.
+
+```typescript
+orderRepo.registerWriteInterceptor({
+  name: 'order-revision',
+  // Runs BEFORE any write is staged: Firestore requires all reads in a transaction to precede all
+  // writes, which is why `write` below is synchronous. Put I/O here, never there.
+  read: async ({ write, reader }) => await reader.get(auditRepo, write.id),
+  write: ({ write, writer, reads }) => {
+    // `reads` is typed exactly as `read` returned it — here `FirestoreDocument<Audit> | null`.
+    writer.set(auditRepo, write.id, { orderId: write.id, revision: (reads?.revision ?? 0) + 1 });
+  },
+});
+```
+
+:::note[Every example on this page is compiled]
+`src/tests/types/write-interceptor-examples.type-test.ts` contains these snippets verbatim and is
+checked by `npm run test:types`. An earlier version of this guide shipped a snippet that did not
+compile, which is why that gate exists.
+
+:::
+
+```typescript
+```
+
+#### Coverage, and what refuses
+
+| Path | write-only (batch) | read-capable (transaction) |
+| ---- | ------------------ | -------------------------- |
+| `create`, `createWithId`, `update`, `patch`, `upsert`, `delete` | runs | runs |
+| `createInTransaction`, `createWithIdInTransaction`, `updateInTransaction`, `patchInTransaction`, `deleteInTransaction` | joins the caller's transaction | joins the caller's transaction |
+| `bulkCreate`, `bulkCreateWithIds`, `bulkUpdate`, `bulkPatch`, `bulkDelete`, `query().update()`, `query().delete()` | chunked batch | **throws** — a transaction cannot be chunked |
+| `bulkWrite` | **throws** | **throws** |
+| `recursiveDelete`, `recursiveDeleteCollection` | **throws** | **throws** |
+
+Every refusal is a thrown `Error` naming the operation and the interceptor, never a silent skip.
+`bulkWrite` refuses because `BulkWriter` commits per operation, so there is no shared boundary to
+join — and unlike bulk *hooks*, there is **no `{ skipHooks: true }`-style waiver**: a hook is a
+notification and may be skipped, a guarantee may not. The recursive deletes refuse because
+`db.recursiveDelete` streams name-only snapshots across collections this repository does not model,
+so no honest payload exists.
+
+:::caution[`{ withMetadata: true }` throws under transaction mode]
+A transaction exposes no per-operation write receipt, so a `writeTime` there would be fabricated.
+With a read-capable interceptor registered, `{ withMetadata: true }` throws on the single-document
+writes and names the interceptor that forced the mode. Under **batch** mode it keeps working
+normally — batch receipts are real, and they stay 1:1 with your documents rather than counting the
+interceptor's writes.
+
+:::
+
+#### Capacity, and other things to know
+
+- **Chunk capacity is divided by the writes actually staged, not by the interceptor count.** A write
+  batch holds 500 operations, and a document now costs one plus however many writes its interceptors
+  stage for it — an interceptor may stage none, one, or several. A chunk therefore holds
+  `floor(500 / writes-per-document)` documents: with one interceptor staging one write that is 250,
+  and with one staging two it is 166. A bulk call becomes non-atomic — and
+  [`WriteOutcomeError`](/flintfire/reference/errors/) with `state: 'partially-committed'` becomes
+  reachable — at proportionally **fewer** documents than before, and `committedWrites` /
+  `totalWrites` count physical writes, so they are larger than your document count. A single
+  document whose writes exceed 500 operations throws rather than being split.
+- **Write phases run before anything commits, so an interceptor failure is all-or-nothing.** The
+  repository has to know each document's real write count before it can place a chunk boundary, so
+  every `write` phase runs first, stages nothing, and is replayed into the batch afterwards. Each
+  phase still runs exactly once per document — and the two ways a large bulk call can fail are
+  deliberately different:
+
+  | What failed | What is committed |
+  | ----------- | ----------------- |
+  | An **interceptor** threw (bad payload, target-schema rejection, a bug) | **Nothing.** The whole call aborts before the first commit, even if the failure was on the thousandth document, and you get that interceptor's own error |
+  | A **commit** was rejected by Firestore, above 500 operations | Earlier chunks stay committed — the documented non-atomic behaviour — and you get `WriteOutcomeError` with `state: 'partially-committed'` and exact physical counts |
+
+  So read the "becomes non-atomic" note above as being about *commit* failures. An interceptor
+  rejecting the write set means none of it lands, which is what makes the guarantee worth having: you
+  fix the interceptor and re-run against a clean state, rather than reconciling a half-written batch
+  (and `bulkCreate` / `bulkCreateWithIds` are create-only, so re-running over already-created
+  documents would raise `ConflictError`).
+- **Every target must be on the same `Firestore` instance.** Staging a reference from another
+  `Firestore` is accepted by the SDK, reports success, and lands in neither database. The repository
+  refuses it instead, before anything commits.
+- **Interceptors run in registration order**, sequentially, and the first to throw aborts the whole
+  write — nothing commits and no later interceptor runs. Names must be unique per repository: read
+  results are keyed by name.
+- **Registration is per instance.** It is carried into the repository handed to `runInTransaction`,
+  and deliberately **not** into `subcollection()`, `withSchema()` or `withSchemaArgs()`, which model
+  a different collection whose write model your interceptor could not satisfy.
+
+:::caution[Under transaction mode, do not call a plain write inside someone else's transaction]
+A read-capable interceptor makes every single-document write on that repository open its own
+transaction. Calling one from **inside** another repository's `runInTransaction` callback therefore
+nests two independent transactions, which can contend or deadlock on overlapping documents:
+
+```typescript
+await orderRepo.runInTransaction(async (tx, orders) => {
+  await orders.updateInTransaction(tx, id, { status: 'shipped' }); // ✅ joins this transaction
+  await userRepo.update(userId, { lastOrderId: id });              // ⚠️ opens a SECOND transaction
+});
+```
+
+Use the `*InTransaction` helpers for every write inside a transaction callback — they join the
+transaction you are already in. This was always the guidance; interceptors make ignoring it more
+expensive. Tracked as
+[#112](https://github.com/reggieofarrell/flintfire/issues/112).
+
+:::
+
+### 2. Use a facade that owns the write paths
+
+Reach for this when the invariant needs more than a sibling write: read-dependent composition, a
+deliberately narrowed public surface, or an operation that has to refuse rather than mirror. Hold the
+repositories **private** inside a service and expose only the operations you have written. Each one
+wraps the primary write and its denormalized sibling in a single transaction, so they commit together
+or not at all. The bypass paths are not intercepted — they are simply **unreachable**.
+
+Unlike an interceptor, a facade constrains only the callers who go through it: code holding the
+underlying repository can still write around it. An interceptor is attached to the repository itself,
+so it holds wherever that instance is used.
 
 ```typescript
 import { FirestoreRepository } from 'flintfire';
@@ -560,7 +756,7 @@ only; a deliberate cast still reaches the write terminals. See
 
 :::
 
-### 2. Why not subclass and override the write methods?
+### 3. Why not subclass and override the write methods?
 
 Because an override is reached by almost nothing. Overriding `update` intercepts `update()` and
 `patch()` (which delegates to it) — and **nothing else**:
@@ -578,12 +774,13 @@ transaction callback never re-enter an override either.
 
 Overriding is still the right tool for **adding** behavior to one entry point — see
 [Custom repository methods](#custom-repository-methods). It is not a mechanism for enforcing an
-invariant. The base constructor warns once per subclass when a listed write method is overridden on
-the prototype; set `static suppressWriteOverrideWarning = true` if the partial override is
-intentional (inherited by further subclasses unless redeclared `false`). Class-field and
-constructor-body overrides are invisible to that check until a future write choke point lands.
+invariant; a write interceptor (§1) is. The base constructor warns once per subclass when a listed
+write method is overridden on the prototype, and points at `registerWriteInterceptor`; set
+`static suppressWriteOverrideWarning = true` if the partial override is intentional (inherited by
+further subclasses unless redeclared `false`). Class-field and constructor-body overrides are still
+invisible to that check.
 
-### 3. Hooks: broad coverage, but not atomic
+### 4. Hooks: broad coverage, but not atomic
 
 A `before*` hook plus its `beforeBulk*` counterpart covers far more paths than an override, and
 `bulkWrite` **throws** rather than silently skipping when a bulk hook is registered:
@@ -603,12 +800,16 @@ Two limits decide whether hooks are enough for you:
 - **On the delete side there is a silent gap.** The two recursive deletes fire no delete hooks at all
   (see
   [operations that run no hooks](/flintfire/guides/concepts/lifecycle-hooks/#operations-that-run-no-hooks)),
-  so a delete invariant enforced by hooks does not hold across them.
+  so a delete invariant enforced by hooks does not hold across them. This is the one gap an
+  interceptor closes by being **loud**: with one registered, `recursiveDelete()` and
+  `recursiveDeleteCollection()` throw instead of quietly deleting past your invariant.
 
 ### Choosing
 
-| You need                                            | Use                                                       |
-| --------------------------------------------------- | --------------------------------------------------------- |
-| A denormalized write that is **atomic** with its primary write | The facade (§1)                                  |
-| Broad coverage where eventual consistency is fine   | Hooks (§3), minding the recursive-delete gap              |
-| Extra behavior on one specific method               | A subclass override ([custom methods](#custom-repository-methods)) |
+| You need | Use |
+| -------- | --- |
+| A sibling write that is **atomic** with the primary write, and enforced on every path | A write interceptor (§1) |
+| The same, but the sibling payload depends on a read | A write interceptor with a `read` phase (§1) — accepting that the bulk paths then refuse |
+| Read-dependent composition, or a deliberately narrow public surface | The facade (§2) |
+| Broad coverage where eventual consistency is fine | Hooks (§4), minding the recursive-delete gap |
+| Extra behavior on one specific method | A subclass override ([custom methods](#custom-repository-methods)) |

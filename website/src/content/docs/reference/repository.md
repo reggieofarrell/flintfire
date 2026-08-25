@@ -106,8 +106,11 @@ Prefer `withSchema(...)` (or `raw(...)` for an unvalidated repository) for typic
 
 Opt out of the once-per-class `console.warn` that fires when a **subclass** overrides a public write
 method (`update`, `create`, `delete`, …) on its prototype. The warning exists because sibling write
-paths do not route through the override — see [Advanced Patterns](/flintfire/guides/advanced/patterns/)
-(Custom repository methods / Enforced denormalization). Set `static suppressWriteOverrideWarning = true`
+paths do not route through the override; it points at
+[`registerWriteInterceptor`](#write-interceptors), which does enforce an invariant across every write
+path, with the facade as the fallback — see
+[Enforced denormalization](/flintfire/guides/advanced/patterns/#enforced-denormalization). Set
+`static suppressWriteOverrideWarning = true`
 on the subclass **before** the first instance is constructed. Method-style overrides only are
 detected; class-field and constructor-body assignments are not. Because the flag is a normal JS
 static, a suppressing parent also silences further subclasses unless they redeclare it `false`.
@@ -375,6 +378,115 @@ await userRepo.recursiveDeleteCollection();
 const postRepo = userRepo.subcollection('user-123', 'posts', postSchema);
 await postRepo.recursiveDeleteCollection();
 ```
+
+### Write interceptors
+
+**`registerWriteInterceptor(interceptor: WriteOnlyInterceptor<T, W, WO>): void`**
+**`registerWriteInterceptor<R>(interceptor: ReadCapableInterceptor<T, W, WO, R>): void`**
+
+Register a callback whose writes the repository **guarantees** commit in the same atomic boundary as
+the write that triggered them — or that write path refuses. This is the enforcement primitive behind
+[enforced denormalization](/flintfire/guides/advanced/patterns/#1-register-a-write-interceptor); that
+guide is the full treatment, including the capacity trade-off and every refusal.
+
+Registration is **per repository instance** and lasts for the life of the process, like
+[`on(...)`](#query-hooks--helpers). `name` must be unique on the repository — read-phase results are
+keyed by it — and a duplicate throws. Interceptors run in **registration order**, sequentially; the
+first to throw aborts the write, so nothing commits and no later interceptor runs. With none
+registered, every write path behaves exactly as it did before.
+
+Two shapes, and the shape decides the boundary:
+
+```typescript
+// Write-only → staged into a WriteBatch. Bulk helpers and query write terminals keep working.
+type WriteOnlyInterceptor = {
+  name: string;
+  write: (ctx: { write: InterceptedWrite; writer: InterceptorWriter }) => void;
+};
+
+// Read-capable → the repository runs a Transaction. `R` is inferred from `read`.
+type ReadCapableInterceptor<R> = {
+  name: string;
+  read: (ctx: { write: InterceptedWrite; reader: InterceptorReader }) => Promise<R>;
+  write: (ctx: { write: InterceptedWrite; writer: InterceptorWriter; reads: R }) => void;
+};
+```
+
+`write` is **synchronous by type** and that is deliberate: Firestore requires every read in a
+transaction to precede every write, so all I/O belongs in `read`.
+
+**`InterceptedWrite`** — the domain write being observed, discriminated on `kind`:
+
+| `kind` | Payload | Notes |
+| ------ | ------- | ----- |
+| `'create'` | `data: CreateOutput<WO>` | the validated create **output**, after schema transforms |
+| `'update'` | `data: UpdateInput<W>` | the validated update payload; `patch` reports as `'update'` |
+| `'delete'` | `document: FirestoreDocument<T>` | the whole stored document — every delete path pre-reads it |
+
+Every member also carries `id: ID`. `upsert` reports whichever write it actually performed.
+
+**`InterceptorWriter`** — stages writes; it cannot commit and cannot reach the batch or transaction.
+Each member takes the **target repository** positionally, and validates the payload through that
+repository (id validation, schema validation, merge normalization, empty-payload rejection), so a
+sibling write is checked exactly as a direct call to it would be:
+
+Each member is named after the repository method it stages, and behaves the same way:
+
+| Member | Repository equivalent | Payload | If the document is missing |
+| ------ | --------------------- | ------- | -------------------------- |
+| `createWithId` | [`createWithId`](#writes) | complete | creates it — a collision aborts the whole group |
+| `set` | *none* — see below | complete | creates it (`{ merge: true }` keeps unmentioned fields instead of replacing) |
+| `update` | [`update`](#writes) | partial | **fails**, aborting the whole group |
+| `patch` | [`patch`](#writes) | partial, nested objects normalized to field paths | **fails**, aborting the whole group |
+| `delete` | [`delete`](#writes) | — | no-op |
+
+`set` is the one member with no repository counterpart, and it keeps the raw Firestore verb
+deliberately. It is **not** `upsert`: `upsert` replaces a nested map wholesale on an existing
+document, while `set(..., { merge: true })` deep-merges it, so borrowing the name would claim an
+equivalence that does not hold. It exists because it is the only way to write a sibling that may not
+exist yet without first reading it — the counter case interceptors are for.
+
+**`set` takes the complete write model on both branches, including under `{ merge: true }`.** A `set`
+creates the document when it is absent, and a partial payload cannot produce a document that
+satisfies its own schema — you would be persisting a record missing its required fields, and since
+reads are not validated it would come back typed as complete. If you want to touch a subset of
+fields, that is `update`, and its failure on a missing document is the guard rail: an order write
+should not conjure a half-formed user.
+
+The create validator applies to `set` on both branches, so it also rejects dot-notation keys (which
+`set()` would turn into literal field names) and `FieldValue.delete()` (whose meaning would depend on
+whether the sibling happened to exist — the same reason `upsert` rejects them).
+
+**`InterceptorReader`** — `get(repo, id): Promise<FirestoreDocument<T2> | null>`, joining the same
+transaction the write will be staged into.
+
+Every target repository must be built on the **same `Firestore` instance** as the repository being
+written; another instance is refused before anything commits (the SDK accepts such a write, reports
+success, and lands it in neither database).
+
+**Coverage.** The single-document writes and the `*InTransaction` helpers always run interceptors.
+The fixed-batch helpers and `query().update()` / `query().delete()` run **write-only** interceptors in
+chunked batches and **throw** for a read-capable one (a transaction cannot be chunked). `bulkWrite`,
+`recursiveDelete` and `recursiveDeleteCollection` **throw** whenever any interceptor is registered —
+there is no shared boundary to join, and no `{ skipHooks: true }`-style waiver, because a guarantee
+is not a notification. `{ withMetadata: true }` throws under transaction mode only.
+
+```typescript
+orderRepo.registerWriteInterceptor({
+  name: 'order-audit-trail',
+  write: ({ write, writer }) => {
+    if (write.kind === 'delete') {
+      writer.delete(auditRepo, write.id);
+      return;
+    }
+    writer.set(auditRepo, write.id, { orderId: write.id, event: write.kind }, { merge: true });
+  },
+});
+```
+
+Field-derived targets need a little more care: an `'update'` payload carries only the fields being
+written, so a field like `userId` is optional there and the types say so. See
+[the worked example](/flintfire/guides/advanced/patterns/#1-register-a-write-interceptor).
 
 ## Identity
 
