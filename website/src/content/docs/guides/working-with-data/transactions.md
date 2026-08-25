@@ -18,10 +18,12 @@ Call `runInTransaction` on a repository. The callback receives two arguments:
   writes inside the callback so that `before*` hooks and validation still run, and so reads stay
   inside the transaction (and inside any `readTime` snapshot).
 
-  Non-transactional methods on a full repo (`getById`, `getAll`, `query()`, `create()`, …) perform
-  I/O **outside** the transaction — and outside `readTime`. When `readOnly: true`, the callback
-  `repo` is narrowed to `ReadOnlyTransactionalRepository` so those methods are absent from the type;
-  a read-write callback still receives the full repository and relies on you not calling them.
+  Non-transactional **reads** on a full repo (`getById`, `getAll`, `query()`, …) perform I/O
+  **outside** the transaction — and outside `readTime`. Non-transactional **writes** (`create()`,
+  `update()`, …) do the same when no read-capable write interceptor is registered. When
+  `readOnly: true`, the callback `repo` is narrowed to `ReadOnlyTransactionalRepository` so those
+  methods are absent from the type; a read-write callback still receives the full repository and
+  relies on you not calling them.
 
   Prefer `*InTransaction` helpers so `before*` hooks and validation still run. Raw `tx.set` /
   `tx.update` / `tx.delete` bypass repository validation and hooks entirely.
@@ -42,7 +44,11 @@ returns). For non-durable side effects, return data from the callback and run th
 or use a durable outbox when available ([#80](https://github.com/reggieofarrell/flintfire/issues/80)).
 
 Calling a normal `create()` / `update()` on the transaction-scoped `repo` is still a **direct**
-write (outside the transaction); its hooks report `execution: 'direct'`.
+write (outside the transaction) when that repository has no read-capable write interceptor; its
+hooks report `execution: 'direct'`. If a read-capable interceptor is registered, that same plain
+write **throws** instead of opening a second transaction on this `Firestore` instance — use the
+`*InTransaction` helpers to join the callback you are already in. See
+[the nested-write caution](/flintfire/guides/advanced/patterns/#1-register-a-write-interceptor).
 
 ```typescript
 await accountRepo.runInTransaction(async (tx, repo) => {
