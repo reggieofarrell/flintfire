@@ -175,6 +175,42 @@ these types describe, see [FirestoreRepository](/flintfire/reference/repository/
   still reaches the write terminals. See
   [Read-only view](/flintfire/reference/query-builder/#read-only-view).
 
+### Write interceptors
+
+The seven types describing
+[`registerWriteInterceptor`](/flintfire/reference/repository/#write-interceptors) (ADR-0040). The two
+internal staging types (`StagingTarget`, `WriteGroup`) are deliberately **not** exported — an
+interceptor never touches the batch or transaction directly.
+
+- **`WriteInterceptor<T, W, WO>`** — either flavour below; what a repository stores.
+- **`WriteOnlyInterceptor<T, W, WO>`** — `{ name, write }`, with `read?: undefined`. Its writes are
+  staged into a `WriteBatch`, so the fixed-batch helpers and query write terminals keep working. The
+  `read?: undefined` (rather than an absent key) is what makes the registration overloads
+  discriminate.
+- **`ReadCapableInterceptor<T, W, WO, R>`** — `{ name, read, write }`. `R` is inferred from `read`'s
+  return type and handed to `write` as `reads`. Registering one promotes every single-document write
+  on that repository to a transaction, and makes the bulk paths and `{ withMetadata: true }` refuse.
+- **`InterceptedWriteKind`** — `'create' | 'update' | 'delete'`. `patch` reports as `'update'`;
+  `upsert` reports whichever write it performed.
+- **`InterceptedWrite<T, W, WO>`** — the domain write, discriminated on `kind`. `'create'` carries
+  `data: CreateOutput<WO>`, `'update'` carries `data: UpdateInput<W>`, and `'delete'` carries
+  `document: FirestoreDocument<T>` — the whole stored document, because every delete path pre-reads
+  it. All three carry `id: ID`. Each is what is **actually being written**, after schema parsing and
+  transforms — not the caller's raw argument.
+  **On `'update'`, a merge write arrives dot-path normalized.** `patch()`,
+  `update(…, { merge: true })` and `bulkPatch()` normalize nested objects into field paths before
+  validating, so `patch(id, { address: { city: 'c' } })` reaches the interceptor as
+  `{ 'address.city': 'c' }`, while a plain `update()` keeps `{ address: { city: 'c' } }`. Both report
+  `kind: 'update'`, and `UpdateInput<W>` admits dotted keys, so TypeScript does **not** flag the
+  difference — read a nested field as `write.data['address.city']`, not `write.data.address?.city`.
+  Flat payloads are unaffected.
+- **`InterceptorWriter`** — the staging surface: `createWithId` / `set` / `update` / `patch` /
+  `delete`, each taking the **target repository** positionally and generic over that repository's
+  parameters, so a sibling payload is checked against the target's write model. Every member but
+  `set` is named after — and behaves as — the repository method of the same name; `set` has no
+  repository counterpart and keeps the Firestore verb. Stages only; it cannot commit.
+- **`InterceptorReader`** — `get(repo, id)`, joining the transaction the write will be staged into.
+
 The package also exports runtime helpers — validation combinators, timestamp utilities, and
 dot-notation utilities — documented on the [Helpers & Utilities](/flintfire/reference/helpers/)
 page. The vector-search extension (`flintfire/vector`) exports

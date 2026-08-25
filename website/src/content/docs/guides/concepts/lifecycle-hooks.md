@@ -99,6 +99,21 @@ Three write paths deliberately fire nothing:
 
 Do not assume every write goes through the hook table above.
 
+Both recursive deletes **throw** when a
+[write interceptor](/flintfire/reference/repository/#write-interceptors) is registered on the
+repository, rather than deleting past it silently — the same reason `bulkWrite` throws on a registered
+bulk hook, applied to a guarantee instead of a notification. So an invariant enforced by an
+interceptor holds on these paths by refusing them; an invariant enforced by hooks does not hold on
+them at all.
+
+:::caution[A hook is not a substitute for an interceptor]
+`HookContext` carries no transaction handle, so a `before*` hook **cannot** write a sibling document
+atomically with the primary write — even inside `runInTransaction`. Hooks are for work where eventual
+consistency is acceptable. When the sibling write must land with the primary write or not at all, use
+[`registerWriteInterceptor`](/flintfire/reference/repository/#write-interceptors).
+
+:::
+
 ## Hook payloads
 
 | Event                                  | Payload                                                                                               |
@@ -179,7 +194,8 @@ bulk-delete hooks receive `{ ids, documents }`. The per-document `before/afterUp
 `before/afterDelete` hooks do **not** run on query-level writes — use the single-document methods
 when you need those. Separately, `bulkWrite`, `recursiveDelete`, and `recursiveDeleteCollection` run
 **no** hooks at all (see
-[above](#operations-that-run-no-hooks)). See
+[above](#operations-that-run-no-hooks)) — and all three **throw** when a
+[write interceptor](/flintfire/reference/repository/#write-interceptors) is registered. See
 [Queries](/flintfire/guides/working-with-data/queries/).
 
 ## When hooks do not run

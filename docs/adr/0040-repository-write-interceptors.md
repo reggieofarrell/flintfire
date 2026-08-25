@@ -1,6 +1,6 @@
 # ADR-0040: Repository write interceptors (enforced denormalization primitive)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-23
 - **Deciders:** Reggie O'Farrell
 - **Related:** [ADR-0032](0032-bulkwriter-high-throughput-writes-and-recursive-delete.md)
@@ -70,6 +70,32 @@ the write**. Both execution modes ship in **one release**.
    unless it declares a read phase. Sibling writes are addressed through a repository (so the target
    repository's validator applies) rather than a raw `DocumentReference`.
 
+   > Amendment (3.0.0, issue #108): the restricted writer ships **`set` in addition to `create` /
+   > `update` / `delete`**. The enumeration above cannot write a sibling that may not exist yet:
+   > `update` fails the whole batch on a missing document, which is exactly the counter shape this
+   > record motivates. `set` is declared with identical parameter lists on both `WriteBatch` and
+   > `Transaction`, so it costs nothing structurally, and it matches the `'set'` verb `bulkWrite`
+   > already exposes. The shipped surface is `createWithId` / `set` / `update` / `patch` / `delete`,
+   > each taking the target repository positionally (`writer.set(repo, id, data)`) and each — apart
+   > from `set` — named after the repository method it stages, with the same semantics. `set` keeps
+   > the Firestore verb precisely because it has no repository counterpart: it is not `upsert`,
+   > which replaces a nested map wholesale on an existing document where a merge-set deep-merges it.
+   >
+   > **`set` takes the target's COMPLETE write model, including under `{ merge: true }`.** An
+   > earlier revision of this change typed the merge branch as a partial update, so that one field
+   > could be mirrored onto a schema with required fields. That is unsound: a `set` creates the
+   > document when it is absent, so a partial payload persists a record missing its required fields
+   > — and because reads are not validated, it reads back typed as complete. A subset write is
+   > `update`, whose failure on a missing document is the guard rail rather than a limitation. The
+   > two axes this surface covers are payload completeness and existence tolerance, and the partial
+   > x tolerates-missing cell is deliberately empty.
+
+   > Amendment (3.0.0, issue #108): registration also refuses a **duplicate interceptor `name` on
+   > one repository**. Read-phase results are keyed by name so each write phase receives its own, so
+   > a duplicate would silently hand one interceptor another's `reads` value. Interceptors run in
+   > **registration order**, sequentially, and the first to throw aborts the write — nothing commits
+   > and no later interceptor runs.
+
 2. **The execution mode is inferred from the callback shape, not declared.** An interceptor with a
    `read` phase requires a transaction; one without runs in a write batch. A `mode` flag would be a
    second source of truth that can contradict the callback, and inference makes the cost
@@ -78,6 +104,16 @@ the write**. Both execution modes ship in **one release**.
 3. **One writer interface backs both modes.** Because `WriteBatch` and `Transaction` declare
    identical `create` / `update` / `delete` signatures, an interceptor's write phase is
    mode-agnostic: the same code runs under either boundary with no adaptation.
+
+   > Amendment (3.0.0, issue #108): "identical signatures" is imprecise, and the imprecision is
+   > load-bearing. Their **parameter lists** are byte-identical; their **return types are not**
+   > (`): WriteBatch;` vs `): Transaction;`). So the natural spelling of the shared staging type —
+   > `Pick<WriteBatch, 'create' | 'set' | 'update' | 'delete'>` — **does not accept a
+   > `Transaction`**, and it type-checks perfectly while only batch mode is wired, failing late. The
+   > shipped `StagingTarget` therefore declares its members as returning **`unknown`**, which both
+   > classes satisfy. Casting (`tx as unknown as WriteBatch`) would compile too, but it discards the
+   > compiler's only check that both boundaries really do accept the same calls, so it is forbidden;
+   > a type test asserts both assignments directly.
 
 4. **Coverage is explicit, and every gap is a refusal rather than a silent skip.**
 

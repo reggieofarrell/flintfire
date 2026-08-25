@@ -384,6 +384,297 @@ type AnyHookFn<T extends object, W extends object, WO extends object> = HookFnMa
 >[HookEvent];
 
 /**
+ * Which repository write a {@link WriteInterceptor} is running for.
+ *
+ * `patch` and `upsert` are not kinds of their own: a patch is an `'update'`, and an upsert reports
+ * whichever of `'create'` / `'update'` it actually performed.
+ */
+export type InterceptedWriteKind = 'create' | 'update' | 'delete';
+
+/**
+ * The staging surface shared by the Admin SDK's `WriteBatch` and `Transaction` — the one type this
+ * repository stages every intercepted write through, so a group of writes is written once and lands
+ * in whichever boundary the registered interceptors require.
+ *
+ * **These members must return `unknown`, and this type must not become a `Pick<WriteBatch, …>`.**
+ * `create` / `set` / `update` / `delete` have byte-identical *parameter* lists on both SDK classes
+ * but different *return* types (`WriteBatch` vs `Transaction`), so `Pick<WriteBatch, 'create' |
+ * 'set' | 'update' | 'delete'>` type-checks against a `WriteBatch` and **rejects a `Transaction`**.
+ * Returning `unknown` is what makes both assignable, and it is the compiler's only check that the
+ * two boundaries really do accept the same calls — `tx as unknown as WriteBatch` would discard it.
+ * `write-interceptors.type-test.ts` asserts both assignments so a regression fails `test:types`.
+ *
+ * Exported because the public {@link WriteGroup} names it in a declaration position, and it must
+ * NOT carry an internal-marker JSDoc tag: `stripInternal` is on, so such a tag erases this type from
+ * the emitted `.d.ts` while `WriteGroup` still references the name — a broken published `.d.ts` that
+ * `build`, `test:types`, `check:package` and `check:consumer` all report as green (`check:consumer`
+ * compiles with `skipLibCheck` by design). Only the declaration-emit gate leg catches it. Do not
+ * write that tag name here even inside a code span: the compiler reads the tag out of the comment
+ * regardless of markup, so mentioning it is enough to trigger the erasure.
+ *
+ * What keeps this type off the public API is simply that `src/index.ts` does not re-export it.
+ */
+export type StagingTarget = {
+  create(ref: FirebaseFirestore.DocumentReference<any, any>, data: any): unknown;
+  set(
+    ref: FirebaseFirestore.DocumentReference<any, any>,
+    data: any,
+    options?: FirebaseFirestore.SetOptions,
+  ): unknown;
+  update(
+    ref: FirebaseFirestore.DocumentReference<any, any>,
+    data: any,
+    precondition?: FirebaseFirestore.Precondition,
+  ): unknown;
+  delete(
+    ref: FirebaseFirestore.DocumentReference<any, any>,
+    precondition?: FirebaseFirestore.Precondition,
+  ): unknown;
+};
+
+/**
+ * One **domain** write — the write the caller asked for — plus the interceptor writes that must
+ * commit with it or not at all.
+ *
+ * `domain` is singular by construction: a group is the atomic unit {@link commitInChunks} refuses to
+ * split across a chunk boundary, and the position of its receipt in the committed chunk is what
+ * keeps `withMetadata` receipts 1:1 with the caller's documents.
+ *
+ * Not re-exported from the root entry point (see {@link StagingTarget}).
+ */
+export type WriteGroup = {
+  readonly domain: (target: StagingTarget) => void;
+  readonly interceptor: readonly ((target: StagingTarget) => void)[];
+};
+
+/**
+ * The restricted reader handed to a {@link ReadCapableInterceptor}'s `read` phase.
+ *
+ * `get` joins the same transaction the domain write will be staged into, so what it returns is
+ * consistent with what the write phase then stages. The target repository is positional and must be
+ * built on the **same** `Firestore` instance as the intercepted repository — staging against another
+ * instance is accepted by the SDK and lands nowhere, so it is refused up front.
+ *
+ * Reads are deliberately the only I/O an interceptor may do, and only here: Firestore requires every
+ * read in a transaction to precede every write, so the `write` phase is synchronous by type.
+ */
+export interface InterceptorReader {
+  get<TT extends object, WW extends object, SS extends object, WWO extends object>(
+    repo: FirestoreRepository<TT, WW, SS, WWO>,
+    id: ID,
+  ): Promise<FirestoreDocument<TT> | null>;
+}
+
+/**
+ * The restricted writer handed to a {@link WriteInterceptor}'s `write` phase — the only way an
+ * interceptor writes, and the reason its writes are guaranteed to share the domain write's boundary.
+ *
+ * Every member *stages* rather than commits: nothing here awaits, nothing here returns a receipt, and
+ * the repository decides whether the staged writes land in a `WriteBatch` or a `Transaction`. Each
+ * member is generic over the **target** repository's parameters, so a payload is type-checked against
+ * that repository's write model, and each validates through that repository exactly as a direct call
+ * would (id validation, schema validation, merge normalization, empty-payload rejection).
+ *
+ * The target repository must be built on the same `Firestore` instance as the intercepted repository
+ * (see {@link InterceptorReader}).
+ */
+export interface InterceptorWriter {
+  /**
+   * Creates a sibling under a caller-supplied id, failing if one is already there — the staged
+   * counterpart of {@link FirestoreRepository.createWithId}. A collision aborts the whole group, so
+   * the domain write does not land either.
+   */
+  createWithId<TT extends object, WW extends object, SS extends object, WWO extends object>(
+    repo: FirestoreRepository<TT, WW, SS, WWO>,
+    id: ID,
+    data: CreateInput<WW>,
+  ): void;
+  /**
+   * Writes a whole document: the target's **complete** write model, checked by its create validator.
+   *
+   * `set` is on this surface because it is the only member that can address a sibling which **may not
+   * exist yet** — `update` fails the whole batch on a missing document, which is exactly the counter
+   * and mirror cases interceptors exist for. `{ merge: true }` keeps fields the payload does not
+   * mention instead of replacing the document wholesale.
+   *
+   * **The payload stays complete even under `merge`, and that is deliberate.** A `set` creates the
+   * document when it is absent, and a partial payload cannot produce a document that satisfies its
+   * own schema — you would be writing a record missing its required fields, which reads back typed
+   * as complete because reads are not validated. If you want to touch a subset of fields, use
+   * {@link InterceptorWriter.update}, which fails when the document is missing. That failure is the
+   * guard rail, not a limitation.
+   */
+  set<TT extends object, WW extends object, SS extends object, WWO extends object>(
+    repo: FirestoreRepository<TT, WW, SS, WWO>,
+    id: ID,
+    data: CreateInput<WW>,
+    options?: { merge?: boolean },
+  ): void;
+  /**
+   * Updates fields on a sibling that must **already exist** — the staged counterpart of
+   * {@link FirestoreRepository.update}. A missing document fails the whole group, which is the guard
+   * rail against writing a record that does not satisfy its schema.
+   */
+  update<TT extends object, WW extends object, SS extends object, WWO extends object>(
+    repo: FirestoreRepository<TT, WW, SS, WWO>,
+    id: ID,
+    data: UpdateInput<WW>,
+  ): void;
+  /**
+   * Merge-style partial update — the staged counterpart of {@link FirestoreRepository.patch}, and
+   * exactly what `patch` is there: nested objects are normalized into field paths before validation,
+   * so a partial nested object does not require its siblings. Also fails on a missing document.
+   */
+  patch<TT extends object, WW extends object, SS extends object, WWO extends object>(
+    repo: FirestoreRepository<TT, WW, SS, WWO>,
+    id: ID,
+    data: UpdateInput<WW>,
+  ): void;
+  delete<TT extends object, WW extends object, SS extends object, WWO extends object>(
+    repo: FirestoreRepository<TT, WW, SS, WWO>,
+    id: ID,
+  ): void;
+}
+
+/**
+ * The domain write an interceptor observes, discriminated on {@link InterceptedWriteKind}.
+ *
+ * Each member carries **what is actually being written**, after id validation, schema parsing and any
+ * schema transforms — not the caller's raw argument. `'create'` carries the validated create output,
+ * `'update'` the validated update payload, and `'delete'` the whole stored document rather than just
+ * its id (sound because every delete path here pre-reads its document before staging the delete).
+ *
+ * ⚠ **On `'update'`, a merge write arrives DOT-PATH NORMALIZED.** `patch()`,
+ * `update(…, { merge: true })` and `bulkPatch()` normalize nested objects into field paths *before*
+ * validating, so that is the shape the interceptor sees — while a plain `update()` keeps the nested
+ * object. Both report `kind: 'update'`, and `UpdateInput<W>` admits dotted keys, so **TypeScript will
+ * not warn you**:
+ *
+ * ```ts
+ * repo.update(id, { address: { city: 'b' } });  // write.data === { address: { city: 'b' } }
+ * repo.patch(id,  { address: { city: 'c' } });  // write.data === { 'address.city': 'c' }
+ * ```
+ *
+ * So read a nested field as `write.data['address.city']`, not `write.data.address?.city` — the latter
+ * is `undefined` under `patch()` and the interceptor silently mirrors nothing. A **flat** payload is
+ * unaffected: normalization only rewrites nested objects.
+ *
+ * Pinned by two cases in `repository-write-interceptors.integration.test.ts` ("the payload an
+ * interceptor observes…" and "bulkPatch hands the interceptor the same dot-path shape…"), each of
+ * which fails on its own if the respective site stops normalizing. There is deliberately **no**
+ * type-level guard: both spellings inhabit `UpdateInput<W>`, which is precisely why this needs a
+ * runtime test and a warning here.
+ */
+export type InterceptedWrite<T extends object, W extends object, WO extends object> =
+  | { readonly kind: 'create'; readonly id: ID; readonly data: CreateOutput<WO> }
+  /**
+   * A plain `update()` carries the caller's nested payload; `patch()` /
+   * `update(…, { merge: true })` / `bulkPatch()` carry it **normalized to field paths**. See the
+   * warning on {@link InterceptedWrite}.
+   */
+  | { readonly kind: 'update'; readonly id: ID; readonly data: UpdateInput<W> }
+  | { readonly kind: 'delete'; readonly id: ID; readonly document: FirestoreDocument<T> };
+
+/**
+ * A write-only interceptor: it declares **no** read phase, so its writes can be staged into a
+ * `WriteBatch` alongside the domain write.
+ *
+ * This is the cheaper flavour, and the only one the fixed-batch helpers and query write terminals can
+ * host (a transaction cannot be chunked). `read` is declared as `?: undefined` rather than simply
+ * omitted so {@link FirestoreRepository.registerWriteInterceptor}'s overloads discriminate on it.
+ */
+export interface WriteOnlyInterceptor<T extends object, W extends object, WO extends object> {
+  readonly name: string;
+  readonly read?: undefined;
+  readonly write: (ctx: {
+    readonly write: InterceptedWrite<T, W, WO>;
+    readonly writer: InterceptorWriter;
+  }) => void;
+}
+
+/**
+ * A read-capable interceptor: it declares a `read` phase, which promotes every single-document write
+ * on the repository to a **transaction** so the read and the writes share one boundary.
+ *
+ * `read` runs before any write is staged and its result is handed to `write` as `reads` (`R` is
+ * inferred from `read`'s return type). `write` is synchronous by type: Firestore requires all reads
+ * in a transaction to precede all writes, so there is nowhere else to put I/O.
+ *
+ * Registering one is what makes the fixed-batch helpers, the query write terminals, and
+ * `{ withMetadata: true }` refuse — a transaction can neither be chunked nor produce a per-operation
+ * write receipt.
+ */
+export interface ReadCapableInterceptor<T extends object, W extends object, WO extends object, R> {
+  readonly name: string;
+  readonly read: (ctx: {
+    readonly write: InterceptedWrite<T, W, WO>;
+    readonly reader: InterceptorReader;
+  }) => Promise<R>;
+  readonly write: (ctx: {
+    readonly write: InterceptedWrite<T, W, WO>;
+    readonly writer: InterceptorWriter;
+    readonly reads: R;
+  }) => void;
+}
+
+/** Either interceptor flavour — what {@link FirestoreRepository.registerWriteInterceptor} stores. */
+export type WriteInterceptor<T extends object, W extends object, WO extends object> =
+  WriteOnlyInterceptor<T, W, WO> | ReadCapableInterceptor<T, W, WO, any>;
+
+/**
+ * The `reads` map handed to a write phase in **batch** mode: there is no read phase there, so every
+ * lookup misses and each interceptor sees `reads: undefined`, matching its declared shape.
+ *
+ * One shared instance rather than a fresh `Map` per staged write — a batch-mode bulk call would
+ * otherwise allocate one per document. It is safe to share because the only operation performed on
+ * it is `get`: `ReadonlyMap` removes `set`/`delete`/`clear` from the type, and the binding is
+ * module-private so nothing outside this file can reach it. (`Object.freeze` would not help — a
+ * `Map`'s entries are not own properties, so a frozen `Map` still accepts `set`.)
+ */
+const EMPTY_INTERCEPTOR_READS: ReadonlyMap<string, unknown> = new Map<string, unknown>();
+
+/**
+ * A {@link StagingTarget} that **records** calls instead of performing them.
+ *
+ * `commitInChunks` has to know a group's exact **physical** write count before it can decide where a
+ * chunk boundary goes — and only the interceptors know that count, because a `write` phase may stage
+ * zero, one, or many writes through the writer. Counting the phases themselves is wrong in both
+ * directions: a phase that stages nothing would reserve a slot that never fills (so every later
+ * receipt in the chunk is off by one), and a phase that stages several would overflow the batch past
+ * 500 and split the group it was supposed to keep whole.
+ *
+ * So each group is recorded first: every phase runs **exactly once**, stages nothing, and yields the
+ * real operation list, which is then replayed into whichever batch the chunk decision selected. A
+ * phase that throws therefore throws before **any** chunk is committed.
+ *
+ * Each replay preserves **arity**: an omitted `SetOptions` / `Precondition` is never forwarded as an
+ * explicit `undefined`, which the SDK's alternating field/value overloads would misread as data.
+ */
+function recordStagedWrites(
+  record: (target: StagingTarget) => void,
+): ((batch: StagingTarget) => void)[] {
+  const staged: ((batch: StagingTarget) => void)[] = [];
+  record({
+    create: (ref, data) => void staged.push(batch => batch.create(ref, data)),
+    set: (ref, data, options) =>
+      void staged.push(batch =>
+        options === undefined ? batch.set(ref, data) : batch.set(ref, data, options),
+      ),
+    update: (ref, data, precondition) =>
+      void staged.push(batch =>
+        precondition === undefined
+          ? batch.update(ref, data)
+          : batch.update(ref, data, precondition),
+      ),
+    delete: (ref, precondition) =>
+      void staged.push(batch =>
+        precondition === undefined ? batch.delete(ref) : batch.delete(ref, precondition),
+      ),
+  });
+  return staged;
+}
+
+/**
  * Type-safe Firestore repository with validation and lifecycle hooks.
  * Provides a clean API for common database operations with built-in error handling.
  *
@@ -1695,7 +1986,15 @@ export class FirestoreRepository<
       // Client-side auto id + set() yields a WriteResult (add() only yields a DocumentReference) —
       // required for withMetadata and harmless for the default path (T1).
       const docRef = this.writeCol().doc();
-      const writeResult = await docRef.set(validData as any);
+      // With no interceptor registered this is exactly the `docRef.set(...)` above; otherwise the
+      // write is staged into whichever boundary the registrations require (ADR-0040).
+      const writeResult = await this.runInterceptedWrite(
+        { kind: 'create', id: docRef.id, data: validData },
+        'create()',
+        options,
+        () => docRef.set(validData as any),
+        target => target.set(docRef, validData as any),
+      );
 
       // After-create hooks receive the parsed write OUTPUT plus the generated id, in a frozen
       // envelope (review R4/R2): the type is verified by emitAfterCreate and the identity/accounting
@@ -1706,7 +2005,9 @@ export class FirestoreRepository<
         return await this.readAfterCommit(() => this.getByIdOrThrow(docRef.id));
       }
       if (options?.withMetadata === true) {
-        return { id: docRef.id, writeTime: writeResult.writeTime };
+        // Non-null is sound: a receipt is absent only in transaction mode, which
+        // runInterceptedWrite already refused for `withMetadata` before writing anything.
+        return { id: docRef.id, writeTime: writeResult!.writeTime };
       }
       return { id: docRef.id };
     } catch (err: any) {
@@ -1809,9 +2110,17 @@ export class FirestoreRepository<
       const validData = this.validateCreateData(docToCreate as CreateInput<W>);
 
       // `create()` — NOT `set()`. The backend rejects the write when the document already exists,
-      // which parseFirestoreError normalizes (gRPC 6 ALREADY_EXISTS) into ConflictError.
+      // which parseFirestoreError normalizes (gRPC 6 ALREADY_EXISTS) into ConflictError. Create-only
+      // semantics survive the interceptor boundaries: `WriteBatch.create` and `Transaction.create`
+      // reject an existing document the same way, so a collision still aborts the whole group.
       const docRef = this.writeCol().doc(id);
-      const writeResult = await docRef.create(validData as any);
+      const writeResult = await this.runInterceptedWrite(
+        { kind: 'create', id, data: validData },
+        'createWithId()',
+        options,
+        () => docRef.create(validData as any),
+        target => target.create(docRef, validData as any),
+      );
 
       // After-create hooks observe the parsed write OUTPUT plus the caller's id in a frozen envelope
       // (review R4/R2) — identical to create()/upsert().
@@ -1821,7 +2130,8 @@ export class FirestoreRepository<
         return await this.readAfterCommit(() => this.getByIdOrThrow(id));
       }
       if (options?.withMetadata === true) {
-        return { id, writeTime: writeResult.writeTime };
+        // Non-null is sound: see create(). Transaction mode refuses withMetadata up front.
+        return { id, writeTime: writeResult!.writeTime };
       }
       return { id };
     } catch (err: any) {
@@ -1880,6 +2190,7 @@ export class FirestoreRepository<
     dataArray: CreateInput<W>[],
     options?: { returnDoc?: boolean; withMetadata?: boolean },
   ): Promise<{ id: ID }[] | FirestoreDocument<T>[] | WriteResultWithMetadata<{ id: ID }>[]> {
+    this.assertNoReadCapableInterceptor('bulkCreate()');
     this.assertExclusiveWriteResultOptions(options);
     try {
       const colRef = this.writeCol();
@@ -1908,7 +2219,7 @@ export class FirestoreRepository<
       Object.freeze(drafts);
       await this.runHooks('beforeBulkCreate', drafts);
 
-      const actions: ((batch: FirebaseFirestore.WriteBatch) => void)[] = [];
+      const actions: WriteGroup[] = [];
       // Result/hook payload is built from the VALIDATED create OUTPUT (never the raw draft), so any
       // key Zod strips is absent from both the return value and the afterBulkCreate payload, and the
       // element type is the exact parsed output (review R4).
@@ -1918,7 +2229,15 @@ export class FirestoreRepository<
         const docRef = colRef.doc(id);
         const validData = this.validateCreateData(draft as CreateInput<W>);
 
-        actions.push(batch => batch.set(docRef, validData as any));
+        actions.push({
+          domain: (target: StagingTarget) => target.set(docRef, validData as any),
+          // Batch mode only: commitInChunks refuses a read-capable interceptor, so there are never
+          // read results to hand a write phase here.
+          interceptor: this.collectInterceptorWrites(
+            { kind: 'create', id, data: validData },
+            EMPTY_INTERCEPTOR_READS,
+          ),
+        });
         validatedDocs.push({
           ...validData,
           id,
@@ -1926,7 +2245,7 @@ export class FirestoreRepository<
       }
 
       // Capture receipts in enqueue order across 500-op chunks so withMetadata stays positional (T2).
-      const writeResults = await this.commitInChunks(actions);
+      const writeResults = await this.commitInChunks(actions, 'bulkCreate()');
       // emitAfterBulkCreate freezes the array and each doc so the hook cannot mutate the accounting.
       await this.emitAfterBulkCreate(validatedDocs);
 
@@ -1994,6 +2313,7 @@ export class FirestoreRepository<
     entries: { id: ID; data: CreateInput<W> }[],
     options?: { returnDoc?: boolean; withMetadata?: boolean },
   ): Promise<{ id: ID }[] | FirestoreDocument<T>[] | WriteResultWithMetadata<{ id: ID }>[]> {
+    this.assertNoReadCapableInterceptor('bulkCreateWithIds()');
     // Security boundary + input contract, both BEFORE any hook or I/O: every caller-supplied id is
     // validated (review B1), then duplicates are rejected because two creates on the same document
     // in one batch are ambiguous and inflate the result count.
@@ -2029,7 +2349,7 @@ export class FirestoreRepository<
       Object.freeze(drafts);
       await this.runHooks('beforeBulkCreate', drafts);
 
-      const actions: ((batch: FirebaseFirestore.WriteBatch) => void)[] = [];
+      const actions: WriteGroup[] = [];
       // Result/hook payload is built from the VALIDATED create OUTPUT (never the raw draft), so any
       // key Zod strips is absent from both the return value and the afterBulkCreate payload
       // (review R4).
@@ -2041,14 +2361,20 @@ export class FirestoreRepository<
 
         // `batch.create` — NOT `batch.set`: create-only semantics, and the batch stays atomic, so a
         // collision on any entry means none of the siblings land.
-        actions.push(batch => batch.create(docRef, validData as any));
+        actions.push({
+          domain: (target: StagingTarget) => target.create(docRef, validData as any),
+          interceptor: this.collectInterceptorWrites(
+            { kind: 'create', id, data: validData },
+            EMPTY_INTERCEPTOR_READS,
+          ),
+        });
         validatedDocs.push({
           ...validData,
           id,
         });
       }
 
-      const writeResults = await this.commitInChunks(actions);
+      const writeResults = await this.commitInChunks(actions, 'bulkCreateWithIds()');
       // emitAfterBulkCreate freezes the array and each doc so the hook cannot mutate the accounting.
       await this.emitAfterBulkCreate(validatedDocs);
 
@@ -2605,7 +2931,9 @@ export class FirestoreRepository<
     options?: UpdateOptions,
   ): Promise<{ id: ID } | FirestoreDocument<T> | WriteResultWithMetadata<{ id: ID }>> {
     // A direct update()/patch() legitimately permits FieldValue.delete() to clear a field.
-    return this.runUpdate(id, data, options, false);
+    // `patch()` delegates to `update()`, so it reports as `update()` — which is exactly what its
+    // documented contract says it is (`update(id, data, { merge: true })`).
+    return this.runUpdate(id, data, options, false, 'update()');
   }
 
   /**
@@ -2622,6 +2950,10 @@ export class FirestoreRepository<
     data: UpdateInput<W>,
     options: UpdateOptions | undefined,
     rejectDeleteSentinels: boolean,
+    // The public method to NAME in an interceptor refusal. `upsert` passes its own label so its
+    // error text does not depend on whether the document happened to exist — the create branch
+    // would otherwise say `upsert()` and this branch `update()` for the same call.
+    operation: string,
   ): Promise<{ id: ID } | FirestoreDocument<T> | WriteResultWithMetadata<{ id: ID }>> {
     this.validateId(id);
     this.assertExclusiveWriteResultOptions(options);
@@ -2655,9 +2987,27 @@ export class FirestoreRepository<
       // T1 branch: never forward an `undefined` precondition positionally — `update()`'s
       // field/value overload would parse it as a field argument and throw. See toPrecondition().
       const precondition = this.toPrecondition(options?.lastUpdateTime);
-      const writeResult = precondition
-        ? await docRef.update(writePayload as any, precondition)
-        : await docRef.update(writePayload as any);
+      // One seam for `update`, `patch` and `upsert`'s update branch — so all three get the
+      // interceptor guarantee from a single site.
+      //
+      // NOTE the payload handed to the interceptor is `validData`, i.e. POST-normalization: under
+      // merge a nested `{ address: { city } }` has already become `{ 'address.city': … }`. That is
+      // deliberate — an interceptor observes what is actually written, transforms included — but it
+      // means `patch()` and `update()` hand it different shapes for the same logical write. Documented
+      // on {@link InterceptedWrite} and pinned by the integration suite's `patch` case.
+      const writeResult = await this.runInterceptedWrite(
+        { kind: 'update', id, data: validData },
+        operation,
+        options,
+        () =>
+          precondition
+            ? docRef.update(writePayload as any, precondition)
+            : docRef.update(writePayload as any),
+        target =>
+          precondition
+            ? target.update(docRef, writePayload as any, precondition)
+            : target.update(docRef, writePayload as any),
+      );
       await this.runHooks('afterUpdate', Object.freeze({ id }));
 
       // When returnDoc is enabled, we re-read the document after write completion.
@@ -2666,7 +3016,8 @@ export class FirestoreRepository<
         return await this.readAfterCommit(() => this.getByIdOrThrow(id));
       }
       if (options?.withMetadata === true) {
-        return { id, writeTime: writeResult.writeTime };
+        // Non-null is sound: see create(). Transaction mode refuses withMetadata up front.
+        return { id, writeTime: writeResult!.writeTime };
       }
 
       return { id };
@@ -2829,6 +3180,7 @@ export class FirestoreRepository<
     merge: boolean,
     options?: { withMetadata?: boolean },
   ): Promise<{ id: ID }[] | WriteResultWithMetadata<{ id: ID }>[]> {
+    this.assertNoReadCapableInterceptor(merge ? 'bulkPatch()' : 'bulkUpdate()');
     this.assertNoDuplicateIds(
       updates.map(u => u.id),
       merge ? 'bulkPatch' : 'bulkUpdate',
@@ -2856,7 +3208,7 @@ export class FirestoreRepository<
         'beforeBulkUpdate',
         hookView as HookDataFor<'beforeBulkUpdate', T, W, WO>,
       );
-      const actions: ((batch: FirebaseFirestore.WriteBatch) => void)[] = [];
+      const actions: WriteGroup[] = [];
       const ids: ID[] = [];
 
       for (const { id, entry } of work) {
@@ -2870,15 +3222,29 @@ export class FirestoreRepository<
         // frozen hook view, which deliberately carries only `id`/`data`), and the one-argument form
         // is used whenever the caller supplied no token. See toPrecondition().
         const precondition = this.toPrecondition(entry.lastUpdateTime);
+        const interceptor = this.collectInterceptorWrites(
+          { kind: 'update', id, data: validData },
+          EMPTY_INTERCEPTOR_READS,
+        );
         if (precondition) {
-          actions.push(batch => batch.update(docRef, writePayload as any, precondition));
+          actions.push({
+            domain: (target: StagingTarget) =>
+              target.update(docRef, writePayload as any, precondition),
+            interceptor,
+          });
         } else {
-          actions.push(batch => batch.update(docRef, writePayload as any));
+          actions.push({
+            domain: (target: StagingTarget) => target.update(docRef, writePayload as any),
+            interceptor,
+          });
         }
         ids.push(id);
       }
 
-      const writeResults = await this.commitInChunks(actions);
+      const writeResults = await this.commitInChunks(
+        actions,
+        merge ? 'bulkPatch()' : 'bulkUpdate()',
+      );
       // Freeze the whole envelope (review R2): the `ids` property cannot be reassigned to a forged
       // array, so a first hook cannot corrupt what a second hook observes.
       await this.runHooks('afterBulkUpdate', Object.freeze({ ids: Object.freeze([...ids]) }));
@@ -3033,6 +3399,7 @@ export class FirestoreRepository<
             withMetadata: shouldReturnMetadata,
           },
           true,
+          'upsert()',
         );
       }
 
@@ -3046,7 +3413,17 @@ export class FirestoreRepository<
       const validData = this.validateCreateData(docToCreate as CreateInput<W>);
 
       const docRef = this.writeCol().doc(id);
-      const writeResult = await docRef.set(validData as any);
+      // The existence pre-read above deliberately stays OUTSIDE this boundary: under batch mode it
+      // could not join a WriteBatch at all, and the read-then-write window is pre-existing upsert
+      // behavior (ADR-0019), unchanged here. The interceptor sees `kind: 'create'` on this branch and
+      // `kind: 'update'` through runUpdate on the other, matching the write actually performed.
+      const writeResult = await this.runInterceptedWrite(
+        { kind: 'create', id, data: validData },
+        'upsert()',
+        options,
+        () => docRef.set(validData as any),
+        target => target.set(docRef, validData as any),
+      );
 
       // After-create hooks observe the parsed output + id in a frozen envelope (review R4/R2).
       await this.emitAfterCreate(validData, id);
@@ -3054,7 +3431,8 @@ export class FirestoreRepository<
         return await this.readAfterCommit(() => this.getByIdOrThrow(id));
       }
       if (shouldReturnMetadata) {
-        return { id, writeTime: writeResult.writeTime };
+        // Non-null is sound: see create(). Transaction mode refuses withMetadata up front.
+        return { id, writeTime: writeResult!.writeTime };
       }
       return { id };
     } catch (error: any) {
@@ -3143,13 +3521,22 @@ export class FirestoreRepository<
       // T1 branch: `delete(undefined)` happens to be tolerated by the SDK, but every write site
       // branches identically so there is one rule to remember. See toPrecondition().
       const precondition = this.toPrecondition(options?.lastUpdateTime);
-      const writeResult = precondition ? await docRef.delete(precondition) : await docRef.delete();
+      // The interceptor is handed the whole pre-read document, not just the id — the read above
+      // already fetched it, so there is nothing to re-read.
+      const writeResult = await this.runInterceptedWrite(
+        { kind: 'delete', id, document: asFirestoreDocument<T>(docData) },
+        'delete()',
+        options,
+        () => (precondition ? docRef.delete(precondition) : docRef.delete()),
+        target => (precondition ? target.delete(docRef, precondition) : target.delete(docRef)),
+      );
       await this.runHooks(
         'afterDelete',
         asFirestoreDocument<T>(deepFreeze({ ...docData })) as HookDataFor<'afterDelete', T, W, WO>,
       );
       if (options?.withMetadata === true) {
-        return { writeTime: writeResult.writeTime };
+        // Non-null is sound: see create(). Transaction mode refuses withMetadata up front.
+        return { writeTime: writeResult!.writeTime };
       }
     } catch (error: any) {
       throw parseFirestoreError(error);
@@ -3226,6 +3613,8 @@ export class FirestoreRepository<
     entries: ID[] | { id: ID; lastUpdateTime?: FirebaseFirestore.Timestamp }[],
     options?: { withMetadata?: boolean },
   ): Promise<number | { count: number; writeTimes: FirebaseFirestore.Timestamp[] }> {
+    // Ahead of the db.getAll() existence pre-read and the beforeBulkDelete hook below.
+    this.assertNoReadCapableInterceptor('bulkDelete()');
     // Normalize the two overloads to one internal shape. The overloads keep a mixed
     // `['a', { id: 'b' }]` array from type-checking; this cast is the implementation-signature
     // widening TypeScript requires to iterate the union.
@@ -3279,19 +3668,27 @@ export class FirestoreRepository<
       );
 
       // T1 branch, per target: the one-argument form is used whenever the entry carried no token.
-      const actions = targetRefs.map(ref => {
+      // `docsData` is built from the same `existing` snapshots in the same order as `targetRefs`, so
+      // index alignment hands each interceptor the document actually being deleted.
+      const actions: WriteGroup[] = targetRefs.map((ref, index) => {
         const precondition = this.toPrecondition(preconditionById.get(ref.id));
-        return (batch: FirebaseFirestore.WriteBatch) => {
-          if (precondition) {
-            batch.delete(ref, precondition);
-          } else {
-            batch.delete(ref);
-          }
+        return {
+          domain: (target: StagingTarget) => {
+            if (precondition) {
+              target.delete(ref, precondition);
+            } else {
+              target.delete(ref);
+            }
+          },
+          interceptor: this.collectInterceptorWrites(
+            { kind: 'delete', id: ref.id, document: docsData[index]! },
+            EMPTY_INTERCEPTOR_READS,
+          ),
         };
       });
 
       // Pair receipts to surviving targetRefs / capturedIds — never to the original input (T3).
-      const writeResults = await this.commitInChunks(actions);
+      const writeResults = await this.commitInChunks(actions, 'bulkDelete()');
       await this.runHooks(
         'afterBulkDelete',
         Object.freeze({ ids: capturedIds, documents: docsData }),
@@ -3420,6 +3817,13 @@ export class FirestoreRepository<
     operations: BulkWriteOperation<W>[],
     options?: BulkWriteOptions,
   ): Promise<BulkWriteResult[]> {
+    // Unconditional, and deliberately OUTSIDE the `skipHooks` acknowledgement below: `skipHooks`
+    // waives a notification, and an interceptor is a guarantee. There is no honest way to skip one,
+    // so there is no escape hatch here either (ADR-0040 Decision 4).
+    this.assertNoInterceptorsRegistered(
+      'bulkWrite()',
+      'BulkWriter commits per operation, so there is no shared atomic boundary.',
+    );
     if (options?.skipHooks !== true) this.assertNoBulkHooksRegistered();
     // Whole-call input misuse, checked before any I/O: two writes to one document commit in an
     // undefined order here (the SDK's ordering chain is global, not per-document), so an ambiguous
@@ -3613,6 +4017,11 @@ export class FirestoreRepository<
    */
   async recursiveDelete(id: ID): Promise<void> {
     this.validateId(id);
+    this.assertNoInterceptorsRegistered(
+      'recursiveDelete()',
+      'db.recursiveDelete streams name-only snapshots across collections this repository does not ' +
+        'model, so no honest interceptor payload exists.',
+    );
     try {
       // Deliberately NOT passing our own BulkWriter: `recursiveDelete` only ever `flush()`es a
       // supplied writer (never closes it), and an unclosed writer blocks `db.terminate()`. The SDK's
@@ -3653,6 +4062,11 @@ export class FirestoreRepository<
    * await postRepo.recursiveDeleteCollection();
    */
   async recursiveDeleteCollection(): Promise<void> {
+    this.assertNoInterceptorsRegistered(
+      'recursiveDeleteCollection()',
+      'db.recursiveDelete streams name-only snapshots across collections this repository does not ' +
+        'model, so no honest interceptor payload exists.',
+    );
     try {
       // Same writer-lifecycle rule as {@link recursiveDelete}: pass only the collection reference
       // so the SDK owns the lazily-created BulkWriter. Using `writeCol()` (not `readCol()`) keeps
@@ -3993,10 +4407,14 @@ export class FirestoreRepository<
       this.readCol(),
       this.readCol(),
       this.db,
-      this.commitInChunks.bind(this),
+      (groups: WriteGroup[], operation: string) => this.commitInChunks(groups, operation),
       this.runHooks.bind(this),
       this.validateUpdateData.bind(this),
       this.allowLegacyDatastoreIds,
+      // Query write terminals are batch-only, so there is never a read result to thread through —
+      // hence the empty reads map.
+      write => this.collectInterceptorWrites(write, EMPTY_INTERCEPTOR_READS),
+      operation => this.assertNoReadCapableInterceptor(operation),
     );
   }
 
@@ -4091,50 +4509,495 @@ export class FirestoreRepository<
   }
 
   /**
-   * Commits write actions in sequential chunks of 500 (the Firestore batch limit).
+   * Refuses an interceptor target built on a **different** `Firestore` instance.
    *
-   * Returns the Admin SDK {@link FirebaseFirestore.WriteResult} array for every **successfully**
-   * committed action, concatenated in enqueue order across chunks. A failed chunk contributes no
+   * There is no SDK guard for this and no error either: staging a `DocumentReference` from another
+   * `Firestore` into this instance's batch is accepted, `commit()` returns a real `writeTime`, and
+   * the document is then readable through *neither* instance (measured — probe P8b). Interceptors are
+   * the first API that makes a foreign repository reachable at a write boundary, so the guard lives
+   * here, on every writer and reader member, and throws before anything is staged.
+   */
+  private assertSameFirestoreInstance(
+    repo: FirestoreRepository<any, any, any, any>,
+    member: string,
+  ): void {
+    if (repo.db === this.db) return;
+    throw new Error(
+      `interceptor ${member}(): the target repository for '${repo.collectionPath}' is built on a ` +
+        'different Firestore instance than the repository being written. Firestore accepts such a ' +
+        'write and reports success, but the document lands in neither database. Build every ' +
+        'interceptor target from the same Firestore instance.',
+    );
+  }
+
+  /**
+   * Builds the {@link InterceptorWriter} for one staging boundary.
+   *
+   * Every member stages into `target` — never commits — and runs the target repository's **own**
+   * validation first, so an interceptor cannot write a payload a direct call would have rejected.
+   * Reaching another repository's `private` members is deliberate and legal from inside this class
+   * body; it is what lets a sibling write be validated by the repository that owns that collection.
+   */
+  private buildInterceptorWriter(target: StagingTarget): InterceptorWriter {
+    /**
+     * Shared body for `update` and `patch`, which differ only in whether nested objects are
+     * normalized into field paths first — exactly the difference between `update()` and `patch()` on
+     * the repository, where `patch` IS `update(..., { merge: true })`.
+     */
+    const stageUpdate = (
+      repo: FirestoreRepository<any, any, any, any>,
+      id: ID,
+      data: unknown,
+      merge: boolean,
+    ): void => {
+      const ref = repo.writeCol().doc(repo.validateId(id));
+      const normalized = merge ? repo.normalizeUpdateDataForMerge(data as any) : data;
+      const payload = repo.sanitizeUpdateData(repo.validateUpdateData(normalized as any));
+      repo.assertNonEmptyUpdatePayload(payload as Record<string, any>);
+      target.update(ref, payload as any);
+    };
+    return {
+      createWithId: (repo, id, data) => {
+        this.assertSameFirestoreInstance(repo, 'createWithId');
+        const ref = repo.writeCol().doc(repo.validateId(id));
+        target.create(ref, repo.validateCreateData(data as any) as any);
+      },
+      set: (repo, id, data, options) => {
+        this.assertSameFirestoreInstance(repo, 'set');
+        const ref = repo.writeCol().doc(repo.validateId(id));
+        // The CREATE validator, on both branches: a set creates the document when it is absent, so
+        // the payload has to be a complete one either way. This also inherits the create path's two
+        // guards for free — dotted keys (which `set` would turn into literal field names) and delete
+        // sentinels (whose meaning would depend on whether the sibling happened to exist, exactly as
+        // `upsert` rejects them for the same reason, ADR-0019).
+        const validData = repo.validateCreateData(data as any) as any;
+        if (options?.merge === true) {
+          target.set(ref, validData, { merge: true });
+          return;
+        }
+        target.set(ref, validData);
+      },
+      update: (repo, id, data) => {
+        this.assertSameFirestoreInstance(repo, 'update');
+        stageUpdate(repo, id, data, false);
+      },
+      patch: (repo, id, data) => {
+        this.assertSameFirestoreInstance(repo, 'patch');
+        stageUpdate(repo, id, data, true);
+      },
+      delete: (repo, id) => {
+        this.assertSameFirestoreInstance(repo, 'delete');
+        target.delete(repo.writeCol().doc(repo.validateId(id)));
+      },
+    };
+  }
+
+  /**
+   * Builds the {@link InterceptorReader} for one transaction.
+   *
+   * Reads join the caller's transaction, so what an interceptor reads is consistent with what it
+   * then stages. Same instance-identity guard as the writer: a read through a foreign `Firestore`
+   * would resolve against the wrong database.
+   */
+  private buildInterceptorReader(tx: FirebaseFirestore.Transaction): InterceptorReader {
+    return {
+      // `Promise<any>`: the member is generic over the TARGET repository's read model, which the
+      // implementation cannot name. Callers still get `FirestoreDocument<TT> | null` from the
+      // interface. Mirrors `getInTransaction`'s body otherwise.
+      get: async (repo, id): Promise<any> => {
+        this.assertSameFirestoreInstance(repo, 'get');
+        const snapshot = await tx.get(repo.readCol().doc(repo.validateId(id)));
+        if (!snapshot.exists) return null;
+        return asFirestoreDocument<any>({ ...(snapshot.data() as any), id: snapshot.id });
+      },
+    };
+  }
+
+  /** Registered write interceptors, in registration order (ADR-0040 Decision 1: per instance). */
+  private interceptors: WriteInterceptor<T, W, WO>[] = [];
+
+  /**
+   * Registers a write interceptor: writes it stages are **guaranteed** to commit in the same atomic
+   * boundary as the repository write that triggered it, on every write path — or that path refuses
+   * (ADR-0040).
+   *
+   * This is not another lifecycle hook. A hook is a notification that runs *outside* the write's
+   * boundary and may be skipped; an interceptor's writes land with the domain write or nothing lands.
+   * Where no shared boundary exists — `bulkWrite`, `recursiveDelete`,
+   * `recursiveDeleteCollection` — the path **throws** rather than silently dropping the guarantee.
+   *
+   * **Registration is per repository instance and lives for the process**, like {@link on}. It is
+   * carried into the repository handed to a {@link runInTransaction} callback, and deliberately *not*
+   * into `subcollection()` / `withSchema()` / `withSchemaArgs()`, which model a different collection
+   * whose write model this interceptor could not satisfy.
+   *
+   * **The mode is a union over registrations** (ADR-0040 Decision 7): with only write-only
+   * interceptors registered, single-document writes commit as a `WriteBatch` and the fixed-batch
+   * helpers and query write terminals keep working. Registering **one** interceptor with a `read`
+   * phase promotes every single-document write to a transaction, and those bulk paths then refuse
+   * (a transaction cannot be chunked), as does `{ withMetadata: true }` (a transaction exposes no
+   * per-operation write receipt).
+   *
+   * Interceptors run in **registration order**, sequentially, and the first one to throw aborts the
+   * whole write — nothing is committed, and no later interceptor runs.
+   *
+   * @param interceptor - `{ name, write }`, or `{ name, read, write }` for the read-capable flavour.
+   *   `name` must be unique on this repository: read results are keyed by it.
+   * @throws {Error} If an interceptor with the same `name` is already registered
+   *
+   * @example
+   * // Write-only: keep a counter document in step with every write, in one batch.
+   * userRepo.registerWriteInterceptor({
+   *   name: 'user-count-mirror',
+   *   write: ({ write, writer }) => {
+   *     writer.set(statsRepo, 'users', { lastTouchedId: write.id }, { merge: true });
+   *   },
+   * });
+   *
+   * @example
+   * // Read-capable: every write on this repository now runs in a transaction.
+   * userRepo.registerWriteInterceptor({
+   *   name: 'audit-trail',
+   *   read: async ({ write, reader }) => await reader.get(auditRepo, write.id),
+   *   write: ({ write, writer, reads }) => {
+   *     writer.set(auditRepo, write.id, { revision: (reads?.revision ?? 0) + 1 });
+   *   },
+   * });
+   */
+  registerWriteInterceptor(interceptor: WriteOnlyInterceptor<T, W, WO>): void;
+  registerWriteInterceptor<R>(interceptor: ReadCapableInterceptor<T, W, WO, R>): void;
+  registerWriteInterceptor(interceptor: WriteInterceptor<T, W, WO>): void {
+    // Names key the read-phase results, so a duplicate would silently hand one interceptor another's
+    // `reads` value. Refuse at registration, where the stack still points at the caller.
+    if (this.interceptors.some(registered => registered.name === interceptor.name)) {
+      throw new Error(
+        `A write interceptor named '${interceptor.name}' is already registered on this repository ` +
+          `('${this.collectionPath}'). Interceptor names key their read-phase results, so they must ` +
+          'be unique per repository. Choose a different name.',
+      );
+    }
+    this.interceptors.push(interceptor);
+  }
+
+  /**
+   * Collects the writes every registered interceptor wants to stage alongside one domain write.
+   *
+   * Returns staging closures, never a committed write: the caller decides whether they land in a
+   * `WriteBatch` or a `Transaction`. In transaction mode the read phases have already run (see
+   * {@link runInterceptorReads}), because Firestore requires all reads before all writes.
+   */
+  private collectInterceptorWrites(
+    write: InterceptedWrite<T, W, WO>,
+    reads: ReadonlyMap<string, unknown>,
+  ): ((target: StagingTarget) => void)[] {
+    if (this.interceptors.length === 0) return [];
+    const staged: ((target: StagingTarget) => void)[] = [];
+    for (const interceptor of this.interceptors) {
+      staged.push(target => {
+        const writer = this.buildInterceptorWriter(target);
+        // Cast: the two interceptor flavours differ only in whether `reads` is present, and the
+        // union's call signatures are not callable jointly. `reads` is keyed by interceptor name and
+        // is `undefined` for a write-only interceptor, which is exactly its declared shape.
+        (interceptor.write as (ctx: unknown) => void)({
+          write,
+          writer,
+          reads: reads.get(interceptor.name),
+        });
+      });
+    }
+    return staged;
+  }
+
+  /**
+   * Runs every read-capable interceptor's read phase, before any write is staged.
+   *
+   * Firestore requires all reads in a transaction to precede all writes, so this runs to completion
+   * first and the write phases are synchronous by type. Results are keyed by interceptor name — which
+   * {@link registerWriteInterceptor} requires to be unique — so each write phase receives its own.
+   */
+  private async runInterceptorReads(
+    write: InterceptedWrite<T, W, WO>,
+    tx: FirebaseFirestore.Transaction,
+  ): Promise<ReadonlyMap<string, unknown>> {
+    const reads = new Map<string, unknown>();
+    for (const interceptor of this.interceptors) {
+      if (typeof interceptor.read !== 'function') continue;
+      reads.set(
+        interceptor.name,
+        await interceptor.read({ write, reader: this.buildInterceptorReader(tx) }),
+      );
+    }
+    return reads;
+  }
+
+  /**
+   * Refuses a chunked-batch write path while a **read-capable** interceptor is registered.
+   *
+   * A transaction cannot be chunked into 500-operation batches, so these paths have no honest way to
+   * host an interceptor that declares a read phase. Write-only interceptors are fine here — they
+   * stage into the batch alongside the domain writes — which is why this is a narrower guard than
+   * {@link assertNoInterceptorsRegistered}.
+   *
+   * Called as the **first statement** of each affected path, deliberately ahead of that path's
+   * existence pre-read and its `beforeBulk*` hooks: a call that cannot proceed should not first
+   * perform a batched read and fire user hooks that may have side effects of their own.
+   */
+  private assertNoReadCapableInterceptor(operation: string): void {
+    if (this.interceptorMode() !== 'transaction') return;
+    const forcing = this.interceptors
+      .filter(interceptor => typeof interceptor.read === 'function')
+      .map(interceptor => `'${interceptor.name}'`)
+      .join(', ');
+    throw new Error(
+      `${operation} cannot run write interceptor(s) ${forcing}: they declare a read phase, so ` +
+        'they need a transaction, and a transaction cannot be chunked into 500-operation ' +
+        'batches. Use the single-document write methods, or remove the read phase so the ' +
+        'interceptor can run in a write batch.',
+    );
+  }
+
+  /**
+   * Refuses a write path that cannot host a shared atomic boundary, naming the interceptors that
+   * would otherwise be silently skipped.
+   *
+   * Mirrors {@link assertNoBulkHooksRegistered}, with one deliberate difference: there is no
+   * `{ skipHooks: true }`-style acknowledgement. A hook is a notification and may be waived; an
+   * interceptor is a guarantee, so "skip it" is not an honest option (ADR-0040 Decision 4).
+   */
+  private assertNoInterceptorsRegistered(operation: string, reason: string): void {
+    if (this.interceptors.length === 0) return;
+    const names = this.interceptors.map(interceptor => `'${interceptor.name}'`).join(', ');
+    throw new Error(
+      `${operation} cannot run write interceptor(s) ${names}: ${reason} Use the single-document ` +
+        'write methods (or the fixed-batch helpers, for a write-only interceptor), or do not ' +
+        'register the interceptor on this repository — registration lasts for the life of the ' +
+        'process and cannot be undone.',
+    );
+  }
+
+  /**
+   * Rejects `{ withMetadata: true }` while a transaction-mode interceptor is active.
+   *
+   * A transaction exposes no per-operation receipt (`tx.create(...)` returns the `Transaction`), so
+   * any `writeTime` here would be fabricated or transaction-level — the same reasoning that keeps
+   * `withMetadata` off the `*InTransaction` helpers. The message names the interceptor that forced
+   * the mode union, because the caller who hits this typically did not register it.
+   *
+   * Batch mode is deliberately unaffected: batch receipts are real and positional, so `withMetadata`
+   * keeps working there.
+   */
+  private assertNoWriteMetadataUnderTransactionMode(
+    options: { withMetadata?: boolean } | undefined,
+    operation: string,
+  ): void {
+    if (options?.withMetadata !== true) return;
+    const forcing = this.interceptors
+      .filter(interceptor => typeof interceptor.read === 'function')
+      .map(interceptor => `'${interceptor.name}'`)
+      .join(', ');
+    throw new Error(
+      `${operation} cannot return { withMetadata: true }: write interceptor(s) ${forcing} declare a ` +
+        'read phase, so this write runs in a transaction, and Firestore exposes no per-operation ' +
+        'write receipt inside a transaction. Remove the read phase to run in a write batch, or drop ' +
+        'withMetadata.',
+    );
+  }
+
+  /**
+   * Runs one single-document write through whichever boundary the registered interceptors require,
+   * and returns the domain write's receipt when one exists.
+   *
+   * Three paths, and the first is the important one:
+   * - `'none'` — calls `direct()`, which is the untouched pre-interceptor write. No batch, no
+   *   transaction, no behavior change for the overwhelming majority of repositories (ADR-0040
+   *   Decision 8).
+   * - `'batch'` — one {@link WriteGroup} through {@link commitInChunks}, so the returned receipt is
+   *   the **domain** receipt and `withMetadata` keeps working.
+   * - `'transaction'` — reads first, then the domain write, then the interceptor writes, all inside
+   *   one `db.runTransaction`. Returns `undefined`: there is no per-operation receipt in a
+   *   transaction, which is why `withMetadata` is refused up front.
+   *
+   * @returns The domain write's `WriteResult`, or `undefined` in transaction mode
+   */
+  private async runInterceptedWrite(
+    intercepted: InterceptedWrite<T, W, WO>,
+    operation: string,
+    options: { withMetadata?: boolean } | undefined,
+    direct: () => Promise<FirebaseFirestore.WriteResult>,
+    stage: (target: StagingTarget) => void,
+  ): Promise<FirebaseFirestore.WriteResult | undefined> {
+    const mode = this.interceptorMode();
+    if (mode === 'none') {
+      return await direct();
+    }
+    if (mode === 'batch') {
+      const writeResults = await this.commitInChunks(
+        [
+          {
+            domain: stage,
+            interceptor: this.collectInterceptorWrites(intercepted, EMPTY_INTERCEPTOR_READS),
+          },
+        ],
+        operation,
+      );
+      return writeResults[0];
+    }
+    this.assertNoWriteMetadataUnderTransactionMode(options, operation);
+    await this.db.runTransaction(async tx => {
+      // ALL reads before ANY write — Firestore rejects a read staged after a write in the same
+      // transaction, and this ordering is the whole reason `write` phases are synchronous.
+      const reads = await this.runInterceptorReads(intercepted, tx);
+      const target = tx as StagingTarget;
+      stage(target);
+      for (const stageInterceptor of this.collectInterceptorWrites(intercepted, reads)) {
+        stageInterceptor(target);
+      }
+    });
+    return undefined;
+  }
+
+  /**
+   * Stages one domain write, plus every interceptor's writes, into the **caller's** transaction.
+   *
+   * The `*InTransaction` helpers already have the one thing interceptors need — a transaction — so
+   * there is no mode branch here and no nested `runTransaction`: a write-only and a read-capable
+   * interceptor behave identically, both joining the boundary the caller opened. `withMetadata` does
+   * not exist on these helpers, so there is nothing to refuse either.
+   *
+   * The read phase runs before the domain write is staged, which is why this is the one place the
+   * ordering lives rather than being repeated at four call sites.
+   */
+  private async stageInterceptedWrite(
+    intercepted: InterceptedWrite<T, W, WO>,
+    tx: FirebaseFirestore.Transaction,
+    stage: (target: StagingTarget) => void,
+  ): Promise<void> {
+    const target = tx as StagingTarget;
+    // Nothing registered: stage exactly the write this helper always staged, with no read phase and
+    // no allocation.
+    if (this.interceptors.length === 0) {
+      stage(target);
+      return;
+    }
+    // ALL reads before ANY write (T9): Firestore rejects a read that follows a write in the same
+    // transaction, so every read phase completes before the domain write is staged.
+    const reads = await this.runInterceptorReads(intercepted, tx);
+    stage(target);
+    for (const stageInterceptor of this.collectInterceptorWrites(intercepted, reads)) {
+      stageInterceptor(target);
+    }
+  }
+
+  /**
+   * Resolves which write boundary this repository's registrations require, as a **union** over every
+   * registered interceptor (ADR-0040 Decision 7).
+   *
+   * `'none'` keeps every write path byte-identical to a repository with no interceptors (Decision 8).
+   * A single read-capable registration promotes the whole repository to `'transaction'` — the mode is
+   * per repository, not per interceptor, because one shared atomic boundary has to host all of them.
+   */
+  private interceptorMode(): 'none' | 'batch' | 'transaction' {
+    if (this.interceptors.length === 0) return 'none';
+    return this.interceptors.some(i => typeof i.read === 'function') ? 'transaction' : 'batch';
+  }
+
+  /**
+   * Commits {@link WriteGroup}s in sequential chunks of 500 operations (the Firestore batch limit).
+   *
+   * A group is one **domain** write plus the interceptor writes that must land with it, and a chunk
+   * boundary never falls inside a group: the current batch commits *before* a group that would not
+   * fit whole (ADR-0040 Decision 5). Without that, a domain write could commit in chunk N while its
+   * interceptor write lands in chunk N+1 — losing the only guarantee interceptors sell, and only
+   * above 500 operations.
+   *
+   * Returns **domain receipts only**, in enqueue order across chunks: every caller indexes the
+   * result positionally against its own document list (`writeResults[index]!.writeTime`), and
+   * `bulkDelete` documents `writeTimes.length === count`. Returning interceptor receipts too would
+   * silently hand back another document's `writeTime` (trap T3). A failed chunk contributes no
    * fabricated receipts — only prior successful chunks appear in the returned array (and in
    * {@link WriteOutcomeError.committedWrites}).
+   *
+   * **Assumes its callers have already refused transaction mode.** That check lives in
+   * {@link assertNoReadCapableInterceptor}, called as the *first statement* of each of the six bulk
+   * paths — ahead of their existence pre-reads and `beforeBulk*` hooks, so a call that cannot proceed
+   * performs no I/O and fires no hooks. It used to live here, which meant a refused `bulkDelete` had
+   * already run `db.getAll` and fired its hook. Do not treat those six guards as belt-and-braces:
+   * this method no longer refuses, so removing one stops that path refusing at all.
    *
    * IMPORTANT — non-atomic above 500 operations: each 500-op chunk commits independently, so an
    * operation set larger than 500 writes is NOT globally atomic. If a later chunk fails, earlier
    * chunks remain committed and the operation's after-hook does not run. Bulk operations at or below
    * 500 writes commit as a single atomic batch. Use a transaction if you need all-or-nothing
-   * semantics across more than 500 documents.
+   * semantics across more than 500 documents. With `K` interceptors registered a chunk holds
+   * `floor(500 / (1 + K))` documents, so that boundary is reached at proportionally fewer documents.
    */
   private async commitInChunks(
-    actions: ((batch: FirebaseFirestore.WriteBatch) => void)[],
+    groups: WriteGroup[],
+    operation: string,
   ): Promise<FirebaseFirestore.WriteResult[]> {
+    // Resolve every group to its real operation list BEFORE committing anything. An interceptor's
+    // write phase may stage zero, one, or many writes, so the physical count that the chunk
+    // boundary, the receipt projection and the WriteOutcomeError accounting all depend on is
+    // knowable only by running it (see {@link recordStagedWrites}). Each phase runs exactly once.
+    const recorded: ((batch: StagingTarget) => void)[][] = [];
+    let totalWrites = 0;
+    for (const group of groups) {
+      // The domain write is recorded FIRST, so it is at index 0 of its group and its receipt is the
+      // one at the group's starting position in the committed chunk (P2). Every ORM domain closure
+      // stages exactly one operation.
+      const staged = recordStagedWrites(target => {
+        group.domain(target);
+        for (const stage of group.interceptor) stage(target);
+      });
+      // A group larger than one whole batch can never be staged atomically. Refuse rather than split
+      // it (which would break the guarantee) or loop forever trying to fit it. Measured on the real
+      // operation count, so a single interceptor staging 600 writes trips this too.
+      if (staged.length > 500) {
+        throw new Error(
+          `${operation} cannot stage ${staged.length} writes for one document atomically: a ` +
+            'Firestore write batch holds 500 operations, so a document plus its interceptor writes ' +
+            'must total at most 500. Register fewer write interceptors, or have them stage fewer ' +
+            'writes per document.',
+        );
+      }
+      recorded.push(staged);
+      totalWrites += staged.length;
+    }
+
     // Accumulate only successfully committed chunk results so a later failure cannot invent
     // receipts for uncommitted actions (trap T2).
     const writeResults: FirebaseFirestore.WriteResult[] = [];
     let committedWrites = 0;
     let batch = this.db.batch();
-    let counter = 0;
-    let writesInCurrentBatch = 0;
+    // Physical operations staged into the CURRENT batch.
+    let staged = 0;
+    // Positions, within the CURRENT batch, of the domain writes — the projection that keeps the
+    // returned receipts 1:1 with the caller's documents (T3). Reset with every new batch.
+    let domainIndices: number[] = [];
 
     try {
-      for (const action of actions) {
-        action(batch);
-        counter++;
-        writesInCurrentBatch++;
-
-        if (counter === 500) {
+      for (const group of recorded) {
+        // Commit BEFORE staging a group that would not fit whole, so no group straddles a chunk
+        // boundary (ADR-0040 Decision 5 / trap T4).
+        if (staged > 0 && staged + group.length > 500) {
           const chunkResults = await batch.commit();
-          writeResults.push(...chunkResults);
-          committedWrites += writesInCurrentBatch;
+          writeResults.push(...domainIndices.map(index => chunkResults[index]!));
+          committedWrites += staged;
           batch = this.db.batch();
-          counter = 0;
-          writesInCurrentBatch = 0;
+          staged = 0;
+          domainIndices = [];
+        }
+        domainIndices.push(staged);
+        for (const replay of group) {
+          replay(batch);
+          staged++;
         }
       }
 
-      if (counter > 0) {
+      if (staged > 0) {
         const chunkResults = await batch.commit();
-        writeResults.push(...chunkResults);
-        committedWrites += writesInCurrentBatch;
+        writeResults.push(...domainIndices.map(index => chunkResults[index]!));
+        committedWrites += staged;
       }
 
       return writeResults;
@@ -4150,7 +5013,7 @@ export class FirestoreRepository<
           state: 'partially-committed',
           phase: 'commit',
           committedWrites,
-          totalWrites: actions.length,
+          totalWrites,
         },
         cause,
       );
@@ -4284,6 +5147,12 @@ export class FirestoreRepository<
         txRepo.hooks = Object.fromEntries(
           Object.entries(this.hooks).map(([event, handlers]) => [event, [...(handlers ?? [])]]),
         ) as { [K in HookEvent]?: AnyHookFn<T, W, WO>[] };
+        // Preserve registered interceptors so a write through the transaction repository keeps the
+        // same enforcement guarantee. Without this, every *InTransaction call on `txRepo` would run
+        // ZERO interceptors — the silent bypass ADR-0040 exists to eliminate, at the one site where
+        // atomicity was already free. `txRepo` stands in for `this` on the same collection and
+        // model, which is why this clone carries them and `subcollection()`/`withSchema()` do not.
+        txRepo.interceptors = [...this.interceptors];
         txRepo.transactionAttempt = observedAttempt;
         // txRepo is a full instance: its readCol()/writeCol() already resolve the same
         // converter-wrapped read ref and raw write ref. Transaction semantics come from tx.*.
@@ -4513,11 +5382,13 @@ export class FirestoreRepository<
       // T1 branch: `tx.update(ref, data, undefined)` throws "Input is not an object" exactly like the
       // document and batch surfaces. See toPrecondition().
       const precondition = this.toPrecondition(options?.lastUpdateTime);
-      if (precondition) {
-        tx.update(docRef, writePayload as any, precondition);
-      } else {
-        tx.update(docRef, writePayload as any);
-      }
+      // Interceptors join the caller's transaction here — the same guarantee as `update()`, without
+      // a nested boundary. Covers `patchInTransaction`, which delegates to this method.
+      await this.stageInterceptedWrite({ kind: 'update', id, data: validData }, tx, target =>
+        precondition
+          ? target.update(docRef, writePayload as any, precondition)
+          : target.update(docRef, writePayload as any),
+      );
     } catch (error: any) {
       if (error instanceof z.ZodError) {
         throw new ValidationError(error.issues);
@@ -4590,7 +5461,11 @@ export class FirestoreRepository<
 
       // NOTE: after* hooks intentionally do not run inside a transaction (the write is not committed
       // until the callback returns) — only beforeCreate fires, matching updateInTransaction.
-      tx.set(docRef, validData as any);
+      await this.stageInterceptedWrite(
+        { kind: 'create', id: docRef.id, data: validData },
+        tx,
+        target => target.set(docRef, validData as any),
+      );
       return { id: docRef.id };
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -4649,7 +5524,9 @@ export class FirestoreRepository<
 
       // `tx.create` — create-only semantics inside the transaction. NOTE: after* hooks intentionally
       // do not run inside a transaction, matching createInTransaction/updateInTransaction.
-      tx.create(docRef, validData as any);
+      await this.stageInterceptedWrite({ kind: 'create', id, data: validData }, tx, target =>
+        target.create(docRef, validData as any),
+      );
       return { id };
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -4707,11 +5584,11 @@ export class FirestoreRepository<
       );
       // T1 branch, applied for consistency with every other write site. See toPrecondition().
       const precondition = this.toPrecondition(options?.lastUpdateTime);
-      if (precondition) {
-        tx.delete(docRef, precondition);
-      } else {
-        tx.delete(docRef);
-      }
+      await this.stageInterceptedWrite(
+        { kind: 'delete', id, document: asFirestoreDocument<T>(docData) },
+        tx,
+        target => (precondition ? target.delete(docRef, precondition) : target.delete(docRef)),
+      );
     } catch (error: any) {
       throw parseFirestoreError(error);
     }

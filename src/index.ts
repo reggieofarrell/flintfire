@@ -15,6 +15,13 @@ export type {
   StoredDataOf,
   DocumentOf,
   RepositoryConstructorArgs,
+  InterceptedWriteKind,
+  InterceptedWrite,
+  InterceptorReader,
+  InterceptorWriter,
+  WriteInterceptor,
+  WriteOnlyInterceptor,
+  ReadCapableInterceptor,
 } from './core/FirestoreRepository.js';
 export type { HookEvent, HookContext } from './core/Hooks.js';
 export type { FirestoreDocument, CollectionGroupDocument } from './core/DocumentId.js';
