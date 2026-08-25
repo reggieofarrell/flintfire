@@ -108,6 +108,11 @@ try {
         strict: true,
         // Real consumers use skipLibCheck:true; this validates that the exports map resolves and the
         // public API is usable. The express-isolation guarantee is checked separately (grep-based).
+        //
+        // Consequence worth knowing: this leg therefore CANNOT see a broken published .d.ts — e.g. a
+        // stripInternal-erased type still referenced by a public signature. Compiling the emitted
+        // declarations directly is what catches that; see "Published declaration hygiene" in
+        // docs/development/releasing.md for the command (and why not to glob dist/ with **).
         skipLibCheck: true,
         noEmit: true,
         types: [],

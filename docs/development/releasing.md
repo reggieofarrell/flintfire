@@ -210,6 +210,59 @@ After that, every `npm run release:bump` diffs from the most recent `vx.y.z` tag
 > commit — without triggering an npm publish. Such tags only affect how the next
 > `npm run release:bump` computes its changelog delta.
 
+## Published declaration hygiene (`stripInternal`)
+
+`tsconfig.json` sets `stripInternal: true`, so a declaration carrying the `@internal` JSDoc tag is
+removed from the emitted `.d.ts`. If a **public** (untagged) exported type still _references_ that
+name, the reference survives while the declaration it points at does not — and the published `.d.ts`
+stops compiling.
+
+**No gate leg catches this.** Measured while shipping ADR-0040 (issue #108): with two
+`error TS2304: Cannot find name 'StagingTarget'` sitting in `dist/core/FirestoreRepository.d.ts`,
+`npm run build`, `npm run test:types`, `npm run check:package` **and** `npm run check:consumer` were
+all green. `check:consumer` misses it _by design_ — it compiles the packed consumer with
+`skipLibCheck: true`
+([`scripts/check-packed-consumer.mjs`](../../scripts/check-packed-consumer.mjs)), because a strict
+pass would drown in `firebase-admin`'s transitive declarations. So a consumer compiling with
+`skipLibCheck: false` breaks on install and nothing in CI warns first.
+
+Compile the emitted declarations directly, after `npm run build`:
+
+```bash
+find dist -name '*.d.ts' -print0 |
+  xargs -0 npx tsc --noEmit --strict --module nodenext --moduleResolution nodenext
+```
+
+Expected: exit 0, no output. `TS2304` — or `TS2305`, when another module re-exports the stripped
+name — means a stripped declaration leaked into a public signature. Run it on any change that adds,
+renames, or re-exports a public type, or that moves an `@internal` tag, and before cutting a
+release.
+
+Use `find`, not `dist/**/*.d.ts`. That glob is shell-dependent: zsh expands it recursively (48 files
+here), while macOS `bash` has no `globstar` and quietly expands it one level deep (24 files) — then
+exits 0 on a half-checked `dist`, which is the same silent-partial-pass this section exists to warn
+about.
+
+**Avoiding the trap.** Do not tag a type `@internal` merely to keep it off the public API: _not_
+re-exporting it from `src/index.ts` already does that. Reserve the tag for members of
+otherwise-public declarations, which is the case
+[`scripts/check-package-contents.mjs`](../../scripts/check-package-contents.mjs)'s
+declaration-hygiene guard already covers. Note also that TypeScript reads the tag out of a comment
+**regardless of markup**, so merely mentioning it inside a code span in a `.ts` JSDoc block applies
+it — #108 hit exactly that while writing the warning not to use it.
+
+Recorded instances, so the shape is recognizable:
+
+- `ReadOnlyQueryClauseKeys` — [ADR-0041](../adr/0041-read-only-query-builder-type.md) (issue #100).
+  Stripping it silently re-opened `update` / `delete` on the published `ReadOnlyQuery`.
+- The collection-group query types — [ADR-0024](../adr/0024-collection-group-queries.md), which
+  records them as exported-but-not-re-exported for this reason.
+- `StagingTarget` / `WriteGroup` — [ADR-0040](../adr/0040-repository-write-interceptors.md) (issue
+  #108).
+
+Worth turning into a real gate leg (a `check:declarations` script wired into CI and pre-publish)
+rather than a remembered manual step; it is not one today.
+
 ## Configuration
 
 - [`.versionrc.cjs`](../../.versionrc.cjs) — changelog section mapping, FlintFire commit/compare URL
