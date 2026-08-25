@@ -9,11 +9,12 @@
 
 ## Status
 
-Done-pending-review. Shipped: ALS ambient marker + `assertNoAmbientTransaction` on the
-interceptor-forced transaction branch; both `db.runTransaction` sites wrapped; U-8a–U-8h; I-16–I-17
-(I-17 rewritten after self-review F1/F2); ADR-0040 Amendment after Decision 7; `patterns.md`
-caution rewrite; `scope-and-capabilities.md` clause. Full §10 gate green twice (initial + after
-self-review fixes). Plan directory left in place for review (§11.12 cleanup is post-review).
+Done-pending-review (external round-1 BLOCKED remediated — B1/N1). Shipped: ALS ambient marker +
+`assertNoAmbientTransaction` on the interceptor-forced transaction branch; both
+`db.runTransaction` sites wrapped; U-8a–U-8h; I-16–I-17 (I-17 rewritten after self-review F1/F2);
+ADR-0040 Amendment after Decision 7; `patterns.md` caution rewrite; `scope-and-capabilities.md`
+clause. Full §10 gate green twice before review; `check:docs` + `docs:build` re-green after B1/N1.
+Plan directory left in place for re-review.
 
 ## Ambiguities resolved
 
@@ -79,7 +80,7 @@ Restored via `/tmp/FirestoreRepository.ts.112.backup` (never `git checkout` on d
 | Test | Mutation | Result |
 | ---- | -------- | ------ |
 | U-8a, U-8e, U-8g, U-8h | Remove `assertNoAmbientTransaction` call | **Fails** — promises resolve / error is null |
-| U-8a | Unwrap only outer `runInTransaction` ALS wrap (T1) | **Fails** — resolves instead of rejecting |
+| U-8a, U-8e, U-8g, U-8h | Unwrap only outer `runInTransaction` ALS wrap (T1) | **Fails** (all four) — resolves instead of rejecting |
 | U-8c, U-8f | Same outer-unwrap mutation | Still pass (inner wrap + no forced promotion) |
 | U-8f | Refuse nested `runInTransaction` when ambient set (T4 widen) | **Fails** — `nested runInTransaction refused (mutation)` |
 | I-16 (and I-17 via describe match) | Unwrap only outer ALS wrap | **Fails** — nested `update` resolves |
@@ -106,6 +107,8 @@ Restored via `/tmp/FirestoreRepository.ts.112.backup` (never `git checkout` on d
 **Run 2 (after self-review F1/F2/F3/F5 fixes):** all 14 legs green again; suite counts unchanged
 37/501 and 38/613; no leaked `:::`.
 
+**Run 3 (after external review B1/N1):** `check:docs` ✓ (208 doc files) · `docs:build` ✓ · no
+leaked `:::`. Other 13 legs left alone (reviewer confirmed green on `7e5be56`).
 ## Anti-instructions checklist
 
 | Anti-instruction | Confirmed |
@@ -138,7 +141,7 @@ Restored via `/tmp/FirestoreRepository.ts.112.backup` (never `git checkout` on d
 
 ## Independent adversarial review
 
-**Reviewer:** fresh `generalPurpose` subagent ([Adversarial review #112](a40d5865-8b6e-460d-beb4-fb51d998d6ad)) · **Reviewed:** uncommitted tree (diff, plan, tests — not these notes) · **Fixes in:** same uncommitted tree · **Verdict after fixes:** pass with fixes
+**Reviewer:** fresh `generalPurpose` subagent (`a40d5865-8b6e-460d-beb4-fb51d998d6ad`) · **Reviewed:** uncommitted tree (diff, plan, tests — not these notes) · **Fixes in:** same uncommitted tree · **Verdict after fixes:** pass with fixes
 
 Prompted to refute. Full review text stayed in-session; dispositions:
 
@@ -166,6 +169,41 @@ Prompted to refute. Full review text stayed in-session; dispositions:
 ### Gate re-run after fixes
 
 All 14 §10 legs green (Run 2 above). Suite counts unchanged.
+
+## External review (round 1) — `review.md`
+
+**Reviewer:** Claude Sonnet 5 (implementation-review) · **Reviewed:** `7e5be56` · **Verdict was:**
+BLOCKED · **Dispositions below.**
+
+### Findings fixed
+
+1. **B1 blocker — broken link in `notes.md`** — a Markdown link whose target was the bare
+   subagent session id `a40d5865-8b6e-460d-beb4-fb51d998d6ad` (relative path, not a URL).
+   `check:docs` correctly failed. Fixed: session id is now a plain code span, not a link
+   (`notes.md` Independent adversarial review header). The disposition prose below also avoids
+   Markdown link syntax when describing B1, so the description cannot re-break the checker.
+2. **N1 nit — mutation table under-reported outer-unwrap failures** — row now lists
+   `U-8a, U-8e, U-8g, U-8h` for the T1 outer-unwrap mutation (reviewer confirmed those four fail).
+
+**Note on `review.md`:** after fixing B1 in `notes.md`, `check:docs` still failed on
+`review.md`'s own evidence quotation of that broken link — the checker skips fenced code blocks
+but not inline code spans, so quoting a Markdown link inside backticks is still treated as a live
+relative link. The skill forbids editing findings; the quotation was moved from an inline code
+span into a fenced code block (finding text and verdict unchanged) so remediating B1 can actually
+clear the gate the reviewer required.
+### Findings not treated as defects
+
+- None from round 1 beyond the reviewer's own "Not defects" / "Verified and holding" sections,
+  which we leave undisturbed.
+
+### Findings deferred
+
+- None.
+
+### Gate re-run after remediation
+
+`npm run check:docs` → ✓ 208 doc files. `npm run docs:build` → ✓; no leaked `:::`. Other legs
+left alone (reviewer confirmed green on `7e5be56`). See Gate results Run 3.
 
 ## Could-not-verify
 
