@@ -557,8 +557,13 @@ export interface InterceptorWriter {
  *
  * So read a nested field as `write.data['address.city']`, not `write.data.address?.city` — the latter
  * is `undefined` under `patch()` and the interceptor silently mirrors nothing. A **flat** payload is
- * unaffected: normalization only rewrites nested objects. `write-interceptors.type-test.ts` and the
- * `patch` case in the integration suite pin both shapes.
+ * unaffected: normalization only rewrites nested objects.
+ *
+ * Pinned by two cases in `repository-write-interceptors.integration.test.ts` ("the payload an
+ * interceptor observes…" and "bulkPatch hands the interceptor the same dot-path shape…"), each of
+ * which fails on its own if the respective site stops normalizing. There is deliberately **no**
+ * type-level guard: both spellings inhabit `UpdateInput<W>`, which is precisely why this needs a
+ * runtime test and a warning here.
  */
 export type InterceptedWrite<T extends object, W extends object, WO extends object> =
   | { readonly kind: 'create'; readonly id: ID; readonly data: CreateOutput<WO> }

@@ -51,6 +51,7 @@ Nothing from §2's out-of-scope list was folded in.
 | Owner review, round 1 | Q1–Q5 ruled (deviations 16–18): early refusal guards, nested-transaction issue #112, one commit |
 | Owner review, round 2 | **F3's fix was wrong and is reverted** (a partial payload cannot create a valid document), and the writer's vocabulary was realigned to the repository's (deviation 19) |
 | External review, round 1 | APPROVE WITH FIXES — 1 Major (**M1**: a merge write reaches the interceptor dot-path normalized, undocumented and unpinned) and 5 Minors, all fixed. See "External review — round 1 dispositions" |
+| External review, round 2 | APPROVE WITH FIXES — all round-1 findings verified closed; 3 new Minors (**N6** empty code fence, **N7** my JSDoc cited an impossible type guard, **N8** the compile-gate note over-claimed), all fixed |
 
 Committed as a single commit on `feat/108-write-interceptors`; the tree is clean and the plan
 directory stays in place so this file and `PLAN.md` are readable in the PR diff.
@@ -293,7 +294,7 @@ directory stays in place so this file and `PLAN.md` are readable in the PR diff.
 | `src/index.ts` | Re-exports the **seven** public interceptor types; `StagingTarget`/`WriteGroup` deliberately absent | §6.1 |
 | `src/core/writeOverrideWarning.ts` | Redirect half now names `registerWriteInterceptor` first, facade as fallback; two JSDoc `@see`/prose updates | §9.4, B7 |
 | `src/tests/types/write-interceptors.type-test.ts` | **new** — TT-1…TT-5 | §8.2 |
-| `src/tests/types/write-interceptor-examples.type-test.ts` | **new** — compiles all three published doc snippets verbatim | deviation 9 |
+| `src/tests/types/write-interceptor-examples.type-test.ts` | **new** — compiles all **four** published doc snippets verbatim (the fourth added for N8) | deviation 9, N8 |
 | `src/tests/types/write-override-warning.type-test.ts` | `'registerWriteInterceptor'` in `NonWrite` (came with the patch) | §6.7, T5 |
 | `src/tests/unit/writeInterceptors.unit.test.ts` | **new** — U-1…U-6 (20 tests) | §8.3 |
 | `src/tests/unit/writeOverrideWarning.unit.test.ts` | Inverted the deliberate `not.toMatch(/interceptor/i)` guard | §9.4 |
@@ -422,9 +423,9 @@ being an error.
 Unit **36 suites / 468 tests -> 37 / 493**. Integration **37 / 548 -> 38 / 611**. Both up, as §10
 required; **no existing suite's count moved** in either direction, which is the additivity check.
 
-The gate was run in full **seven** times: the first pass, after my own self-review fixes, after
-remediating the adversarial review, after each of the two owner-review rounds, and after the external
-review's fixes. Only the last matters — it is the committed tree — so that is what is recorded here;
+The gate was run in full **eight** times: the first pass, after my own self-review fixes, after
+remediating the adversarial review, after each of the two owner-review rounds, and after each of the two
+external-review rounds. Only the last matters — it is the committed tree — so that is what is recorded here;
 the earlier runs differed only in test counts and are not reproduced.
 
 ```
@@ -451,8 +452,9 @@ probe P2–P8                                 ✓  matches §3.2 exactly (incl. 
 probe P8b                                   ✓  matches §3.3 exactly (accepted, readable nowhere)
 ```
 
-**Re-run after the external review's fixes** (M1, N1–N5), every leg **individually** so no leg is
-hidden by an `&&` short-circuit — the reviewer's own method:
+**Re-run after the external review's round-2 fixes** (N6–N8; the round-1 run for M1/N1–N5 was
+identical apart from `docs:build` output), every leg **individually** so no leg is hidden by an `&&`
+short-circuit — the reviewer's own method:
 
 ```
 LEG 01–03  test:types · lint · check:format                  EXIT=0
@@ -464,7 +466,9 @@ LEG 13–14  check:docs · docs:build                           EXIT=0   208 doc
 extras     check:zod-idioms · rules:check · check:manifest    EXIT=0
 LEG 15     declaration emit over dist/**.d.ts                EXIT=0
 LEG 16     grep ':::' website/dist/                          0 rows
-greps      PROTOTYPE (#108) · old flat action shape          0 rows each
+greps      PROTOTYPE (#108) · old flat action shape ·
+           'bulkUpdate()/bulkPatch()' in src/ · empty ``` fences   0 rows each
+dist       grep -c 'StagingTarget|WriteGroup' dist/index.d.ts      0
 probes     P1 exit 0 · P2–P8 and P8b, all 16 lines matching §3.2 / §3.3
 ```
 
@@ -824,6 +828,70 @@ it since within one chunk it cannot work); the two unreachable `?? []` branches 
 `commitInChunks`' idempotent double-parse; and the pre-existing out-of-band commit for a plain write
 inside someone's transaction callback under batch mode. I also left `security-boundary.md:72`'s
 parent-section anchor alone, which they marked optional.
+
+## External review — round 2 dispositions
+
+**Reviewed:** `280f87a` · **Verdict:** APPROVE WITH FIXES — all six round-1 findings independently
+verified closed, three new Minors. They re-ran every leg individually, both suites, the coverage
+gates, all three probes, and three mutations — including one of their **own** (`BULK_SHAPE`, the bulk
+site's payload substitution) which confirmed my second M1 case is independently load-bearing rather
+than a duplicate of the first.
+
+Two of the three new findings pre-date the fixup (`0c51ea6`, their round-1 miss) and one was
+introduced *by* the M1 fix. All three are **fixed**; none deferred, none disputed. All documentation
+or test-shaped, exactly as they characterized them.
+
+### N6 — an empty `typescript` fence shipped an empty code block
+
+Confirmed and it was mine: a bare pair of fences left behind when I inserted the
+"Every example on this page is compiled" note, immediately above it. Verified it rendered —
+`<pre data-language="typescript"><code></code></pre>` was present in
+`website/dist/guides/advanced/patterns/index.html` — and that it was the **only** empty fence in the
+entire `website/src/content/docs/` tree (checked with a script over every `.md`/`.mdx`, not by eye).
+Nothing in the gate can see it: `check:docs` validates links, and `docs:build` renders an empty block
+happily.
+
+Deleted. Re-verified after `docs:build`: zero empty code blocks in the built HTML, zero empty fences
+in the source tree, the caution below it still renders as an `<aside>`, and leg 16 still returns 0
+rows.
+
+### N7 — my new JSDoc cited a type-level guard that does not and cannot exist
+
+This one was introduced by the M1 fix, and their reasoning is exactly right. The comment claimed
+"`write-interceptors.type-test.ts` and the `patch` case in the integration suite pin both shapes."
+The integration half is true; the type-test half is not — that file's only relevant assertion is
+`ExpectEqual<UpdateBranch['data'], UpdateInput<OrderWrite>>`, which pins the **type**, not the shape
+— and it is *unachievable*, because the nested and the dotted spelling both inhabit `UpdateInput<W>`.
+That is the entire reason M1 existed.
+
+Worse than merely wrong: a maintainer changing the normalization would look for the promised
+type-level guard, fail to find it, and either conclude the behavior is unpinned or add an
+`@ts-expect-error`-shaped "pin" that asserts nothing.
+
+Rewritten (`src/core/FirestoreRepository.ts:562–567`) to cite only the two integration cases **by
+name**, note that each fails on its own, and state explicitly that there is **deliberately no**
+type-level guard because both spellings inhabit `UpdateInput<W>` — which turns the absence into a
+documented consequence instead of a gap.
+
+### N8 — the page's compile-gate note over-claimed once the M1 caution added a seventh snippet
+
+Correct, and this is the failure that note was written to prevent — the guide once shipped a snippet
+that did not compile, which is why
+`src/tests/types/write-interceptor-examples.type-test.ts` exists. The M1 caution added a `typescript`
+block that the type-test never gained, so the note's "contains these snippets verbatim" was broader
+than the gate.
+
+They offered two closures and said the smaller one was narrowing the note. **I took the larger one**,
+because narrowing the note is exactly the drift that got us here: the invariant is worth more literal
+than convenient. The caution's snippet is now in the examples type-test
+(`write-interceptor-examples.type-test.ts:175`), which needed a nested `address` field on that file's
+order model (`:26`, optional so the other snippets are unaffected) and a `declare const id: string`
+so the snippet compiles **verbatim** rather than adapted. Verified byte-identical to the guide with
+`diff`, the same way the other three snippets are.
+
+The type-test's own comment now records what compiling that snippet does and does not prove: the two
+calls are legal, which is all this file ever claims — the runtime shape difference is pinned by the
+integration cases, since no type can express it.
 
 ## Could-not-verify
 

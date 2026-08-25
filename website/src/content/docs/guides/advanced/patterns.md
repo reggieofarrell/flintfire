@@ -591,9 +591,6 @@ compile, which is why that gate exists.
 
 :::
 
-```typescript
-```
-
 :::caution[A merge write arrives dot-path normalized]
 `patch()`, `update(…, { merge: true })` and `bulkPatch()` normalize nested objects into field paths
 before validating, and the interceptor sees that normalized shape. A plain `update()` does not:

@@ -22,6 +22,8 @@ declare const db: Firestore;
 const orderSchema = z.object({
   userId: z.string(),
   status: z.enum(['pending', 'shipped']),
+  // Nested, so the dot-path normalization snippet below has something to normalize.
+  address: z.object({ city: z.string() }).optional(),
 });
 const userSchema = z.object({
   lastOrderId: z.string().optional(),
@@ -159,6 +161,22 @@ orderRepo.registerWriteInterceptor({
     writer.update(memberRepo, write.data.userId, { notAField: 1 });
   },
 });
+
+/* ---------------------------------------------------------------------------------------------- *
+ * patterns.md — the ":::caution[A merge write arrives dot-path normalized]" snippet.
+ *
+ * Verbatim, so the page's own "every example on this page is compiled" note stays literally true.
+ * What it demonstrates is a RUNTIME shape difference that no type can express (both spellings inhabit
+ * `UpdateInput<W>`); compiling it only proves the two calls are legal, which is all this file claims.
+ * ---------------------------------------------------------------------------------------------- */
+
+declare const id: string;
+
+async function mergeNormalizationSnippet(): Promise<void> {
+  orderRepo.update(id, { address: { city: 'b' } }); // write.data === { address: { city: 'b' } }
+  orderRepo.patch(id, { address: { city: 'c' } }); // write.data === { 'address.city': 'c' }
+}
+void mergeNormalizationSnippet;
 
 /* ---------------------------------------------------------------------------------------------- *
  * The calls the guide shows AFTER registering — every one of these must be a legal write.
