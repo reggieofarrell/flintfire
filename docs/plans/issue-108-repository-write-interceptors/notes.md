@@ -50,6 +50,7 @@ Nothing from §2's out-of-scope list was folded in.
 | Independent adversarial review | 8 findings, all fixed. **F1 was a blocker** — `commitInChunks` counted interceptor *closures* rather than the writes they stage, silently reintroducing traps T3 and T4 |
 | Owner review, round 1 | Q1–Q5 ruled (deviations 16–18): early refusal guards, nested-transaction issue #112, one commit |
 | Owner review, round 2 | **F3's fix was wrong and is reverted** (a partial payload cannot create a valid document), and the writer's vocabulary was realigned to the repository's (deviation 19) |
+| External review, round 1 | APPROVE WITH FIXES — 1 Major (**M1**: a merge write reaches the interceptor dot-path normalized, undocumented and unpinned) and 5 Minors, all fixed. See "External review — round 1 dispositions" |
 
 Committed as a single commit on `feat/108-write-interceptors`; the tree is clean and the plan
 directory stays in place so this file and `PLAN.md` are readable in the PR diff.
@@ -185,12 +186,17 @@ directory stays in place so this file and `PLAN.md` are readable in the PR diff.
     tested decision.
 
 13. **Pinned `WriteOutcomeError`'s new accounting end-to-end.** §6.2 invariant 4 says
-    `committedWrites`/`totalWrites` count **physical** writes, but nothing tested it, and two new
-    consequences were undocumented: with one interceptor and 260 documents a partial failure reports
-    `committedWrites: 500` / `totalWrites: 520` (not 250 / 260), and — because interceptors run
-    during *staging* — the error's `cause` can now be the **caller's own interceptor error** rather
-    than a Firestore one. Both asserted by a new integration test, and the second is now called out
-    in the guide's capacity bullet.
+    `committedWrites`/`totalWrites` count **physical** writes, but nothing tested it: with one
+    interceptor and 260 documents a partial failure reports `committedWrites: 500` /
+    `totalWrites: 520`, not 250 / 260. Asserted by a unit test that rejects the second chunk's commit.
+
+    > **Superseded in part by F1 (reviewer N5).** This deviation originally also claimed that a
+    > `WriteOutcomeError`'s `cause` could be the caller's own interceptor error, because interceptors
+    > ran during staging. F1's record-then-chunk rewrite put the recording loop **outside** the `try`
+    > (`src/core/FirestoreRepository.ts:4937`, `try` opens at `:4973`), so an interceptor throw now
+    > propagates unwrapped and nothing commits — which is what the suite asserts
+    > (`repository-write-interceptors.integration.test.ts`, `expect(error).not.toBeInstanceOf(WriteOutcomeError)`).
+    > The shipped docs already describe the current behavior; only this paragraph was stale.
     Note `phase` stays `'commit'` even when the failure was in staging. Widening the `WriteOutcome`
     union would change a public error contract, which §3.9 keeps unchanged and D3 avoids; the
     `state` (`'partially-committed'`) and the counts are accurate, and `cause` carries the real
@@ -385,7 +391,7 @@ plan's own `totalWrites` formula gets wrong).
 | I-8 (T4, faithful naive port) | restore the pre-#108 flat counter committing at exactly 500 *after* incrementing, inside the group | **Fails** — 1 test, at the per-group sibling-timestamp assertion (line 613) |
 | I-8 (T4, boundary check ignores group size) | `counter + 1 > 500` instead of `counter + groupSize > 500` | **Fails** — 1 test (boundary moves; groups 165/166 land in one commit) |
 | U-4 (T4) | remove the oversized-group throw | **Fails** — 2 tests |
-| I-11 (T6) | invert `assertSameFirestoreInstance` to a no-op | **Fails** — 30 tests |
+| I-11 (T6) | invert `assertSameFirestoreInstance` to a no-op | **Fails** — **2 tests**, both I-11. (An earlier draft of this row said 30; the external reviewer re-ran it and measured 2, which is the better result — precisely targeted rather than coupled. Corrected per N5.) |
 | I-10 / U-5 (T10) | remove the `assertNoWriteMetadataUnderTransactionMode` call | **Fails** — 1 integration + 2 unit |
 | I-5 / I-9 (T9) | stage the domain write **before** running the read phase | **Fails** — 1 test |
 | I-5 (tx join) | make `stageInterceptedWrite` always take its no-interceptor fast path | **Fails** — 4 tests |
@@ -413,20 +419,20 @@ being an error.
 
 ## Gate results
 
-Unit **36 suites / 468 tests -> 37 / 493**. Integration **37 / 548 -> 38 / 609**. Both up, as §10
+Unit **36 suites / 468 tests -> 37 / 493**. Integration **37 / 548 -> 38 / 611**. Both up, as §10
 required; **no existing suite's count moved** in either direction, which is the additivity check.
 
-The gate was run in full **six** times: the first pass, after my own self-review fixes, after
-remediating the adversarial review, and after each of the two owner-review rounds. Only the last one
-matters for review — it is the committed tree — so that is what is recorded here; the earlier runs
-differed only in test counts and are not reproduced.
+The gate was run in full **seven** times: the first pass, after my own self-review fixes, after
+remediating the adversarial review, after each of the two owner-review rounds, and after the external
+review's fixes. Only the last matters — it is the committed tree — so that is what is recorded here;
+the earlier runs differed only in test counts and are not reproduced.
 
 ```
 npm run test:types                       ✓
 npm run lint                             ✓
 npm run check:format                     ✓  All matched files use Prettier code style!
 npm run test:unit                        ✓  37 suites / 493 tests   (was 36 / 468)
-npm run test:integration:emulator        ✓  38 suites / 609 tests   (was 37 / 548)
+npm run test:integration:emulator        ✓  38 suites / 611 tests   (was 37 / 548)
 npm run test:unit:coverage + gate:unit   ✓  All unit coverage gates passed.
 npm run test:integration:coverage + gate ✓  All integration coverage gates passed.
 npm run build                            ✓
@@ -445,11 +451,28 @@ probe P2–P8                                 ✓  matches §3.2 exactly (incl. 
 probe P8b                                   ✓  matches §3.3 exactly (accepted, readable nowhere)
 ```
 
-**Coverage gates, no threshold edited:**
+**Re-run after the external review's fixes** (M1, N1–N5), every leg **individually** so no leg is
+hidden by an `&&` short-circuit — the reviewer's own method:
+
+```
+LEG 01–03  test:types · lint · check:format                  EXIT=0
+LEG 04     test:unit                                         EXIT=0   37 suites / 493 tests
+LEG 05     test:integration:emulator                         EXIT=0   38 suites / 611 tests  (+2 from M1)
+LEG 06–09  unit + integration coverage, both gates           EXIT=0   both "coverage gates passed"
+LEG 10–12  build · check:package · check:consumer            EXIT=0   102 files; firebase-admin@^14.0.0
+LEG 13–14  check:docs · docs:build                           EXIT=0   208 doc files; Complete!
+extras     check:zod-idioms · rules:check · check:manifest    EXIT=0
+LEG 15     declaration emit over dist/**.d.ts                EXIT=0
+LEG 16     grep ':::' website/dist/                          0 rows
+greps      PROTOTYPE (#108) · old flat action shape          0 rows each
+probes     P1 exit 0 · P2–P8 and P8b, all 16 lines matching §3.2 / §3.3
+```
+
+**Coverage gates, no threshold edited** (final, post-remediation):
 
 | File | lines | branches | functions | thresholds |
 | ---- | ----- | -------- | --------- | ---------- |
-| `FirestoreRepository.ts` | 98.36% | 93.47% | **95.12%** | 90 / 75 / 85 |
+| `FirestoreRepository.ts` | 98.37% | 93.51% | **95.12%** | 90 / 75 / 85 |
 | `QueryBuilder.ts` | 96.66% | 86.36% | **100%** | 90 / 75 / 95 |
 
 §3.6 warned that **functions** is the binding metric (9 and 3 units of room), so per §8.6 I checked
@@ -478,23 +501,10 @@ rewording (`FirestoreRepository.ts:399–414` (unchanged region), which now says
 here even in a code span); leg 15 re-run exits 0, and `dist/core/FirestoreRepository.d.ts:341,357`
 now declare both types while `dist/index.d.ts` mentions neither.
 
-**Run 4** — after the owner rulings on Q1 (delete sentinels), Q3 (early guards) and Q4 (doc +
-issue). This is the current state of the tree:
-
-```
-test:types · lint · check:format         ✓
-npm run test:unit                        ✓  37 suites / 493 tests
-npm run test:integration:emulator        ✓  38 suites / 609 tests
-unit + integration coverage gates        ✓  both passed, no threshold edited
-build · check:package · check:consumer   ✓  102 files; firebase-admin@^14.0.0
-check:docs · docs:build                  ✓  207 doc files; 61 pages
-check:zod-idioms · rules:check · check:manifest ✓
-LEG 15  declaration emit                 ✓  exit 0
-LEG 16  grep ':::' website/dist/         ✓  0 rows
-FirestoreRepository.ts  lines 98.35% · branches 93.47% · functions 95.00%  (90 / 75 / 85)
-QueryBuilder.ts         lines 96.66% · branches 86.36% · functions 100%    (90 / 75 / 95)
-uncovered functions: FirestoreRepository.ts 6 (all pre-existing), QueryBuilder.ts 0
-```
+**Superseded intermediate runs.** Earlier drafts of this file listed each gate run separately; they
+differed from the final run only in test counts and one coverage figure, so they have been removed in
+favour of the single authoritative block above. Reviewer N5 flagged one of them for reporting
+`FirestoreRepository.ts` functions at 95.00% where the committed tree measures **95.12%**.
 
 ## Anti-instructions checklist
 
@@ -719,6 +729,101 @@ Re-run in full after remediating the review, and again after each owner-review r
 with each round of remediation (unit 488 -> 493, integration 593 -> 609); both coverage gates still
 pass with no threshold edit, and the only uncovered functions in the two changed files remain the 6
 that were already uncovered at baseline.
+
+## External review — round 1 dispositions
+
+**Reviewer:** external session, `review.md` in this directory · **Reviewed:** `0c51ea6` ·
+**Verdict:** APPROVE WITH FIXES — no blockers, 1 Major, 5 Minors.
+
+I read their "Verified and holding" section first, so none of that is re-checked here. They
+independently re-ran all 14 legs *individually* (no `&&` short-circuit), legs 15–16, all three probes,
+five of my mutations, and added three probes the plan never named — a payload-shape probe (which found
+**M1**), an error-identity probe across both modes (held), and a 50-case chunk property sweep over
+K ∈ {0…4} writes-per-document × ten boundary-adjacent document counts (held, and non-vacuous: 8 cases
+fail under a group-size-ignoring boundary). They also judged each of my deviations individually and
+found all seven right; **none is reversed**.
+
+All six findings are **fixed**. None deferred, none disputed.
+
+### M1 — Major — a merge write reaches the interceptor dot-path normalized, undocumented and unpinned
+
+Confirmed against source: `runUpdate` normalizes a merge payload into field paths *before* validating
+(`src/core/FirestoreRepository.ts:2948–2952`) and hands that same `validData` to the interceptor
+(`:2967`). So `update(id, { address: { city } })` observes `{ address: { city } }` while
+`patch(id, { address: { city } })` observes `{ 'address.city': … }` — same `kind: 'update'`, and
+`UpdateInput<W>` admits dotted keys, so TypeScript says nothing. `bulkPatch` has the same shape
+(`:3183–3185`). An interceptor reading `write.data.address?.city` silently mirrors nothing under
+`patch()`: the exact silent-skip class ADR-0040 exists to remove, at the observation surface.
+
+I took their recommended resolution rather than changing the contract — the interceptor observing what
+is **actually written**, transforms included, is the honest semantics, and handing over the caller's
+pre-normalization payload would hide the schema transforms `validateUpdateData` applies. So the shape
+stays and is now written down and pinned:
+
+- **Declared where the contract is** (`:540–563`): a ⚠ block on `InterceptedWrite` with the two-line
+  worked example and the "read it as `write.data['address.city']`" instruction, plus a per-member note
+  on the `'update'` branch. Also noted at the site that produces the divergence (`:2967`).
+- **`types.md`** — the `InterceptedWrite` bullet now carries the same warning.
+- **`patterns.md:597`** — a `:::caution` in the guide where interceptor authors actually read, with
+  the scope note that flat payloads are unaffected (which is why the guide's own published example
+  was never exposed to it).
+- **Pinned** by two new integration cases (`…integration.test.ts:158`, `:201`): `update()` keeps the
+  nested object, `patch()` and `update(…, { merge: true })` normalize, `bulkPatch` matches `patch`,
+  and a **flat** payload is unchanged through both. Mutation-checked (`M1_SHAPE`): handing over the
+  pre-normalization payload fails the new case.
+
+### N1 — `commitInChunks`' JSDoc still claimed it refuses transaction mode
+
+Their sharpest point: a maintainer trusting that comment would read the six early guards as
+belt-and-braces and might delete one, at which point that path stops refusing entirely. Replaced with
+the inverse statement — this method **assumes its callers have already refused**, the check lives in
+`assertNoReadCapableInterceptor` (`:4740`), and removing one of the six guards removes that path's
+refusal outright.
+
+### N2 — orphaned JSDoc in the query builder
+
+Correct: two doc blocks sat consecutively, so the second won the declaration and
+`CollectInterceptorWrites` had none — and the orphan carried N1's stale claim. Reordered so each block
+sits above the type it documents (`QueryBuilder.ts:69`, `:82`), and the collector's third paragraph now
+names the early guard instead of `commitInChunks`.
+
+### N3 — transaction-retry re-execution undocumented, beside a claim reading the other way
+
+Both phases run inside the transaction callback, so Firestore's contention retry re-executes them —
+correct and unavoidable, but an interceptor with an external side effect fires it once per *attempt*.
+Meanwhile the guide said "each phase still runs exactly once per document", true only of the
+batch/chunking path it sits in. Fixed both halves: that sentence is now scoped to **batch mode**, and a
+new bullet (`patterns.md:665`) states the re-run and says to keep phases free of external side
+effects.
+
+### N4 — the bulk-update refusal named both methods regardless of which was called
+
+Exactly the imprecision deviation 11 fixed for `upsert`, and `merge` was already in scope two lines
+below. Now `merge ? 'bulkPatch()' : 'bulkUpdate()'` at the guard (`:3178`) and at the `commitInChunks`
+label (`:3241`), so the oversized-group error is precise too. Both suites' assertions tightened to the
+specific label — which is what made this visible: the integration test failed the moment the label
+changed. Mutation-checked (`N4_LABEL`).
+
+### N5 — three stale figures in these notes
+
+All three corrected in place, each marked as a correction rather than silently rewritten:
+
+1. **Deviation 13's claim that `WriteOutcomeError.cause` can be the interceptor's error** — superseded
+   by F1, as they spotted. The recording loop is **outside** the `try` (`:4937` vs `:4973`), so an
+   interceptor throw propagates unwrapped and nothing commits. Their reading is right; the shipped docs
+   already said the correct thing.
+2. **The T6 mutation row said "30 tests"** — they measured **2**, both I-11. Corrected, and it is the
+   better result: precisely targeted rather than coupled.
+3. **A superseded run block reported functions at 95.00%** where the tree measures 95.12%. That block
+   is deleted; the "Gate results" section is the single authoritative run.
+
+### Their four "not defects" — agreed, and nothing changed
+
+`I-6` not failing under the T3 mutation (that is F4, and they explicitly warn against "strengthening"
+it since within one chunk it cannot work); the two unreachable `?? []` branches in the query builder;
+`commitInChunks`' idempotent double-parse; and the pre-existing out-of-band commit for a plain write
+inside someone's transaction callback under batch mode. I also left `security-boundary.md:72`'s
+parent-section anchor alone, which they marked optional.
 
 ## Could-not-verify
 

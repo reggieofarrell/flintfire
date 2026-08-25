@@ -155,6 +155,69 @@ describe('repository write interceptors (issue #108)', () => {
       expect(await readMirror('i1-patch')).toMatchObject({ marker: 'mirror:update' });
     });
 
+    it('the payload an interceptor observes: nested for update, DOT-PATH for patch', async () => {
+      // `patch()` / `update(…, { merge: true })` / `bulkPatch()` normalize nested objects into field
+      // paths BEFORE validating, and the interceptor is handed that normalized payload. A plain
+      // `update()` is not normalized. Both report `kind: 'update'` and `UpdateInput<W>` admits dotted
+      // keys, so TypeScript cannot tell them apart — which makes this the only thing standing between
+      // the two shapes and an interceptor that reads `write.data.profile?.verified` and silently
+      // mirrors nothing under `patch()`.
+      const seen: Record<string, unknown>[] = [];
+      const { userRepo } = freshRepos();
+      await userRepo.createWithId('i1-shape', { name: 'Ada', profile: { verified: false } });
+
+      const { userRepo: observer } = freshRepos();
+      observer.registerWriteInterceptor({
+        name: 'payload-observer',
+        write: ({ write }) => {
+          if (write.kind === 'update') seen.push({ ...(write.data as Record<string, unknown>) });
+        },
+      });
+
+      // Control: a plain update keeps the caller's nested object.
+      await observer.update('i1-shape', { profile: { verified: true } });
+      expect(seen).toHaveLength(1);
+      expect(seen[0]).toEqual({ profile: { verified: true } });
+      expect(seen[0]!['profile.verified']).toBeUndefined();
+
+      // patch(): the same logical write, normalized to a field path.
+      await observer.patch('i1-shape', { profile: { verified: false } });
+      expect(seen).toHaveLength(2);
+      expect(seen[1]).toEqual({ 'profile.verified': false });
+      expect((seen[1] as { profile?: unknown }).profile).toBeUndefined();
+
+      // update({ merge: true }) is patch's spelling, so it normalizes too.
+      await observer.update('i1-shape', { profile: { verified: true } }, { merge: true });
+      expect(seen[2]).toEqual({ 'profile.verified': true });
+
+      // A FLAT payload is unaffected either way — normalization only rewrites nested objects, which
+      // is why the guide's own published example is not exposed to this.
+      await observer.update('i1-shape', { name: 'Ada L' });
+      await observer.patch('i1-shape', { name: 'Ada Lovelace' });
+      expect(seen[3]).toEqual({ name: 'Ada L' });
+      expect(seen[4]).toEqual({ name: 'Ada Lovelace' });
+    });
+
+    it('bulkPatch hands the interceptor the same dot-path shape as patch', async () => {
+      const seen: Record<string, unknown>[] = [];
+      const { userRepo } = freshRepos();
+      await userRepo.createWithId('i1-bulkshape', { name: 'Ada', profile: { verified: false } });
+
+      const { userRepo: observer } = freshRepos();
+      observer.registerWriteInterceptor({
+        name: 'bulk-payload-observer',
+        write: ({ write }) => {
+          if (write.kind === 'update') seen.push({ ...(write.data as Record<string, unknown>) });
+        },
+      });
+
+      await observer.bulkUpdate([{ id: 'i1-bulkshape', data: { profile: { verified: true } } }]);
+      await observer.bulkPatch([{ id: 'i1-bulkshape', data: { profile: { verified: false } } }]);
+
+      expect(seen[0]).toEqual({ profile: { verified: true } });
+      expect(seen[1]).toEqual({ 'profile.verified': false });
+    });
+
     it("upsert's create branch", async () => {
       const { userRepo, mirrorRepo } = freshRepos();
       userRepo.registerWriteInterceptor(mirrorInterceptor(mirrorRepo));
@@ -1012,11 +1075,12 @@ describe('repository write interceptors (issue #108)', () => {
       await expect(repo.bulkCreateWithIds([{ id: 'i13-3', data: { name: 'A' } }])).rejects.toThrow(
         /bulkCreateWithIds\(\) cannot run write interceptor\(s\) 'tx-only'/,
       );
+      // Each names the method the caller actually invoked, not both.
       await expect(repo.bulkUpdate([{ id: 'i13-1', data: { name: 'A' } }])).rejects.toThrow(
-        /bulkUpdate\(\)\/bulkPatch\(\) cannot run write interceptor\(s\) 'tx-only'/,
+        /bulkUpdate\(\) cannot run write interceptor\(s\) 'tx-only'/,
       );
       await expect(repo.bulkPatch([{ id: 'i13-1', data: { name: 'A' } }])).rejects.toThrow(
-        /bulkUpdate\(\)\/bulkPatch\(\) cannot run write interceptor\(s\) 'tx-only'/,
+        /bulkPatch\(\) cannot run write interceptor\(s\) 'tx-only'/,
       );
       await expect(repo.bulkDelete(['i13-1'])).rejects.toThrow(
         /bulkDelete\(\) cannot run write interceptor\(s\) 'tx-only'/,

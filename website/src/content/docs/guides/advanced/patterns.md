@@ -594,6 +594,21 @@ compile, which is why that gate exists.
 ```typescript
 ```
 
+:::caution[A merge write arrives dot-path normalized]
+`patch()`, `update(…, { merge: true })` and `bulkPatch()` normalize nested objects into field paths
+before validating, and the interceptor sees that normalized shape. A plain `update()` does not:
+
+```typescript
+orderRepo.update(id, { address: { city: 'b' } }); // write.data === { address: { city: 'b' } }
+orderRepo.patch(id, { address: { city: 'c' } }); // write.data === { 'address.city': 'c' }
+```
+
+Both report `kind: 'update'`, and the type admits dotted keys, so TypeScript will not warn you. Read a
+nested field as `write.data['address.city']` — `write.data.address?.city` is `undefined` under
+`patch()`, and the interceptor would silently mirror nothing. Flat payloads are unaffected.
+
+:::
+
 #### Coverage, and what refuses
 
 | Path | write-only (batch) | read-capable (transaction) |
@@ -633,9 +648,9 @@ interceptor's writes.
   document whose writes exceed 500 operations throws rather than being split.
 - **Write phases run before anything commits, so an interceptor failure is all-or-nothing.** The
   repository has to know each document's real write count before it can place a chunk boundary, so
-  every `write` phase runs first, stages nothing, and is replayed into the batch afterwards. Each
-  phase still runs exactly once per document — and the two ways a large bulk call can fail are
-  deliberately different:
+  every `write` phase runs first, stages nothing, and is replayed into the batch afterwards. In
+  **batch** mode each phase runs exactly once per document — and the two ways a large bulk call can
+  fail are deliberately different:
 
   | What failed | What is committed |
   | ----------- | ----------------- |
@@ -647,6 +662,12 @@ interceptor's writes.
   fix the interceptor and re-run against a clean state, rather than reconciling a half-written batch
   (and `bulkCreate` / `bulkCreateWithIds` are create-only, so re-running over already-created
   documents would raise `ConflictError`).
+- **In transaction mode, both phases re-run on a Firestore retry.** The `read` and `write` phases
+  execute inside the transaction callback, so Firestore's contention retry runs them again — which is
+  what makes the read consistent with the write, and is why staging is safe to repeat. Keep them free
+  of **external** side effects: a metric, a log line or a counter incremented inside a phase will fire
+  once per attempt, not once per write. Anything that must happen once belongs after the write
+  returns.
 - **Every target must be on the same `Firestore` instance.** Staging a reference from another
   `Firestore` is accepted by the SDK, reports success, and lands in neither database. The repository
   refuses it instead, before anything commits.

@@ -195,7 +195,15 @@ interceptor never touches the batch or transaction directly.
 - **`InterceptedWrite<T, W, WO>`** — the domain write, discriminated on `kind`. `'create'` carries
   `data: CreateOutput<WO>`, `'update'` carries `data: UpdateInput<W>`, and `'delete'` carries
   `document: FirestoreDocument<T>` — the whole stored document, because every delete path pre-reads
-  it. All three carry `id: ID`.
+  it. All three carry `id: ID`. Each is what is **actually being written**, after schema parsing and
+  transforms — not the caller's raw argument.
+  **On `'update'`, a merge write arrives dot-path normalized.** `patch()`,
+  `update(…, { merge: true })` and `bulkPatch()` normalize nested objects into field paths before
+  validating, so `patch(id, { address: { city: 'c' } })` reaches the interceptor as
+  `{ 'address.city': 'c' }`, while a plain `update()` keeps `{ address: { city: 'c' } }`. Both report
+  `kind: 'update'`, and `UpdateInput<W>` admits dotted keys, so TypeScript does **not** flag the
+  difference — read a nested field as `write.data['address.city']`, not `write.data.address?.city`.
+  Flat payloads are unaffected.
 - **`InterceptorWriter`** — the staging surface: `createWithId` / `set` / `update` / `patch` /
   `delete`, each taking the **target repository** positionally and generic over that repository's
   parameters, so a sibling payload is checked against the target's write model. Every member but

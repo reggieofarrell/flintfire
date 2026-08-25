@@ -539,13 +539,34 @@ export interface InterceptorWriter {
 /**
  * The domain write an interceptor observes, discriminated on {@link InterceptedWriteKind}.
  *
- * `'create'` carries the validated create **output** (what is actually being written, after schema
- * transforms), `'update'` the sanitized update input, and `'delete'` the whole stored `document`
- * rather than just its id — sound because every delete path in this repository pre-reads its
- * document before staging the delete, so there is always a real document to hand over.
+ * Each member carries **what is actually being written**, after id validation, schema parsing and any
+ * schema transforms — not the caller's raw argument. `'create'` carries the validated create output,
+ * `'update'` the validated update payload, and `'delete'` the whole stored document rather than just
+ * its id (sound because every delete path here pre-reads its document before staging the delete).
+ *
+ * ⚠ **On `'update'`, a merge write arrives DOT-PATH NORMALIZED.** `patch()`,
+ * `update(…, { merge: true })` and `bulkPatch()` normalize nested objects into field paths *before*
+ * validating, so that is the shape the interceptor sees — while a plain `update()` keeps the nested
+ * object. Both report `kind: 'update'`, and `UpdateInput<W>` admits dotted keys, so **TypeScript will
+ * not warn you**:
+ *
+ * ```ts
+ * repo.update(id, { address: { city: 'b' } });  // write.data === { address: { city: 'b' } }
+ * repo.patch(id,  { address: { city: 'c' } });  // write.data === { 'address.city': 'c' }
+ * ```
+ *
+ * So read a nested field as `write.data['address.city']`, not `write.data.address?.city` — the latter
+ * is `undefined` under `patch()` and the interceptor silently mirrors nothing. A **flat** payload is
+ * unaffected: normalization only rewrites nested objects. `write-interceptors.type-test.ts` and the
+ * `patch` case in the integration suite pin both shapes.
  */
 export type InterceptedWrite<T extends object, W extends object, WO extends object> =
   | { readonly kind: 'create'; readonly id: ID; readonly data: CreateOutput<WO> }
+  /**
+   * A plain `update()` carries the caller's nested payload; `patch()` /
+   * `update(…, { merge: true })` / `bulkPatch()` carry it **normalized to field paths**. See the
+   * warning on {@link InterceptedWrite}.
+   */
   | { readonly kind: 'update'; readonly id: ID; readonly data: UpdateInput<W> }
   | { readonly kind: 'delete'; readonly id: ID; readonly document: FirestoreDocument<T> };
 
@@ -2963,6 +2984,12 @@ export class FirestoreRepository<
       const precondition = this.toPrecondition(options?.lastUpdateTime);
       // One seam for `update`, `patch` and `upsert`'s update branch — so all three get the
       // interceptor guarantee from a single site.
+      //
+      // NOTE the payload handed to the interceptor is `validData`, i.e. POST-normalization: under
+      // merge a nested `{ address: { city } }` has already become `{ 'address.city': … }`. That is
+      // deliberate — an interceptor observes what is actually written, transforms included — but it
+      // means `patch()` and `update()` hand it different shapes for the same logical write. Documented
+      // on {@link InterceptedWrite} and pinned by the integration suite's `patch` case.
       const writeResult = await this.runInterceptedWrite(
         { kind: 'update', id, data: validData },
         operation,
@@ -3148,7 +3175,7 @@ export class FirestoreRepository<
     merge: boolean,
     options?: { withMetadata?: boolean },
   ): Promise<{ id: ID }[] | WriteResultWithMetadata<{ id: ID }>[]> {
-    this.assertNoReadCapableInterceptor('bulkUpdate()/bulkPatch()');
+    this.assertNoReadCapableInterceptor(merge ? 'bulkPatch()' : 'bulkUpdate()');
     this.assertNoDuplicateIds(
       updates.map(u => u.id),
       merge ? 'bulkPatch' : 'bulkUpdate',
@@ -3209,7 +3236,10 @@ export class FirestoreRepository<
         ids.push(id);
       }
 
-      const writeResults = await this.commitInChunks(actions, 'bulkUpdate()/bulkPatch()');
+      const writeResults = await this.commitInChunks(
+        actions,
+        merge ? 'bulkPatch()' : 'bulkUpdate()',
+      );
       // Freeze the whole envelope (review R2): the `ids` property cannot be reassigned to a forged
       // array, so a first hook cannot corrupt what a second hook observes.
       await this.runHooks('afterBulkUpdate', Object.freeze({ ids: Object.freeze([...ids]) }));
@@ -4882,9 +4912,12 @@ export class FirestoreRepository<
    * fabricated receipts — only prior successful chunks appear in the returned array (and in
    * {@link WriteOutcomeError.committedWrites}).
    *
-   * Refuses transaction mode outright, naming `operation`: a transaction cannot be chunked, so the
-   * bulk helpers and query write terminals have no honest way to host a read-capable interceptor.
-   * This single check implements every "refuse" cell of ADR-0040's coverage matrix for those paths.
+   * **Assumes its callers have already refused transaction mode.** That check lives in
+   * {@link assertNoReadCapableInterceptor}, called as the *first statement* of each of the six bulk
+   * paths — ahead of their existence pre-reads and `beforeBulk*` hooks, so a call that cannot proceed
+   * performs no I/O and fires no hooks. It used to live here, which meant a refused `bulkDelete` had
+   * already run `db.getAll` and fired its hook. Do not treat those six guards as belt-and-braces:
+   * this method no longer refuses, so removing one stops that path refusing at all.
    *
    * IMPORTANT — non-atomic above 500 operations: each 500-op chunk commits independently, so an
    * operation set larger than 500 writes is NOT globally atomic. If a later chunk fails, earlier

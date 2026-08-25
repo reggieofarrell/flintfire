@@ -59,6 +59,15 @@ type RunHook<T extends object = object, W extends object = T, WO extends object 
 ) => Promise<void>;
 type ValidateUpdate<W> = (data: UpdateInput<W>) => UpdateInput<W>;
 /**
+ * Bound repository guard refusing a query write terminal while a **read-capable** write interceptor
+ * is registered: a transaction cannot be chunked, so these paths have no boundary to host one.
+ *
+ * Called as the first statement of `update()` / `delete()`, ahead of the query read and the
+ * `beforeBulk*` hooks, so a refused call performs no I/O and fires no hooks. This is the *only* place
+ * these paths refuse — `commitInChunks` no longer carries that check.
+ */
+type AssertBatchWritesAllowed = (operation: string) => void;
+/**
  * Bound repository collector for the write-interceptor writes that must land in the same batch as
  * each query-terminal domain write (ADR-0040).
  *
@@ -66,17 +75,10 @@ type ValidateUpdate<W> = (data: UpdateInput<W>) => UpdateInput<W>;
  * only ever an update or a delete, never a create, so this signature never needs the repository's
  * `WO` (create-output) parameter. Contravariance makes the repository's wider method assignable.
  *
- * The query terminals are **batch-only** — `commitInChunks` refuses a read-capable interceptor — so
- * there is no read phase to thread through and no `reads` argument.
+ * The query terminals are **batch-only** — {@link AssertBatchWritesAllowed} has already refused a
+ * read-capable interceptor by the time this runs — so there is no read phase to thread through and no
+ * `reads` argument.
  */
-/**
- * Bound repository guard refusing a query write terminal while a **read-capable** write interceptor
- * is registered: a transaction cannot be chunked, so these paths have no boundary to host one.
- *
- * Called as the first statement of `update()` / `delete()`, ahead of the query read and the
- * `beforeBulk*` hooks, so a refused call performs no I/O and fires no hooks.
- */
-type AssertBatchWritesAllowed = (operation: string) => void;
 type CollectInterceptorWrites<T extends object, W extends object> = (
   write:
     | { readonly kind: 'update'; readonly id: ID; readonly data: UpdateInput<W> }

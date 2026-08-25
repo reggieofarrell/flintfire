@@ -575,11 +575,13 @@ describe('write interceptors — paths with no shared boundary refuse (U-6)', ()
     await expect(repo.bulkCreateWithIds([{ id: 'user-1', data: { name: 'Ada' } }])).rejects.toThrow(
       /bulkCreateWithIds\(\) cannot run write interceptor\(s\) 'audit'/,
     );
+    // Each names the method that was actually called, not both — `runBulkBatchWrite` is shared, so
+    // the label is derived from its `merge` flag.
     await expect(repo.bulkUpdate([{ id: 'user-1', data: { name: 'Ada' } }])).rejects.toThrow(
-      /bulkUpdate\(\)\/bulkPatch\(\) cannot run write interceptor\(s\) 'audit'/,
+      /bulkUpdate\(\) cannot run write interceptor\(s\) 'audit'/,
     );
     await expect(repo.bulkPatch([{ id: 'user-1', data: { name: 'Ada' } }])).rejects.toThrow(
-      /bulkUpdate\(\)\/bulkPatch\(\) cannot run write interceptor\(s\) 'audit'/,
+      /bulkPatch\(\) cannot run write interceptor\(s\) 'audit'/,
     );
     await expect(repo.bulkDelete(['user-1'])).rejects.toThrow(
       /bulkDelete\(\) cannot run write interceptor\(s\) 'audit'/,
