@@ -23,6 +23,8 @@
  *  - I-13: the fixed-batch helpers and query write terminals refuse under transaction mode
  *  - I-14: with nothing registered every path is unchanged (additivity)
  *  - I-15: several interceptors run in registration order, and the first throw stops the rest
+ *  - I-16: nested transaction-mode write throws against the real emulator (issue #112)
+ *  - I-17: the ambient marker survives a genuine Admin SDK contention retry (issue #112)
  */
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore';
@@ -1716,6 +1718,96 @@ describe('repository write interceptors (issue #108)', () => {
       // Every read precedes every write, and each write got ITS OWN read result (keyed by name).
       expect(order).toEqual(['read-a', 'read-b', 'write-a:a', 'write-b:b']);
       expect(await readMirror('i15-reads')).toMatchObject({ marker: 'a:a' });
+    });
+  });
+
+  /**
+   * Nested-transaction guard against real Firestore (issue #112). The unit suite proves the ALS
+   * mechanism under a mock that never retries; these two cases close the gaps a mock cannot —
+   * the real Admin SDK's runTransaction participates in the ambient marker, and the marker's scope
+   * is the whole outer call including every contention retry (not just the first callback entry).
+   */
+  describe('I-16 / I-17: nested transaction guard (issue #112)', () => {
+    // I-16 / T1: nests the promoted write inside the OUTER public runInTransaction — the issue's
+    // own example. A fix that only wraps the inner interceptor-forced site would fail here.
+    it('I-16: throws when a transaction-mode write nests inside a real runInTransaction', async () => {
+      const { userRepo, mirrorRepo } = freshRepos();
+      // Separate collection so the outer transaction and the promoted inner write do not share docs
+      // — we only care that the guard fires before the second transaction opens.
+      const innerRepo = new FirestoreRepository<User>(db, `${USERS}_nested_inner`);
+      innerRepo.registerWriteInterceptor(revisionInterceptor(mirrorRepo, 'nested-guard'));
+      const innerDoc = await innerRepo.create({ name: 'inner', email: 'inner@example.com' });
+
+      await expect(
+        userRepo.runInTransaction(async () => {
+          await innerRepo.update(innerDoc.id, { name: 'nested' });
+        }),
+      ).rejects.toThrow(/already open/);
+    });
+
+    // I-17: two concurrent runInTransaction calls contending on the same document force a genuine
+    // SDK retry. The nested promoted write must throw on EVERY callback entry (including retries),
+    // proving AsyncLocalStorage's scope is the whole outer db.runTransaction call.
+    //
+    // Attempt metric: per-worker callback-entry counts (not a shared counter). Two concurrent
+    // first attempts alone make a shared counter hit 2 with ZERO retries — that false-green is
+    // exactly what this rewrite closes. A real retry means at least one worker's callback ran
+    // twice (max(callbackEntriesByWorker) >= 2). Contention uses a first-read barrier (same
+    // pattern as repository-write-outcomes I4), not a sleep.
+    it('I-17: the guard fires on every attempt of a genuine contention retry', async () => {
+      const { userRepo, mirrorRepo } = freshRepos();
+      const innerRepo = new FirestoreRepository<User>(db, `${USERS}_retry_inner`);
+      innerRepo.registerWriteInterceptor(revisionInterceptor(mirrorRepo, 'retry-guard'));
+      // Seed a document that both concurrent transactions will contend on.
+      const contended = await userRepo.create({ name: 'contended', email: 'contend@example.com' });
+      // Seed an inner doc so the nested update has a real target if the guard ever failed to throw.
+      const nestedTarget = await innerRepo.create({
+        name: 'nested-target',
+        email: 'n@example.com',
+      });
+
+      // Per logical runInTransaction — index 0 and 1. A shared counter would false-green at 2.
+      const callbackEntriesByWorker = [0, 0];
+      const guardThrowsByWorker = [0, 0];
+
+      // Barrier: both workers must observe the same initial value before either writes, or the
+      // SDK can serialize them without retrying.
+      let firstReads = 0;
+      let releaseFirstReads: (() => void) | undefined;
+      const bothFirstReads = new Promise<void>(resolve => {
+        releaseFirstReads = resolve;
+      });
+
+      const run = (workerId: number) =>
+        userRepo.runInTransaction(async (tx, repo) => {
+          callbackEntriesByWorker[workerId] += 1;
+          await repo.getInTransaction(tx, contended.id);
+          firstReads += 1;
+          // Only the first entry of each of the two workers waits; retries proceed immediately.
+          if (firstReads <= 2) {
+            if (firstReads === 2) releaseFirstReads?.();
+            await bothFirstReads;
+          }
+          await repo.updateInTransaction(tx, contended.id, {
+            name: `run-w${workerId}-e${callbackEntriesByWorker[workerId]}`,
+          });
+          // Nested promoted write must refuse on this entry AND every subsequent retry.
+          await expect(innerRepo.update(nestedTarget.id, { name: 'nested' })).rejects.toThrow(
+            /already open/,
+          );
+          guardThrowsByWorker[workerId] += 1;
+        });
+
+      await Promise.all([run(0), run(1)]);
+
+      // At least one logical transaction must have retried under contention (callback entered
+      // twice for that worker). Two first attempts alone cannot satisfy this.
+      const maxEntries = Math.max(...callbackEntriesByWorker);
+      expect(maxEntries).toBeGreaterThanOrEqual(2);
+
+      // The guard must have thrown on every callback entry, including retries — not only the first.
+      expect(guardThrowsByWorker[0]).toBe(callbackEntriesByWorker[0]);
+      expect(guardThrowsByWorker[1]).toBe(callbackEntriesByWorker[1]);
     });
   });
 });

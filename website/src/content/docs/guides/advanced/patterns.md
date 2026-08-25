@@ -675,22 +675,25 @@ interceptor's writes.
   and deliberately **not** into `subcollection()`, `withSchema()` or `withSchemaArgs()`, which model
   a different collection whose write model your interceptor could not satisfy.
 
-:::caution[Under transaction mode, do not call a plain write inside someone else's transaction]
+:::caution[Under transaction mode, a nested write now throws instead of silently opening a second transaction]
 A read-capable interceptor makes every single-document write on that repository open its own
-transaction. Calling one from **inside** another repository's `runInTransaction` callback therefore
-nests two independent transactions, which can contend or deadlock on overlapping documents:
+transaction. Calling one from **inside** another repository's `runInTransaction` callback on the
+**same** `Firestore` instance now throws, naming the interceptor that forced the mode, instead of
+silently nesting two independent transactions:
 
 ```typescript
 await orderRepo.runInTransaction(async (tx, orders) => {
   await orders.updateInTransaction(tx, id, { status: 'shipped' }); // ✅ joins this transaction
-  await userRepo.update(userId, { lastOrderId: id });              // ⚠️ opens a SECOND transaction
+  await userRepo.update(userId, { lastOrderId: id });              // ❌ throws — nested transaction refused
 });
 ```
 
-Use the `*InTransaction` helpers for every write inside a transaction callback — they join the
-transaction you are already in. This was always the guidance; interceptors make ignoring it more
-expensive. Tracked as
-[#112](https://github.com/reggieofarrell/flintfire/issues/112).
+This also fires when the write is on the **same** repository: the `orders` handed to your callback
+above still has a plain `update()`, and calling it — instead of `updateInTransaction` — throws for
+the identical reason. Use the `*InTransaction` helpers for every write inside a transaction
+callback; they join the transaction you are already in rather than opening a second one. Resolved in
+[#112](https://github.com/reggieofarrell/flintfire/issues/112) — previously this was documented
+guidance only.
 
 :::
 
