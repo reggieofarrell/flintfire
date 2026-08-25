@@ -469,7 +469,11 @@ The fixed-batch helpers and `query().update()` / `query().delete()` run **write-
 chunked batches and **throw** for a read-capable one (a transaction cannot be chunked). `bulkWrite`,
 `recursiveDelete` and `recursiveDeleteCollection` **throw** whenever any interceptor is registered —
 there is no shared boundary to join, and no `{ skipHooks: true }`-style waiver, because a guarantee
-is not a notification. `{ withMetadata: true }` throws under transaction mode only.
+is not a notification. `{ withMetadata: true }` throws under transaction mode only. A
+transaction-mode write also **throws** instead of nesting a second transaction when one is already
+open on the same `Firestore` instance — including the transaction-scoped `repo`'s own plain
+`create()` / `update()` — so join with the `*InTransaction` helpers. See
+[the nested-write caution](/flintfire/guides/advanced/patterns/#1-register-a-write-interceptor).
 
 ```typescript
 orderRepo.registerWriteInterceptor({

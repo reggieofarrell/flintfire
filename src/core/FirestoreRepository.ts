@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   CollectionReference,
   FieldPath,
@@ -632,6 +633,20 @@ export type WriteInterceptor<T extends object, W extends object, WO extends obje
  * `Map`'s entries are not own properties, so a frozen `Map` still accepts `set`.)
  */
 const EMPTY_INTERCEPTOR_READS: ReadonlyMap<string, unknown> = new Map<string, unknown>();
+
+/**
+ * Ambient record of the `Firestore` instance whose transaction is currently open, scoped to the
+ * async call chain by {@link AsyncLocalStorage} — set only around the SDK's own
+ * `db.runTransaction(...)` calls (both in {@link FirestoreRepository.runInTransaction} and in the
+ * write-interceptor-forced branch of {@link FirestoreRepository.runInterceptedWrite}), and checked
+ * by {@link FirestoreRepository.assertNoAmbientTransaction} before a transaction-mode write would
+ * open a SECOND, independent transaction on the same instance (issue #112).
+ *
+ * Scoped to the `Firestore` instance, not a bare boolean, so that nesting a transaction on a
+ * genuinely different `Firestore` instance — which carries no contention risk — is not refused
+ * (T3, D2).
+ */
+const activeTransactionDb = new AsyncLocalStorage<Firestore>();
 
 /**
  * A {@link StagingTarget} that **records** calls instead of performing them.
@@ -4842,18 +4857,62 @@ export class FirestoreRepository<
       );
       return writeResults[0];
     }
+    // Refuse before opening a second, independent transaction when one is already ambient on this
+    // Firestore instance (issue #112 / ADR-0040 Amendment). Checked ahead of the withMetadata guard
+    // so the more fundamental "you cannot even open this transaction" error surfaces first when both
+    // conditions happen to be true — a UX ordering choice with no correctness consequence either way.
+    this.assertNoAmbientTransaction(operation);
     this.assertNoWriteMetadataUnderTransactionMode(options, operation);
-    await this.db.runTransaction(async tx => {
-      // ALL reads before ANY write — Firestore rejects a read staged after a write in the same
-      // transaction, and this ordering is the whole reason `write` phases are synchronous.
-      const reads = await this.runInterceptorReads(intercepted, tx);
-      const target = tx as StagingTarget;
-      stage(target);
-      for (const stageInterceptor of this.collectInterceptorWrites(intercepted, reads)) {
-        stageInterceptor(target);
-      }
-    });
+    // Wrap the SDK call so AsyncLocalStorage attaches for the whole run — including every Admin SDK
+    // retry-and-reinvoke of the callback — not just the first attempt (I-17).
+    await activeTransactionDb.run(this.db, () =>
+      this.db.runTransaction(async tx => {
+        // ALL reads before ANY write — Firestore rejects a read staged after a write in the same
+        // transaction, and this ordering is the whole reason `write` phases are synchronous.
+        const reads = await this.runInterceptorReads(intercepted, tx);
+        const target = tx as StagingTarget;
+        stage(target);
+        for (const stageInterceptor of this.collectInterceptorWrites(intercepted, reads)) {
+          stageInterceptor(target);
+        }
+      }),
+    );
     return undefined;
+  }
+
+  /**
+   * Refuses a transaction-mode write when a transaction is already open on the SAME `Firestore`
+   * instance, rather than silently opening a second, independent one (ADR-0040 Amendment, issue
+   * #112).
+   *
+   * The hazard: a read-capable interceptor promotes every single-document write on its repository to
+   * `db.runTransaction(...)` (ADR-0040 Decision 7). Calling such a write from inside another
+   * `runInTransaction` callback — including the SAME repository's own tx-clone calling a plain write
+   * method instead of its `*InTransaction` counterpart (T2) — would otherwise nest two independent
+   * transactions, which can contend or deadlock on overlapping documents.
+   *
+   * Deliberately scoped to the same `Firestore` instance (T3) and to this promoted-write branch only
+   * — an explicit, interceptor-free `runInTransaction` nested inside another one is unchanged (T4);
+   * this refusal targets only the silent promotion ADR-0040 introduced.
+   */
+  private assertNoAmbientTransaction(operation: string): void {
+    // Compare Firestore object identity, not a bare boolean — nesting on a genuinely different
+    // instance carries no contention risk and must not be refused (D2 / T3).
+    const activeDb = activeTransactionDb.getStore();
+    if (activeDb === undefined || activeDb !== this.db) return;
+    // Name only the read-capable interceptors that forced transaction mode — same message-shape
+    // precedent as assertNoWriteMetadataUnderTransactionMode (U-8g / U-5).
+    const forcing = this.interceptors
+      .filter(interceptor => typeof interceptor.read === 'function')
+      .map(interceptor => `'${interceptor.name}'`)
+      .join(', ');
+    throw new Error(
+      `${operation} cannot run: write interceptor(s) ${forcing} declare a read phase, so this ` +
+        'write needs its own transaction, but one is already open on this Firestore instance. ' +
+        'Nesting a second, independent transaction inside the first can contend or deadlock on ' +
+        'overlapping documents. Use the *InTransaction helpers to join the transaction you are ' +
+        'already in.',
+    );
   }
 
   /**
@@ -5122,42 +5181,49 @@ export class FirestoreRepository<
       let observedAttempt = 0;
       // Forward options verbatim to the Admin SDK — including `undefined` when the caller omitted
       // the second argument, so existing one-arg callers keep the SDK default retry behavior.
-      return await this.db.runTransaction(async tx => {
-        observedAttempt++;
-        // Clone this repository for the transaction. The args cast mirrors `raw()`:
-        // `RepositoryConstructorArgs<T, W, WO>` is a deferred conditional under generic params, and
-        // this clone is sound by construction — a `WO !== W` repository necessarily already has a
-        // validator (the S1 invariant the constructor enforced), which is carried over here.
-        //
-        // Runtime always hands a full FirestoreRepository (write helpers still exist). Read-only
-        // narrowing is type-level only; the SDK rejects writes inside `{ readOnly: true }` txs
-        // client-side with a plain Error ("Firestore read-only transactions cannot execute writes.").
-        const txArgs = [
-          this.db,
-          this.collectionPath,
-          this.validator,
-          this.parentPath,
-          this.readConverter,
-          this.schemasInternal,
-          this.allowLegacyDatastoreIds,
-        ] as unknown as RepositoryConstructorArgs<T, W, WO>;
-        const txRepo = new FirestoreRepository<T, W, S, WO>(...txArgs);
-        // Preserve registered hooks so transactional operations follow the same lifecycle behavior.
-        // Harmless for read-only txs (no write helpers on the typed surface) and keeps one code path.
-        txRepo.hooks = Object.fromEntries(
-          Object.entries(this.hooks).map(([event, handlers]) => [event, [...(handlers ?? [])]]),
-        ) as { [K in HookEvent]?: AnyHookFn<T, W, WO>[] };
-        // Preserve registered interceptors so a write through the transaction repository keeps the
-        // same enforcement guarantee. Without this, every *InTransaction call on `txRepo` would run
-        // ZERO interceptors — the silent bypass ADR-0040 exists to eliminate, at the one site where
-        // atomicity was already free. `txRepo` stands in for `this` on the same collection and
-        // model, which is why this clone carries them and `subcollection()`/`withSchema()` do not.
-        txRepo.interceptors = [...this.interceptors];
-        txRepo.transactionAttempt = observedAttempt;
-        // txRepo is a full instance: its readCol()/writeCol() already resolve the same
-        // converter-wrapped read ref and raw write ref. Transaction semantics come from tx.*.
-        return await fn(tx, txRepo);
-      }, options);
+      //
+      // Wrap in activeTransactionDb so a nested interceptor-forced transaction on the SAME
+      // Firestore instance can detect the ambient boundary and refuse (issue #112 / T1). Both
+      // runTransaction call sites must set the marker — wrapping only the promoted-write site would
+      // leave the issue's own outer-runInTransaction example undefended.
+      return await activeTransactionDb.run(this.db, () =>
+        this.db.runTransaction(async tx => {
+          observedAttempt++;
+          // Clone this repository for the transaction. The args cast mirrors `raw()`:
+          // `RepositoryConstructorArgs<T, W, WO>` is a deferred conditional under generic params, and
+          // this clone is sound by construction — a `WO !== W` repository necessarily already has a
+          // validator (the S1 invariant the constructor enforced), which is carried over here.
+          //
+          // Runtime always hands a full FirestoreRepository (write helpers still exist). Read-only
+          // narrowing is type-level only; the SDK rejects writes inside `{ readOnly: true }` txs
+          // client-side with a plain Error ("Firestore read-only transactions cannot execute writes.").
+          const txArgs = [
+            this.db,
+            this.collectionPath,
+            this.validator,
+            this.parentPath,
+            this.readConverter,
+            this.schemasInternal,
+            this.allowLegacyDatastoreIds,
+          ] as unknown as RepositoryConstructorArgs<T, W, WO>;
+          const txRepo = new FirestoreRepository<T, W, S, WO>(...txArgs);
+          // Preserve registered hooks so transactional operations follow the same lifecycle behavior.
+          // Harmless for read-only txs (no write helpers on the typed surface) and keeps one code path.
+          txRepo.hooks = Object.fromEntries(
+            Object.entries(this.hooks).map(([event, handlers]) => [event, [...(handlers ?? [])]]),
+          ) as { [K in HookEvent]?: AnyHookFn<T, W, WO>[] };
+          // Preserve registered interceptors so a write through the transaction repository keeps the
+          // same enforcement guarantee. Without this, every *InTransaction call on `txRepo` would run
+          // ZERO interceptors — the silent bypass ADR-0040 exists to eliminate, at the one site where
+          // atomicity was already free. `txRepo` stands in for `this` on the same collection and
+          // model, which is why this clone carries them and `subcollection()`/`withSchema()` do not.
+          txRepo.interceptors = [...this.interceptors];
+          txRepo.transactionAttempt = observedAttempt;
+          // txRepo is a full instance: its readCol()/writeCol() already resolve the same
+          // converter-wrapped read ref and raw write ref. Transaction semantics come from tx.*.
+          return await fn(tx, txRepo);
+        }, options),
+      );
     } catch (error: any) {
       throw parseFirestoreError(error);
     }

@@ -147,6 +147,20 @@ the write**. Both execution modes ship in **one release**.
    phase, every supported write on that repository runs under a transaction. The error raised for
    `withMetadata` must name the interceptor that forced the mode.
 
+   > Amendment (3.0.0, issue #112): the mode-union footgun this decision creates — a read-capable
+   > interceptor silently promoting every single-document write on a repository to its own
+   > transaction — is now refused rather than only documented. The repository tracks, via
+   > `AsyncLocalStorage`, which `Firestore` instance currently has a transaction open on the calling
+   > async chain, checked right before the promoted branch would open a second one. A
+   > transaction-mode write that would nest a second, independent transaction on the **same**
+   > instance while one is already open throws, naming the interceptor(s) that forced the mode and
+   > pointing at the `*InTransaction` helpers. Scoped to the same `Firestore` instance only —
+   > nesting on a genuinely different instance carries no contention risk and is not refused.
+   > Explicit nested `runInTransaction` calls with no interceptor promotion involved are unchanged:
+   > this refusal targets only the silent promotion this ADR introduced, not general transaction
+   > nesting, which predates this ADR and is a separate, already-understood pattern. See
+   > [issue #112](https://github.com/reggieofarrell/flintfire/issues/112).
+
 8. **The change is additive.** With no interceptor registered the existing code path is unchanged —
    single-document writes keep using `docRef.set()` / `create()` / `update()` / `delete()` directly.
    Registration is new API, `commitInChunks` is private, and every new throw is reachable only on a

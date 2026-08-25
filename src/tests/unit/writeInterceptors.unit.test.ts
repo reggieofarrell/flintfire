@@ -17,6 +17,10 @@
  *     read-capable interceptor(s) that forced the mode.
  *   - U-6: the three unsupported paths refuse, naming the operation and every interceptor — and
  *     `bulkWrite` refuses even with `{ skipHooks: true }`, because a guarantee cannot be waived.
+ *   - U-8: nested-transaction guard (issue #112) — a transaction-mode write refuses when a
+ *     transaction is already open on the same Firestore instance; joining via `*InTransaction`,
+ *     standalone writes, batch/none mode, and explicit nested `runInTransaction` stay unchanged;
+ *     a readOnly outer transaction also sets the ambient marker (U-8h).
  */
 import { FirestoreRepository } from '../../core/FirestoreRepository.js';
 import { WriteOutcomeError } from '../../core/Errors.js';
@@ -586,5 +590,131 @@ describe('write interceptors — paths with no shared boundary refuse (U-6)', ()
     await expect(repo.bulkDelete(['user-1'])).rejects.toThrow(
       /bulkDelete\(\) cannot run write interceptor\(s\) 'audit'/,
     );
+  });
+});
+
+/**
+ * Nested-transaction guard (issue #112 / ADR-0040 Amendment): a read-capable interceptor promotes
+ * every single-document write to its own `db.runTransaction`. Calling that write from inside another
+ * transaction on the same Firestore instance must throw rather than silently nest a second one.
+ *
+ * Both `db.runTransaction` call sites set the ambient marker (T1). The guard sits only on the
+ * interceptor-forced branch — explicit nested `runInTransaction` stays unchanged (T4 / D3).
+ */
+describe('write interceptors — nested transaction guard (U-8)', () => {
+  // U-8a: the issue's own reported scenario — outer public runInTransaction, inner promoted write.
+  it('U-8a: throws when a transaction-mode write nests inside another runInTransaction on the same db', async () => {
+    const { repo, siblingRepo, readCapable } = createHarness();
+    // Promote siblingRepo to transaction mode; repo stays interceptor-free and only opens the outer tx.
+    siblingRepo.registerWriteInterceptor(readCapable('audit'));
+
+    await expect(
+      repo.runInTransaction(async () => {
+        await siblingRepo.update('doc-1', { marker: 'z' } as any);
+      }),
+    ).rejects.toThrow(/already open/);
+  });
+
+  // U-8b: the documented correct usage — join the caller's transaction instead of nesting.
+  it('U-8b: does NOT throw when using updateInTransaction to join the caller transaction', async () => {
+    const { repo, siblingRepo, readCapable } = createHarness();
+    siblingRepo.registerWriteInterceptor(readCapable('audit'));
+
+    await expect(
+      repo.runInTransaction(async tx => {
+        await siblingRepo.updateInTransaction(tx, 'doc-1', { marker: 'z' } as any);
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  // U-8c: additivity outside any ambient transaction — the promoted write still opens its own tx.
+  it('U-8c: does NOT throw for a standalone transaction-mode write (no ambient transaction)', async () => {
+    const { siblingRepo, readCapable } = createHarness();
+    siblingRepo.registerWriteInterceptor(readCapable('audit'));
+
+    await expect(siblingRepo.update('doc-1', { marker: 'z' } as any)).resolves.toBeDefined();
+  });
+
+  // U-8d: the guard lives only on the promoted-transaction branch — none/batch mode must not refuse.
+  it("U-8d: does NOT throw for mode 'none' or 'batch' writes nested inside another runInTransaction", async () => {
+    const { repo, siblingRepo, writeOnly } = createHarness();
+
+    // Mode 'none': siblingRepo has no interceptor registered.
+    await expect(
+      repo.runInTransaction(async () => {
+        await siblingRepo.update('doc-1', { marker: 'none' } as any);
+      }),
+    ).resolves.toBeUndefined();
+
+    // Mode 'batch': a write-only interceptor stages into a WriteBatch, not a nested transaction.
+    siblingRepo.registerWriteInterceptor(writeOnly('mirror'));
+    await expect(
+      repo.runInTransaction(async () => {
+        await siblingRepo.update('doc-2', { marker: 'batch' } as any);
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  // U-8e / T2: the tx-clone still exposes plain write methods; calling them is the same hazard.
+  it("U-8e: throws when the same repository's tx-clone calls its own plain update()", async () => {
+    const { siblingRepo, readCapable } = createHarness();
+    siblingRepo.registerWriteInterceptor(readCapable('audit'));
+
+    await expect(
+      siblingRepo.runInTransaction(async (_tx, txRepo) => {
+        await txRepo.update('doc-1', { marker: 'z' } as any);
+      }),
+    ).rejects.toThrow(/already open/);
+  });
+
+  // U-8f / T4 / D3: explicit nested runInTransaction with no interceptor promotion stays unchanged.
+  it('U-8f: does NOT throw for explicit nested runInTransaction (no interceptor promotion inside)', async () => {
+    const { repo, siblingRepo } = createHarness();
+
+    await expect(
+      repo.runInTransaction(async () => {
+        // Must return the inner result — a missing return would make this assertion check the wrong
+        // thing (the outer callback's undefined) and falsely pass even if nesting were refused.
+        return await siblingRepo.runInTransaction(async () => 'ok');
+      }),
+    ).resolves.toBe('ok');
+  });
+
+  // U-8g: message-quality — name only the read-capable interceptor(s) that forced the mode.
+  it('U-8g: thrown message names exactly the read-capable interceptor(s) that forced the mode', async () => {
+    const { repo, siblingRepo, writeOnly, readCapable } = createHarness();
+    siblingRepo.registerWriteInterceptor(writeOnly('mirror'));
+    siblingRepo.registerWriteInterceptor(readCapable('audit'));
+
+    const error = await repo
+      .runInTransaction(async () => {
+        await siblingRepo.update('doc-1', { marker: 'z' } as any);
+      })
+      .then(() => null)
+      .catch((caught: Error) => caught);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(/write interceptor\(s\) 'audit' declare a read phase/);
+    expect((error as Error).message).toMatch(/already open/);
+    // Pin the full §6.1 guidance clauses — not only the interceptor name / "already open" fragments.
+    expect((error as Error).message).toMatch(/contend or deadlock/);
+    expect((error as Error).message).toMatch(/\*InTransaction helpers/);
+    // The write-only interceptor did not force the transaction — naming it would misdirect unregister.
+    expect((error as Error).message).not.toContain("'mirror'");
+  });
+
+  // U-8h: readOnly outer transactions share the same wrapped runTransaction call site (§5 bound).
+  it('U-8h: throws when nesting a promoted write inside a readOnly outer transaction', async () => {
+    const { repo, siblingRepo, readCapable } = createHarness();
+    siblingRepo.registerWriteInterceptor(readCapable('audit'));
+
+    await expect(
+      repo.runInTransaction(
+        async () => {
+          await siblingRepo.update('doc-1', { marker: 'z' } as any);
+        },
+        { readOnly: true },
+      ),
+    ).rejects.toThrow(/already open/);
   });
 });
