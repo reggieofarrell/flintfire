@@ -5,6 +5,70 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0](https://github.com/reggieofarrell/flintfire/compare/v3.0.0...v3.1.0) (2026-08-25)
+
+### Added
+
+- **query:** export ReadOnlyQuery so fluent chains cannot leak write terminals
+  ([#107](https://github.com/reggieofarrell/flintfire/issues/107))
+  ([a6069f0](https://github.com/reggieofarrell/flintfire/commit/a6069f0a524edc2ebb0c5f366e75cb6c45704431)),
+  closes [#100](https://github.com/reggieofarrell/flintfire/issues/100)
+  [#100](https://github.com/reggieofarrell/flintfire/issues/100)
+  [#100](https://github.com/reggieofarrell/flintfire/issues/100)
+- **repository:** expose withSchema's argument assembly for subclasses (withSchemaArgs)
+  ([#104](https://github.com/reggieofarrell/flintfire/issues/104))
+  ([ac45759](https://github.com/reggieofarrell/flintfire/commit/ac45759d11e9c25f47fa52feea3f912bb38f8fe3)),
+  closes [#102](https://github.com/reggieofarrell/flintfire/issues/102)
+  [#102](https://github.com/reggieofarrell/flintfire/issues/102)
+  [#105](https://github.com/reggieofarrell/flintfire/issues/105)
+  [#105](https://github.com/reggieofarrell/flintfire/issues/105)
+  [#105](https://github.com/reggieofarrell/flintfire/issues/105)
+- **repository:** guarantee write interceptors run in the primary write's atomic boundary
+  ([#108](https://github.com/reggieofarrell/flintfire/issues/108))
+  ([#113](https://github.com/reggieofarrell/flintfire/issues/113))
+  ([510f595](https://github.com/reggieofarrell/flintfire/commit/510f595a6b473616df0413a9b9d87cc56f156be3)),
+  closes [#103](https://github.com/reggieofarrell/flintfire/issues/103)
+  [#100](https://github.com/reggieofarrell/flintfire/issues/100)
+  [#112](https://github.com/reggieofarrell/flintfire/issues/112)
+- **repository:** warn once when subclass overrides unenforceable write
+  ([#103](https://github.com/reggieofarrell/flintfire/issues/103))
+  ([#109](https://github.com/reggieofarrell/flintfire/issues/109))
+  ([b72436c](https://github.com/reggieofarrell/flintfire/commit/b72436c71972c883cac43b3bf93a58888443d768))
+
+### Fixed
+
+- **ci:** skip rulesync bump when the lockfile is inside the cooldown
+  ([#111](https://github.com/reggieofarrell/flintfire/issues/111))
+  ([42314e8](https://github.com/reggieofarrell/flintfire/commit/42314e8434ba94cb465f5b6e8578b68916846f01))
+- **repository:** refuse nested write-interceptor transactions
+  ([#112](https://github.com/reggieofarrell/flintfire/issues/112))
+  ([#114](https://github.com/reggieofarrell/flintfire/issues/114))
+  ([d8c7805](https://github.com/reggieofarrell/flintfire/commit/d8c78056fb3831dc0cf98f2a000dbb5e2097218c))
+
+### Documentation
+
+- **adr:** add ADR-0041 read-only query builder type
+  ([4625d60](https://github.com/reggieofarrell/flintfire/commit/4625d60dc4cacc3ef37ef799422a77005223a217)),
+  closes [#100](https://github.com/reggieofarrell/flintfire/issues/100)
+- apply the v3 audit findings to the docs site
+  ([#101](https://github.com/reggieofarrell/flintfire/issues/101))
+  ([0ef66cb](https://github.com/reggieofarrell/flintfire/commit/0ef66cb3888496d0959a82ec2068546265be5928)),
+  closes [#6](https://github.com/reggieofarrell/flintfire/issues/6)
+  [#102](https://github.com/reggieofarrell/flintfire/issues/102)
+- make the query-builder write-terminal leak preventable, not just documented
+  ([0b7d883](https://github.com/reggieofarrell/flintfire/commit/0b7d88316fa857919b5bdc39f60f52ae8ff78f2c))
+- **release:** record FlintFire 3.0.0 closeout
+  ([#96](https://github.com/reggieofarrell/flintfire/issues/96))
+  ([070b378](https://github.com/reggieofarrell/flintfire/commit/070b378d3ba023f7c7b7c673e41d104e6de8d443))
+- use zod 4 top-level formats in npm README and add an idiom gate
+  ([#106](https://github.com/reggieofarrell/flintfire/issues/106))
+  ([b999f40](https://github.com/reggieofarrell/flintfire/commit/b999f40d5c430d3bd7b97c69fdd61d1584dcd486)),
+  closes [#105](https://github.com/reggieofarrell/flintfire/issues/105)
+- v3 website docs audit + ADR-0040 (repository write interceptors)
+  ([#99](https://github.com/reggieofarrell/flintfire/issues/99))
+  ([f30d6ae](https://github.com/reggieofarrell/flintfire/commit/f30d6aef5a293a82fc3d3ba3f11d817a0d227d1c)),
+  closes [#80](https://github.com/reggieofarrell/flintfire/issues/80)
+
 ## [3.0.0](https://github.com/reggieofarrell/flintfire/compare/v2.2.1...v3.0.0) (2026-08-23)
 
 ### ⚠ BREAKING CHANGES
