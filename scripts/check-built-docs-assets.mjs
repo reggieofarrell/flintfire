@@ -115,6 +115,17 @@ if (!existsSync(indexHtmlPath)) {
   if (!hasDarkHidden) fail('index.html is missing dark:sl-hidden on a splash image');
   if (!hasLightHidden) fail('index.html is missing light:sl-hidden on a splash image');
 
+  // Nav SiteTitle override (see website/src/components/SiteTitle.astro) must emit the
+  // horizontal wordmark pair with the Pages base prefix, same slash-join rule as favicons.
+  const hasLightHorizontal = /\/flintfire\/flint-fire-logo-horizontal-light\.svg/.test(html);
+  const hasDarkHorizontal = /\/flintfire\/flint-fire-logo-horizontal-dark\.svg/.test(html);
+  if (!hasLightHorizontal) {
+    fail('index.html does not reference /flintfire/flint-fire-logo-horizontal-light.svg');
+  }
+  if (!hasDarkHorizontal) {
+    fail('index.html does not reference /flintfire/flint-fire-logo-horizontal-dark.svg');
+  }
+
   for (const name of FORBIDDEN_UNSUFFIXED) {
     if (html.includes(name) || html.includes(`/${name}`)) {
       fail(`index.html references unsuffixed brand path: ${name}`);

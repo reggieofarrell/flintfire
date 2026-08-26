@@ -58,6 +58,10 @@ export default defineConfig({
       favicon: '/favicon-light.svg',
       components: {
         Head: './src/components/ThemeFavicons.astro',
+        // Horizontal wordmark in the nav. Not Starlight's `logo` option — that Vite-imports
+        // files, and Vite cannot import from `public/` (ADR-0039). SiteTitle.astro reads the
+        // public light/dark pair the same way the splash hero does.
+        SiteTitle: './src/components/SiteTitle.astro',
       },
       plugins: [
         starlightVersions({

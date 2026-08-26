@@ -1,0 +1,77 @@
+---
+/**
+ * Starlight `SiteTitle` override that puts the horizontal FlintFire wordmark in the nav.
+ *
+ * Why override instead of Starlight's `logo` option: that option Vite-imports the files,
+ * and Vite will not import from `public/` (see ADR-0039). The brand contract keeps the
+ * eight paired SVGs in `website/public/` so they emit at known dist paths. This component
+ * uses those public URLs with Starlight's `light:sl-hidden` / `dark:sl-hidden` classes,
+ * the same theme-switch pattern as the splash hero in `src/content/docs/index.md`.
+ *
+ * `title: 'FlintFire'` stays in `astro.config.mjs` for `<title>` / OG metadata. The visible
+ * nav text is replaced by the wordmark; the string is kept as `sr-only` so the home link
+ * still has an accessible name. Images use empty `alt` so screen readers do not announce
+ * the brand three times (two imgs + the sr-only span).
+ *
+ * Join BASE_URL with an explicit slash. A missing slash would produce
+ * `/flintfireflint-fire-logo-horizontal-light.svg` (404) while filename-only asset checks
+ * still pass.
+ */
+const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute;
+
+const base = import.meta.env.BASE_URL.endsWith('/')
+  ? import.meta.env.BASE_URL
+  : `${import.meta.env.BASE_URL}/`;
+const lightSrc = `${base}flint-fire-logo-horizontal-light.svg`;
+const darkSrc = `${base}flint-fire-logo-horizontal-dark.svg`;
+---
+
+<a href={siteTitleHref} class="site-title sl-flex">
+  {/* Dark-theme wordmark: white type + orange flame. Hidden in light mode and when printing. */}
+  <img
+    class="light:sl-hidden print:hidden"
+    src={darkSrc}
+    alt=""
+    width="1019"
+    height="309"
+  />
+  {/* Light-theme wordmark: navy type + orange flame. Shown when printing (ink on paper). */}
+  <img
+    class="dark:sl-hidden print:block"
+    src={lightSrc}
+    alt=""
+    width="1019"
+    height="309"
+  />
+  <span class="sr-only" translate="no">{siteTitle}</span>
+</a>
+
+<style>
+  /**
+   * Mirror Starlight's default SiteTitle image sizing so the wordmark sits in the
+   * nav row instead of at the SVG's intrinsic 1019×309. `max-width` keeps the mark
+   * from colliding with search / version / theme controls on narrow viewports.
+   */
+  @layer starlight.core {
+    .site-title {
+      align-items: center;
+      gap: var(--sl-nav-gap);
+      font-size: var(--sl-text-h4);
+      font-weight: 600;
+      color: var(--sl-color-text-accent);
+      text-decoration: none;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    span {
+      overflow: hidden;
+    }
+    img {
+      height: calc(var(--sl-nav-height) - 2 * var(--sl-nav-pad-y));
+      width: auto;
+      max-width: min(11.5rem, 46vw);
+      object-fit: contain;
+      object-position: 0 50%;
+    }
+  }
+</style>
