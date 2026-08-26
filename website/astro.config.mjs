@@ -63,6 +63,9 @@ export default defineConfig({
         // public light/dark pair the same way the splash hero does.
         SiteTitle: './src/components/SiteTitle.astro',
       },
+      // Splash-only layout: center the stacked hero mark on small screens.
+      // See src/styles/hero.css for why Starlight's default leaves it left-aligned.
+      customCss: ['./src/styles/hero.css'],
       plugins: [
         starlightVersions({
           versions: [{ slug: '2.0', label: 'v2' }],

@@ -1,0 +1,17 @@
+/**
+ * Splash-hero layout tweaks for the FlintFire docs site.
+ *
+ * Starlight's Hero sizes `.hero-html` to `min(70%, 20rem)` and centers that box,
+ * but the box is `display: flex` (via `sl-flex`) with the default `flex-start`
+ * alignment. Our mark (`.flintfire-hero-mark`) is narrower than that box
+ * (`min(12rem, 40vw)`), so on stacked small-screen layouts the flame sits to
+ * the left of the already-centered title, tagline, and CTAs.
+ *
+ * Starlight's own stacked/split breakpoint is `50rem` (see Hero.astro). Match
+ * it so desktop keeps the 7fr/4fr split with the mark in the right column.
+ */
+@media (max-width: 49.999rem) {
+  .hero-html {
+    justify-content: center;
+  }
+}
