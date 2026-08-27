@@ -206,6 +206,12 @@ describe('VectorQueryBuilder', () => {
         queryVector: [],
       }),
     ).toThrow(/non-empty number array/i);
+    expect(() =>
+      vectorBuilder.findNearest({
+        ...findNearestOptions,
+        queryVector: [],
+      }),
+    ).toThrow(TypeError);
   });
 
   it('should reject distanceThreshold 0 at findNearest()', () => {
@@ -215,6 +221,9 @@ describe('VectorQueryBuilder', () => {
     expect(() =>
       vectorBuilder.findNearest({ ...findNearestOptions, distanceThreshold: 0 }),
     ).toThrow(/distanceThreshold cannot be 0/i);
+    expect(() =>
+      vectorBuilder.findNearest({ ...findNearestOptions, distanceThreshold: 0 }),
+    ).toThrow(TypeError);
   });
 
   it('should reject distanceResultField "id" (reserved; overlaid by the repository)', () => {

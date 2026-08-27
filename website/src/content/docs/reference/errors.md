@@ -3,9 +3,9 @@ title: 'Error Handling'
 description: 'Error classes, when they throw, and the parseFirestoreError normalizer.'
 ---
 
-Typed error classes for validation, not-found, conflict, failed-precondition, malformed-id, and
-missing-index failures, plus the `parseFirestoreError` normalizer. The drop-in Express middleware
-that maps these to HTTP responses lives in
+Typed error classes for validation, not-found, conflict, failed-precondition, malformed-id,
+pagination-cursor, and missing-index failures, plus the `parseFirestoreError` normalizer. The
+drop-in Express middleware that maps these to HTTP responses lives in
 [Express integration](/flintfire/guides/integrations/express/).
 
 ## Overview
@@ -21,6 +21,7 @@ import {
   PreconditionFailedError,
   FirestoreIndexError,
   InvalidDocumentIdError,
+  InvalidPaginationCursorError,
   WriteOutcomeError,
 } from 'flintfire';
 
@@ -35,6 +36,9 @@ try {
   } else if (error instanceof InvalidDocumentIdError) {
     // Handle a malformed document id
     console.log(`Invalid document id (${error.reason})`);
+  } else if (error instanceof InvalidPaginationCursorError) {
+    // Ask the client to restart pagination from the first page
+    console.log(`Invalid pagination cursor (${error.reason})`);
   } else if (error instanceof NotFoundError) {
     // Handle not found
     console.log('Document not found');
@@ -86,6 +90,22 @@ Properties:
 
 - `reason: InvalidDocumentIdReason` — a discriminant describing why the id was rejected
 - `message: string` — error description
+
+### `InvalidPaginationCursorError`
+
+Thrown by `paginate` / `paginateWithCount` when an opaque cursor cannot safely continue the query.
+The cursor may be malformed, may identify a document outside the current collection or collection
+group, or may point to a document deleted since the previous page. Consumers should restart from the
+first page or return a client error rather than matching the human-readable message.
+
+Properties:
+
+- `reason: InvalidPaginationCursorReason` — `'malformed' | 'source_mismatch' | 'stale'`
+- `message: string` — a stable, non-sensitive description of the category
+
+The error never stores the cursor token, decoded document path, or parser failure. This keeps logs
+and HTTP serialization from reflecting untrusted cursor contents. The Express adapter maps it to
+HTTP 400 and returns only `{ error: 'InvalidPaginationCursorError', reason }`.
 
 ### `NotFoundError`
 

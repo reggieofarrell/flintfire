@@ -341,6 +341,11 @@ rejected). Pass the previous page's
 `nextCursor` to fetch the next page. Tokens encode a document path only — they are not interchangeable
 with typed `startAfter` field values.
 
+Invalid numeric pagination arguments throw `TypeError`. A malformed cursor, a cursor from another
+collection or collection group, or a cursor whose document was deleted throws
+`InvalidPaginationCursorError`; branch on its `reason` (`'malformed' | 'source_mismatch' | 'stale'`)
+and restart from the first page rather than matching message text.
+
 ```typescript
 // Cursor-based pagination (recommended)
 // orderBy() is required for stable cursor pagination

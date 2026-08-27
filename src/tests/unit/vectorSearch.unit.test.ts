@@ -46,6 +46,55 @@ describe('VectorSearch utilities', () => {
     ).not.toThrow();
   });
 
+  it.each<[string, () => void]>([
+    [
+      'a non-array queryVector',
+      () => validateFindNearestOptions({ ...validOptions, queryVector: 'bad' as never }),
+    ],
+    [
+      'an empty queryVector',
+      () => validateFindNearestOptions({ ...validOptions, queryVector: [] }),
+    ],
+    [
+      'a non-finite queryVector component',
+      () => validateFindNearestOptions({ ...validOptions, queryVector: [Number.NaN] }),
+    ],
+    [
+      'an oversized queryVector',
+      () =>
+        validateFindNearestOptions({
+          ...validOptions,
+          queryVector: Array.from({ length: VECTOR_MAX_DIMENSIONS + 1 }, () => 0),
+        }),
+    ],
+    ['a non-integer limit', () => validateFindNearestOptions({ ...validOptions, limit: 1.5 })],
+    [
+      'an oversized limit',
+      () => validateFindNearestOptions({ ...validOptions, limit: VECTOR_MAX_LIMIT + 1 }),
+    ],
+    [
+      'a non-finite distanceThreshold',
+      () => validateFindNearestOptions({ ...validOptions, distanceThreshold: Number.NaN }),
+    ],
+    [
+      'a zero distanceThreshold',
+      () => validateFindNearestOptions({ ...validOptions, distanceThreshold: 0 }),
+    ],
+    [
+      'a negative EUCLIDEAN distanceThreshold',
+      () => validateFindNearestOptions({ ...validOptions, distanceThreshold: -0.5 }),
+    ],
+  ])('should throw TypeError for invalid numeric argument: %s', (_description, action) => {
+    expect(action).toThrow(TypeError);
+  });
+
+  it.each([0, -1, 1.5, VECTOR_MAX_DIMENSIONS + 1])(
+    'should throw TypeError for invalid vectorEmbeddingSchema dimensions (%s)',
+    dimensions => {
+      expect(() => vectorEmbeddingSchema(dimensions)).toThrow(TypeError);
+    },
+  );
+
   it('should reject null or non-object options', () => {
     expect(() => validateFindNearestOptions(null as never)).toThrow(/requires an options object/i);
     expect(() => validateFindNearestOptions('bad' as never)).toThrow(/requires an options object/i);

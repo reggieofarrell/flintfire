@@ -317,3 +317,41 @@ export class InvalidDocumentIdError extends Error {
     this.name = 'InvalidDocumentIdError';
   }
 }
+
+/**
+ * Stable, machine-readable reason an opaque pagination cursor cannot be used.
+ *
+ * The reason deliberately describes only the failure category. Cursor contents and decoded
+ * Firestore paths are untrusted input and are never retained on the error.
+ */
+export type InvalidPaginationCursorReason = 'malformed' | 'source_mismatch' | 'stale';
+
+/** Stable, non-sensitive messages for each {@link InvalidPaginationCursorReason}. */
+function messageForInvalidPaginationCursor(reason: InvalidPaginationCursorReason): string {
+  switch (reason) {
+    case 'malformed':
+      return 'Invalid pagination cursor.';
+    case 'source_mismatch':
+      return 'Invalid pagination cursor for this query source.';
+    case 'stale':
+      return (
+        'Pagination cursor no longer points to an existing document (it may have been deleted ' +
+        'between page requests).'
+      );
+  }
+}
+
+/**
+ * Error thrown when an opaque pagination cursor is malformed, belongs to another query source, or
+ * points to a document that no longer exists.
+ *
+ * Consumers should branch on {@link reason} rather than matching message text. The cursor token,
+ * decoded document path, and any parser failure are intentionally omitted so logging or serializing
+ * this error cannot reflect untrusted cursor contents.
+ */
+export class InvalidPaginationCursorError extends Error {
+  constructor(public readonly reason: InvalidPaginationCursorReason) {
+    super(messageForInvalidPaginationCursor(reason));
+    this.name = 'InvalidPaginationCursorError';
+  }
+}

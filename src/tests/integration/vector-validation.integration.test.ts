@@ -89,6 +89,13 @@ describe('Vector validation integration', () => {
           ...findNearestBase,
           limit: 0,
         }),
+      ).toThrow(TypeError);
+
+      expect(() =>
+        validateFindNearestOptions({
+          ...findNearestBase,
+          limit: 0,
+        }),
       ).toThrow(/positive integer/i);
 
       expect(() =>
@@ -202,6 +209,7 @@ describe('Vector validation integration', () => {
     });
 
     it('should reject an invalid dimensions argument', () => {
+      expect(() => vectorEmbeddingSchema(0)).toThrow(TypeError);
       expect(() => vectorEmbeddingSchema(0)).toThrow(/positive integer/i);
       expect(() => vectorEmbeddingSchema(-1)).toThrow(/positive integer/i);
       expect(() => vectorEmbeddingSchema(2.5)).toThrow(/positive integer/i);

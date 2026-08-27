@@ -15,13 +15,14 @@ import type { VectorValueLike } from '../utils/pathTypes.js';
  *
  * @param dimensions - When provided, values must have exactly this many components. Must itself be a
  *   positive integer no greater than Firestore's maximum embedding dimension.
+ * @throws {@link TypeError} when `dimensions` is not a supported positive integer
  */
 export function vectorEmbeddingSchema(dimensions?: number) {
   if (
     dimensions !== undefined &&
     (!Number.isInteger(dimensions) || dimensions <= 0 || dimensions > VECTOR_MAX_DIMENSIONS)
   ) {
-    throw new Error(
+    throw new TypeError(
       `vectorEmbeddingSchema() dimensions must be a positive integer <= ${VECTOR_MAX_DIMENSIONS}.`,
     );
   }

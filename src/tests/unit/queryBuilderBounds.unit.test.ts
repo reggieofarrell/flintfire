@@ -197,8 +197,11 @@ describe('FirestoreQueryBuilder bounds / limitToLast guards (issue #36)', () => 
     expect(() => builder.offset(-1)).toThrow(
       /offset must be a non-negative integer \(received -1\)/,
     );
+    expect(() => builder.offset(-1)).toThrow(TypeError);
     expect(() => builder.offset(1.5)).toThrow(/offset must be a non-negative integer/);
+    expect(() => builder.offset(1.5)).toThrow(TypeError);
     expect(() => builder.offset(NaN)).toThrow(/offset must be a non-negative integer/);
+    expect(() => builder.offset(NaN)).toThrow(TypeError);
     expect(query.offset).not.toHaveBeenCalled();
 
     builder.offset(0);
@@ -227,6 +230,7 @@ describe('FirestoreQueryBuilder bounds / limitToLast guards (issue #36)', () => 
     expect(() => builder.orderBy('score').limitToLast(-1)).toThrow(
       /limitToLast must be a non-negative integer \(received -1\)/,
     );
+    expect(() => builder.orderBy('score').limitToLast(-1)).toThrow(TypeError);
   });
 
   it('field-value startAt forwards args to the SDK after a non-empty check', () => {

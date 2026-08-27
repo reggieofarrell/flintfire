@@ -8,6 +8,7 @@
  * distinct (promotes probe N-instanceof-across-read-path.mjs).
  */
 import { GeoPoint, Timestamp } from 'firebase-admin/firestore';
+import { InvalidPaginationCursorError } from '../../core/Errors.js';
 import { createTestUserInput } from '../shared/factories/user.factory.js';
 import { resetTestFactoryCounters } from '../shared/factories/counters.js';
 import { createUserRepoHarness, getIntegrationDb } from './helpers/firestoreIntegrationHarness.js';
@@ -293,6 +294,7 @@ describe('FirestoreRepository QueryBuilder', () => {
   });
 
   it('should reject paginate/offsetPaginate with non-positive, non-integer, or non-finite inputs', async () => {
+    await expect(userRepo.query().orderBy('sortKey').paginate(0)).rejects.toBeInstanceOf(TypeError);
     await expect(userRepo.query().orderBy('sortKey').paginate(0)).rejects.toThrow('pageSize');
     await expect(userRepo.query().orderBy('sortKey').paginate(-1)).rejects.toThrow('pageSize');
     await expect(userRepo.query().orderBy('sortKey').paginate(1.5)).rejects.toThrow('pageSize');
@@ -305,6 +307,7 @@ describe('FirestoreRepository QueryBuilder', () => {
 
     // offsetPaginate previously performed no validation at all.
     await expect(userRepo.query().offsetPaginate(0, 10)).rejects.toThrow('page');
+    await expect(userRepo.query().offsetPaginate(0, 10)).rejects.toBeInstanceOf(TypeError);
     await expect(userRepo.query().offsetPaginate(1, 0)).rejects.toThrow('pageSize');
     await expect(userRepo.query().offsetPaginate(-2, 10)).rejects.toThrow('page');
     await expect(userRepo.query().offsetPaginate(1.5, 10)).rejects.toThrow('page');
@@ -319,7 +322,10 @@ describe('FirestoreRepository QueryBuilder', () => {
 
     await expect(
       userRepo.query().orderBy('sortKey', 'asc').paginate(1, firstPage.nextCursor),
-    ).rejects.toThrow(/cursor no longer points/i);
+    ).rejects.toMatchObject({
+      name: 'InvalidPaginationCursorError',
+      reason: 'stale',
+    });
   });
 
   it('should reject a cursor bound to a different collection', async () => {
@@ -329,16 +335,23 @@ describe('FirestoreRepository QueryBuilder', () => {
       JSON.stringify({ path: 'some_other_collection/forged-doc' }),
     ).toString('base64url');
 
-    await expect(
-      userRepo.query().orderBy('sortKey', 'asc').paginate(1, foreignCursor),
-    ).rejects.toThrow(/cursor for this collection/i);
+    const error = await userRepo
+      .query()
+      .orderBy('sortKey', 'asc')
+      .paginate(1, foreignCursor)
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(InvalidPaginationCursorError);
+    expect(error).toMatchObject({ reason: 'source_mismatch' });
   });
 
   it('should reject a malformed cursor without echoing its contents', async () => {
     await seedCatalog();
     await expect(
       userRepo.query().orderBy('sortKey', 'asc').paginate(1, 'not-a-valid-cursor'),
-    ).rejects.toThrow(/invalid pagination cursor/i);
+    ).rejects.toMatchObject({
+      name: 'InvalidPaginationCursorError',
+      reason: 'malformed',
+    });
   });
 
   it('should select a subset of fields in query results', async () => {

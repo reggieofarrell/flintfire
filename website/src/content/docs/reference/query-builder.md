@@ -114,7 +114,8 @@ Limit the number of results. When chained after `limitToLast()`, this call **rep
 
 Return the last `n` documents of the ordered result set (results still in `orderBy` order).
 Requires at least one prior `orderBy()` / `orderById()` / `orderByPath()`. `n` must be a
-non-negative integer (`0` yields an empty page). Cannot be combined with `stream()`, opaque
+non-negative integer (`0` yields an empty page); an invalid numeric argument throws `TypeError`.
+Cannot be combined with `stream()`, opaque
 `paginate()`, or `offsetPaginate()` — call `get()` instead. Real-time `onSnapshot()` **is**
 supported. `getOne()` / `exists()` also compose: they skip an internal `.limit(1)` narrowing that
 would otherwise last-wins overwrite `limitToLast`.
@@ -130,8 +131,8 @@ single-collection foreign snapshot), consistent with `where` / `orderBy`.
 
 **`offset(n: number): this`**
 
-Skip the first `n` matching documents. `n` must be a non-negative integer (`0` is allowed). Prefer
-cursor bounds or `paginate()` for large offsets — Firestore still scans skipped documents. Opaque
+Skip the first `n` matching documents. `n` must be a non-negative integer (`0` is allowed); an
+invalid numeric argument throws `TypeError`. Prefer cursor bounds or `paginate()` for large offsets — Firestore still scans skipped documents. Opaque
 `paginate()` / `offsetPaginate()` reject a prior `offset()` (the terminals own the offset/limit
 slots).
 
@@ -238,17 +239,20 @@ field the identity overlay shadows.
 **`paginate(pageSize, cursor, options: { withMetadata: true }): Promise<{ items: WithMetadata<R>[]; nextCursor: string | null; hasMore: boolean }>`**
 
 Cursor-based pagination (recommended for large datasets). Requires at least one prior `orderBy(...)`
-call and throws unless `pageSize` is a positive integer.
+call. An invalid numeric `pageSize` throws `TypeError`. An unusable cursor throws
+`InvalidPaginationCursorError` with `reason: 'malformed' | 'source_mismatch' | 'stale'`.
 
 **`offsetPaginate(page: number, pageSize: number): Promise<{ items: R[]; page: number; pageSize: number; total: number; totalPages: number }>`** /
 **`offsetPaginate(page, pageSize, options: { withMetadata: true }): Promise<{ items: WithMetadata<R>[]; page: number; pageSize: number; total: number; totalPages: number }>`**
 
-Offset-based pagination. `page` and `pageSize` must be positive integers.
+Offset-based pagination. Invalid numeric `page` or `pageSize` arguments throw `TypeError`; both must
+be positive integers.
 
 **`paginateWithCount(pageSize: number, cursor?: string | null): Promise<{ items: R[]; nextCursor: string | null; hasMore: boolean; total: number }>`** /
 **`paginateWithCount(pageSize, cursor, options: { withMetadata: true }): Promise<{ items: WithMetadata<R>[]; nextCursor: string | null; hasMore: boolean; total: number }>`**
 
-Cursor pagination combined with a total count.
+Cursor pagination combined with a total count. It has the same `TypeError` and
+`InvalidPaginationCursorError` contract as `paginate`.
 
 **`stream(): AsyncGenerator<R>`** /
 **`stream(options: { withMetadata: true }): AsyncGenerator<WithMetadata<R>>`**

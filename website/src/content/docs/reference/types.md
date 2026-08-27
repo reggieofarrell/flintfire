@@ -63,6 +63,9 @@ these types describe, see [FirestoreRepository](/flintfire/reference/repository/
   `'not_string' | 'empty' | 'contains_slash' | 'reserved_dot_segment' | 'reserved_namespace' |
   'too_long' | 'invalid_utf8'` (the error class is documented in
   [Error Handling](/flintfire/reference/errors/)).
+- **`InvalidPaginationCursorReason`** — machine-readable cause carried by
+  `InvalidPaginationCursorError`: `'malformed' | 'source_mismatch' | 'stale'` (see
+  [Error Handling](/flintfire/reference/errors/#invalidpaginationcursorerror)).
 - **`HookEvent`** — union of supported lifecycle hook names.
 - **`HookContext<E>`** — second argument to every lifecycle hook: `event`, `execution`
   (`'direct'` | `'transaction'`), `retryable`, and (on the transaction branch only) diagnostic

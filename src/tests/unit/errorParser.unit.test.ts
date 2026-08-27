@@ -12,6 +12,7 @@
 import {
   ConflictError,
   FirestoreIndexError,
+  InvalidPaginationCursorError,
   NotFoundError,
   PreconditionFailedError,
   WriteOutcomeError,
@@ -180,6 +181,11 @@ describe('parseFirestoreError', () => {
       },
       cause,
     );
+    expect(parseFirestoreError(original)).toBe(original);
+  });
+
+  it('preserves InvalidPaginationCursorError unchanged through query catch boundaries', () => {
+    const original = new InvalidPaginationCursorError('source_mismatch');
     expect(parseFirestoreError(original)).toBe(original);
   });
 });

@@ -59,10 +59,15 @@ export {
   ConflictError,
   FirestoreIndexError,
   InvalidDocumentIdError,
+  InvalidPaginationCursorError,
   PreconditionFailedError,
   WriteOutcomeError,
 } from './core/Errors.js';
-export type { InvalidDocumentIdReason, WriteOutcome } from './core/Errors.js';
+export type {
+  InvalidDocumentIdReason,
+  InvalidPaginationCursorReason,
+  WriteOutcome,
+} from './core/Errors.js';
 
 export { parseFirestoreError } from './core/ErrorParser.js';
 // NOTE: `errorHandler` is intentionally NOT exported from the root — it lives in the optional
