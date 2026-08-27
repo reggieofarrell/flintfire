@@ -2,7 +2,7 @@ import { parseFirestoreError } from './ErrorParser.js';
 import { ID, type HookDataFor } from './FirestoreRepository.js';
 import type { HookEvent, HookExecution } from './Hooks.js';
 import { FirestoreDocument, asFirestoreDocument } from './DocumentId.js';
-import { ValidationError } from './Errors.js';
+import { InvalidPaginationCursorError, ValidationError } from './Errors.js';
 import { UpdateInput } from './Validation.js';
 import {
   buildDocumentMetadata,
@@ -584,7 +584,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
       docRef = this.db.doc(payload.path);
     } catch {
       // Never echo the decoded path — it is caller-supplied and untrusted.
-      throw new Error('Invalid pagination cursor.');
+      throw new InvalidPaginationCursorError('malformed');
     }
 
     // Bind the cursor to THIS query's source: a forged/foreign cursor pointing at a document
@@ -595,10 +595,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
 
     const snapshot = await docRef.get();
     if (!snapshot.exists) {
-      throw new Error(
-        'Pagination cursor no longer points to an existing document (it may have been deleted ' +
-          'between page requests).',
-      );
+      throw new InvalidPaginationCursorError('stale');
     }
 
     return snapshot as QueryDocumentSnapshot<any>;
@@ -611,7 +608,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
    */
   private assertPositiveInt(name: string, value: number): void {
     if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
-      throw new Error(`${name} must be a positive integer (received ${String(value)}).`);
+      throw new TypeError(`${name} must be a positive integer (received ${String(value)}).`);
     }
   }
 
@@ -622,7 +619,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
    */
   private assertNonNegativeInt(name: string, value: number): void {
     if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
-      throw new Error(`${name} must be a non-negative integer (received ${String(value)}).`);
+      throw new TypeError(`${name} must be a non-negative integer (received ${String(value)}).`);
     }
   }
 
@@ -830,6 +827,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
    *
    * @param n - Number of matching documents to skip (including `0`)
    * @returns The query builder instance
+   * @throws {@link TypeError} when `n` is negative, non-integral, or non-finite
    */
   offset(n: number): this {
     this.assertNonNegativeInt('offset', n);
@@ -853,6 +851,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
    *
    * @param n - Number of trailing documents to return (`0` yields an empty page)
    * @returns The query builder instance
+   * @throws {@link TypeError} when `n` is negative, non-integral, or non-finite
    */
   limitToLast(n: number): this {
     this.assertNonNegativeInt('limitToLast', n);
@@ -904,6 +903,9 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
    * @param cursor - Opaque cursor string returned by the previous page
    * @param options - Optional `{ withMetadata }` opt-in
    * @returns Object with items, next cursor, and hasMore flag
+   * @throws {@link TypeError} when `pageSize` is not a positive finite integer
+   * @throws {@link InvalidPaginationCursorError} when `cursor` is malformed, belongs to another
+   *   query source, or points to a deleted document
    *
    * @example
    * // First page
@@ -994,6 +996,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
    * @param page - Page number (1-based)
    * @param pageSize - Number of items per page
    * @returns Paginated results with metadata
+   * @throws {@link TypeError} when `page` or `pageSize` is not a positive finite integer
    *
    * @example
    * // Get page 2 with 20 items per page
@@ -1636,6 +1639,9 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
    * @param cursor - Opaque cursor string returned by the previous page
    * @param options - Optional `{ withMetadata }` opt-in (forwarded to {@link paginate})
    * @returns Paginated results with total count
+   * @throws {@link TypeError} when `pageSize` is not a positive finite integer
+   * @throws {@link InvalidPaginationCursorError} under the same cursor conditions as
+   *   {@link paginate}
    *
    * @example
    * // Get paginated results with progress info
@@ -1915,7 +1921,7 @@ export class FirestoreQueryBuilder<
    */
   protected assertCursorBelongsToSource(docRef: DocumentReference): void {
     if (docRef.parent.path !== this.collectionRef.path) {
-      throw new Error('Invalid pagination cursor for this collection.');
+      throw new InvalidPaginationCursorError('source_mismatch');
     }
   }
 

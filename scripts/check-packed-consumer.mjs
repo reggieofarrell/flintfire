@@ -67,8 +67,9 @@ function tscExpectOk(dir, label) {
 const ROOT_IMPORTS = `
   FirestoreRepository, FirestoreQueryBuilder, FirestoreCollectionGroup,
   FirestoreCollectionGroupQueryBuilder, NotFoundError, ValidationError, ConflictError,
-  FirestoreIndexError, parseFirestoreError, makeValidator, zNumberWrite, zDateWrite, zArrayWrite,
-  zSentinel, withDelete, isDotNotation, expandDotNotation, mergeDotNotationUpdate,
+  FirestoreIndexError, InvalidPaginationCursorError, parseFirestoreError, makeValidator,
+  zNumberWrite, zDateWrite, zArrayWrite, zSentinel, withDelete, isDotNotation,
+  expandDotNotation, mergeDotNotationUpdate,
   convertTimestampsToMillis, createMillisTimestampConverter
 `;
 
@@ -136,12 +137,15 @@ try {
       // Issue #37 / D5: QueryExplainResult must be nameable from root AND /vector (same rationale
       // as VectorValueLike — QueryBuilder has no export-map subpath).
       `import type { QueryExplainResult } from '${PKG}';\n` +
+      `import type { InvalidPaginationCursorReason } from '${PKG}';\n` +
       `import type { QueryExplainResult as VectorQueryExplainResult } from '${PKG}/vector';\n` +
       `type _ExplainSame = QueryExplainResult<{ id: string }> extends VectorQueryExplainResult<{ id: string }>\n` +
       `  ? VectorQueryExplainResult<{ id: string }> extends QueryExplainResult<{ id: string }> ? true : never\n` +
       `  : never;\n` +
       `const _explainOk: _ExplainSame = true;\n` +
       `void _explainOk;\n` +
+      `const cursorReason: InvalidPaginationCursorReason = 'stale';\n` +
+      `const cursorError = new InvalidPaginationCursorError(cursorReason);\n` +
       // Issue #100 / ADR-0041: ReadOnlyQuery must be nameable from root AND /vector (QueryBuilder has
       // no export-map subpath). Also pins trap T5 — tagging ReadOnlyQueryClauseKeys `@internal` strips
       // its declaration under stripInternal:true while the extends clause still references it, which
@@ -255,7 +259,7 @@ try {
       `void satisfiesRo;\n` +
       `void roRepo;\n` +
       `void txHandle;\n` +
-      `export const used = [FirestoreRepository, FirestoreQueryBuilder, groupIsHandle, groupBuilder, groupPath, groupParentPath, NotFoundError, ValidationError, ConflictError, FirestoreIndexError, parseFirestoreError, makeValidator, zNumberWrite, zDateWrite, zArrayWrite, zSentinel, withDelete, isDotNotation, expandDotNotation, mergeDotNotationUpdate, convertTimestampsToMillis, createMillisTimestampConverter, withVectorSearch, vectorEmbeddingSchema, vvl, goodEmb, badEmb, reusable];\n`,
+      `export const used = [FirestoreRepository, FirestoreQueryBuilder, groupIsHandle, groupBuilder, groupPath, groupParentPath, NotFoundError, ValidationError, ConflictError, FirestoreIndexError, InvalidPaginationCursorError, cursorError, parseFirestoreError, makeValidator, zNumberWrite, zDateWrite, zArrayWrite, zSentinel, withDelete, isDotNotation, expandDotNotation, mergeDotNotationUpdate, convertTimestampsToMillis, createMillisTimestampConverter, withVectorSearch, vectorEmbeddingSchema, vvl, goodEmb, badEmb, reusable];\n`,
   );
   tscExpectOk(esm, 'ESM root+vector consumer (express NOT installed)');
 
@@ -264,7 +268,7 @@ try {
     join(esm, 'smoke.mjs'),
     `import * as root from '${PKG}';\n` +
       `import * as vector from '${PKG}/vector';\n` +
-      `const need = ['FirestoreRepository','FirestoreQueryBuilder','parseFirestoreError','makeValidator','convertTimestampsToMillis'];\n` +
+      `const need = ['FirestoreRepository','FirestoreQueryBuilder','InvalidPaginationCursorError','parseFirestoreError','makeValidator','convertTimestampsToMillis'];\n` +
       `const missing = need.filter(k => typeof root[k] === 'undefined');\n` +
       `if (missing.length) { console.error('missing root exports:', missing); process.exit(1); }\n` +
       `if (typeof vector.withVectorSearch !== 'function') { console.error('missing vector export'); process.exit(1); }\n`,
@@ -322,7 +326,7 @@ try {
     join(cjs, 'consumer.ts'),
     `import {${ROOT_IMPORTS}} from '${PKG}';\n` +
       `import { withVectorSearch } from '${PKG}/vector';\n` +
-      `export const used = [FirestoreRepository, parseFirestoreError, makeValidator, withVectorSearch];\n`,
+      `export const used = [FirestoreRepository, InvalidPaginationCursorError, parseFirestoreError, makeValidator, withVectorSearch];\n`,
   );
   tscExpectOk(cjs, 'CJS root+vector consumer (express NOT installed)');
 
@@ -331,7 +335,7 @@ try {
     join(cjs, 'smoke.cjs'),
     `const root = require('${PKG}');\n` +
       `const vector = require('${PKG}/vector');\n` +
-      `const need = ['FirestoreRepository','FirestoreQueryBuilder','parseFirestoreError','makeValidator','convertTimestampsToMillis'];\n` +
+      `const need = ['FirestoreRepository','FirestoreQueryBuilder','InvalidPaginationCursorError','parseFirestoreError','makeValidator','convertTimestampsToMillis'];\n` +
       `const missing = need.filter(k => typeof root[k] === 'undefined');\n` +
       `if (missing.length) { console.error('missing root exports:', missing); process.exit(1); }\n` +
       `if (typeof vector.withVectorSearch !== 'function') { console.error('missing vector export'); process.exit(1); }\n`,

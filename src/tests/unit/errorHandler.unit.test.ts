@@ -7,6 +7,7 @@ import { z } from 'zod';
 import {
   ConflictError,
   FirestoreIndexError,
+  InvalidPaginationCursorError,
   NotFoundError,
   PreconditionFailedError,
   ValidationError,
@@ -55,6 +56,23 @@ describe('errorHandler', () => {
       message: 'Document missing',
     });
   });
+
+  it.each(['malformed', 'source_mismatch', 'stale'] as const)(
+    'should return a safe 400 response for InvalidPaginationCursorError (%s)',
+    reason => {
+      const res = createMockResponse();
+      errorHandler(new InvalidPaginationCursorError(reason), req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'InvalidPaginationCursorError',
+        reason,
+      });
+      const serialized = JSON.stringify((res.json as jest.Mock).mock.calls[0][0]);
+      expect(serialized).not.toContain('cursor-token');
+      expect(serialized).not.toContain('documents/private');
+    },
+  );
 
   it('should return 503 for FirestoreIndexError without leaking the console index URL', () => {
     const res = createMockResponse();

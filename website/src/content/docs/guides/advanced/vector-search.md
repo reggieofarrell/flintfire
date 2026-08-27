@@ -210,7 +210,8 @@ for `distanceResultField` (e.g. `'score'`) for precise typing:
 `{ vectorField, queryVector, limit, distanceMeasure, distanceResultField?, distanceThreshold? }`. It
 can be called only once per query, `limit` must be a positive integer no greater than
 `VECTOR_MAX_LIMIT`, and `queryVector` must be a non-empty array of finite numbers within
-`VECTOR_MAX_DIMENSIONS`.
+`VECTOR_MAX_DIMENSIONS`. Invalid numeric arguments (`queryVector`, `limit`, or
+`distanceThreshold`) throw `TypeError`.
 
 `orderBy()`, `onSnapshot()`, and `stream()` are **not supported** on a vector query builder — each
 throws. Apply ordering implicitly through `findNearest()` and pre-filter with `where()` instead.
@@ -221,8 +222,8 @@ the Admin SDK. The emulator throws `No explain results` (no metrics from the emu
 
 ### `vectorEmbeddingSchema(dimensions?)`
 
-**Throws** at schema-construction time when `dimensions` is given and is not a positive integer
-`<= VECTOR_MAX_DIMENSIONS`.
+**Throws `TypeError`** at schema-construction time when `dimensions` is given and is not a positive
+integer `<= VECTOR_MAX_DIMENSIONS`.
 
 Zod helper whose value type is `number[] | VectorValueLike` — a plain number array or a native
 `FieldValue.vector(...)`. It enforces finite components, the exact `dimensions` length (when given),

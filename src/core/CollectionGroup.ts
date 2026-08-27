@@ -29,6 +29,7 @@ import {
   type QueryFilterFactoryBase,
 } from './QueryBuilder.js';
 import { parseFirestoreError } from './ErrorParser.js';
+import { InvalidPaginationCursorError } from './Errors.js';
 import { validateDocumentPath } from '../utils/documentId.js';
 import type { DeepPartial, FieldPaths, OmitId } from '../utils/pathTypes.js';
 
@@ -199,7 +200,7 @@ export class FirestoreCollectionGroupQueryBuilder<
    */
   protected assertCursorBelongsToSource(docRef: DocumentReference): void {
     if (docRef.parent.id !== this.collectionIdValue) {
-      throw new Error('Invalid pagination cursor for this collection group.');
+      throw new InvalidPaginationCursorError('source_mismatch');
     }
   }
 

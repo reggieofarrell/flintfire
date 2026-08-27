@@ -25,7 +25,7 @@
 import { FieldPath, Filter, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { FirestoreRepository } from '../../core/FirestoreRepository.js';
-import { InvalidDocumentIdError } from '../../core/Errors.js';
+import { InvalidDocumentIdError, InvalidPaginationCursorError } from '../../core/Errors.js';
 import { getIntegrationDb } from './helpers/firestoreIntegrationHarness.js';
 
 const postSchema = z.object({
@@ -516,24 +516,27 @@ describe('FirestoreRepository collectionGroup()', () => {
     // Firestore accepts a foreign `startAfter()` snapshot silently (verified), so without this
     // guard a forged cursor would dereference an arbitrary document in the database.
     const foreign = makeCursor(seeded.outsider);
-    await expect(postGroup.query().orderByPath().paginate(2, foreign)).rejects.toThrow(
-      'Invalid pagination cursor for this collection group.',
-    );
+    await expect(postGroup.query().orderByPath().paginate(2, foreign)).rejects.toMatchObject({
+      name: 'InvalidPaginationCursorError',
+      reason: 'source_mismatch',
+    });
 
     const parentDoc = makeCursor(`${USERS}/u1`);
-    await expect(postGroup.query().orderByPath().paginate(2, parentDoc)).rejects.toThrow(
-      'Invalid pagination cursor for this collection group.',
+    await expect(postGroup.query().orderByPath().paginate(2, parentDoc)).rejects.toBeInstanceOf(
+      InvalidPaginationCursorError,
     );
   });
 
   it('rejects a malformed cursor and one whose document no longer exists', async () => {
-    await expect(postGroup.query().orderByPath().paginate(2, 'not-base64!!')).rejects.toThrow(
-      'Invalid pagination cursor.',
+    await expect(postGroup.query().orderByPath().paginate(2, 'not-base64!!')).rejects.toMatchObject(
+      {
+        reason: 'malformed',
+      },
     );
     const missing = makeCursor(`${GROUP_ID}/does-not-exist`);
-    await expect(postGroup.query().orderByPath().paginate(2, missing)).rejects.toThrow(
-      /no longer points to an existing document/,
-    );
+    await expect(postGroup.query().orderByPath().paginate(2, missing)).rejects.toMatchObject({
+      reason: 'stale',
+    });
   });
 
   // -------------------------------------------------------------------------

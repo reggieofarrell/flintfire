@@ -173,6 +173,8 @@ It maps errors to HTTP status codes:
 - `ValidationError` → 400 Bad Request
 - `InvalidDocumentIdError` → 400 Bad Request (a malformed caller-supplied id; the body carries the
   machine-readable `reason`, never the raw id)
+- `InvalidPaginationCursorError` → 400 Bad Request (the body carries the machine-readable `reason`,
+  never the cursor token or decoded document path)
 - `NotFoundError` → 404 Not Found
 - `ConflictError` → 409 Conflict (including create-only collisions from `createWithId`)
 - `PreconditionFailedError` → 412 Precondition Failed (a failed `lastUpdateTime` write)
@@ -185,16 +187,17 @@ It maps errors to HTTP status codes:
 
 Maps errors to HTTP status codes and JSON bodies:
 
-| Error                     | Status | Response body                                                       |
-| ------------------------- | ------ | ------------------------------------------------------------------- |
-| `ValidationError`         | 400    | `{ error: 'ValidationError', details: issues }`                     |
-| `InvalidDocumentIdError`  | 400    | `{ error: 'InvalidDocumentIdError', reason }`                       |
-| `NotFoundError`           | 404    | `{ error: 'NotFoundError', message }`                               |
-| `FirestoreIndexError`     | 503    | `{ error: 'Query needs an index', message }`                        |
-| `ConflictError`           | 409    | `{ error: 'ConflictError', message }`                               |
-| `PreconditionFailedError` | 412    | `{ error: 'PreconditionFailedError', message }`                     |
-| `WriteOutcomeError`       | 500    | `{ error: 'WriteOutcomeError', outcome }` (cause is server-side only) |
-| Anything else             | 500    | `{ error: 'InternalServerError', message: 'Something went wrong' }` |
+| Error                          | Status | Response body                                                         |
+| ------------------------------ | ------ | --------------------------------------------------------------------- |
+| `ValidationError`              | 400    | `{ error: 'ValidationError', details: issues }`                       |
+| `InvalidDocumentIdError`       | 400    | `{ error: 'InvalidDocumentIdError', reason }`                         |
+| `InvalidPaginationCursorError` | 400    | `{ error: 'InvalidPaginationCursorError', reason }`                   |
+| `NotFoundError`                | 404    | `{ error: 'NotFoundError', message }`                                 |
+| `FirestoreIndexError`          | 503    | `{ error: 'Query needs an index', message }`                          |
+| `ConflictError`                | 409    | `{ error: 'ConflictError', message }`                                 |
+| `PreconditionFailedError`      | 412    | `{ error: 'PreconditionFailedError', message }`                       |
+| `WriteOutcomeError`            | 500    | `{ error: 'WriteOutcomeError', outcome }` (cause is server-side only) |
+| Anything else                  | 500    | `{ error: 'InternalServerError', message: 'Something went wrong' }`   |
 
 The generic 500 branch intentionally hides the underlying message so internal details are not leaked
 to clients. `WriteOutcomeError` exposes only the safe discriminated `outcome` — never `cause`,

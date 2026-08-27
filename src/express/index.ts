@@ -3,6 +3,7 @@ import {
   ConflictError,
   FirestoreIndexError,
   InvalidDocumentIdError,
+  InvalidPaginationCursorError,
   NotFoundError,
   PreconditionFailedError,
   ValidationError,
@@ -11,9 +12,10 @@ import {
 
 /**
  * Express middleware that maps repository errors to appropriate HTTP responses.
- * Automatically handles ValidationError (400), InvalidDocumentIdError (400), NotFoundError (404),
- * FirestoreIndexError (503), ConflictError (409), PreconditionFailedError (412),
- * WriteOutcomeError (500 with safe outcome metadata), and generic errors (500).
+ * Automatically handles ValidationError (400), InvalidDocumentIdError (400),
+ * InvalidPaginationCursorError (400), NotFoundError (404), FirestoreIndexError (503),
+ * ConflictError (409), PreconditionFailedError (412), WriteOutcomeError (500 with safe outcome
+ * metadata), and generic errors (500).
  *
  * Imported from the optional `flintfire/express` subpath so `express` stays out
  * of the core package's type graph. `express` is declared as an optional peer dependency — install
@@ -88,6 +90,15 @@ export function errorHandler(err: any, req: Request, res: Response, _next: NextF
     // reflected back.
     return res.status(400).json({
       error: 'InvalidDocumentIdError',
+      reason: err.reason,
+    });
+  }
+
+  if (err instanceof InvalidPaginationCursorError) {
+    // Return only the stable category. Cursor tokens and decoded document paths are intentionally
+    // absent from the error and must never be reflected to an HTTP client.
+    return res.status(400).json({
+      error: 'InvalidPaginationCursorError',
       reason: err.reason,
     });
   }

@@ -6,10 +6,12 @@ import { z } from 'zod';
 import {
   ConflictError,
   FirestoreIndexError,
+  InvalidPaginationCursorError,
   NotFoundError,
   PreconditionFailedError,
   ValidationError,
   WriteOutcomeError,
+  type InvalidPaginationCursorReason,
   type WriteOutcome,
 } from '../../core/Errors.js';
 
@@ -57,6 +59,25 @@ describe('ORM error classes', () => {
     expect(formatted).toContain('FIRESTORE INDEX REQUIRED');
     expect(formatted).toContain('status, createdAt');
     expect(formatted).toContain('https://example.com/index');
+  });
+
+  it.each<[InvalidPaginationCursorReason, string]>([
+    ['malformed', 'Invalid pagination cursor.'],
+    ['source_mismatch', 'Invalid pagination cursor for this query source.'],
+    [
+      'stale',
+      'Pagination cursor no longer points to an existing document (it may have been deleted between page requests).',
+    ],
+  ])('should expose a safe InvalidPaginationCursorError for %s', (reason, message) => {
+    const error = new InvalidPaginationCursorError(reason);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.name).toBe('InvalidPaginationCursorError');
+    expect(error.reason).toBe(reason);
+    expect(error.message).toBe(message);
+    expect(error).not.toHaveProperty('cursor');
+    expect(error).not.toHaveProperty('path');
+    expect(error).not.toHaveProperty('cause');
   });
 
   describe('WriteOutcomeError (issue #46)', () => {
