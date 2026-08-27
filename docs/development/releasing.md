@@ -64,6 +64,10 @@ branch and merge it via PR, then publish a GitHub Release off `main`. Publishing
 CI when a GitHub Release is published (see
 [`.github/workflows/publish.yml`](../../.github/workflows/publish.yml)).
 
+**Agent workflow:** follow the [`releasing` skill](../../.rulesync/skills/releasing/SKILL.md) —
+always run `npm run release:bump:dry` and get explicit approval of the proposed version before
+`npm run release:bump` writes anything.
+
 ### 1. Bump on a branch, then open a PR
 
 ```bash
