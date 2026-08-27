@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1](https://github.com/reggieofarrell/flintfire/compare/v3.1.0...v3.1.1) (2026-08-27)
+
+### Added
+
+- **errors:** add InvalidPaginationCursorError and TypeError for numeric args
+  ([#118](https://github.com/reggieofarrell/flintfire/issues/118))
+  ([5f3e422](https://github.com/reggieofarrell/flintfire/commit/5f3e4228382a056e941bcadc6b5a07cf4261a1c2))
+
+### Documentation
+
+- bump Starlight and use the horizontal wordmark in the nav
+  ([#116](https://github.com/reggieofarrell/flintfire/issues/116))
+  ([63cb7fb](https://github.com/reggieofarrell/flintfire/commit/63cb7fb546639e552c4ddff5cfa155fc4ed2d0c3))
+- center the splash hero mark on small screens
+  ([#117](https://github.com/reggieofarrell/flintfire/issues/117))
+  ([3f5f433](https://github.com/reggieofarrell/flintfire/commit/3f5f4333950de5154c5f879e3b369380988a542a))
+
 ## [3.1.0](https://github.com/reggieofarrell/flintfire/compare/v3.0.0...v3.1.0) (2026-08-25)
 
 ### Added
