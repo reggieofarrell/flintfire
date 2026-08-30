@@ -8,18 +8,18 @@ adding new tests.
 These choices are intentional for a **database library** — false confidence is worse than a lower
 global percentage.
 
-| Decision             | Choice                                             | Rationale                                                                              |
-| -------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Test runner          | **Jest** (not Vitest)                              | Matches existing suite, ts-jest ESM setup, Firebase emulator `exec` workflow           |
-| Primary confidence   | **Integration** (emulator)                         | Real Firestore reads/writes, batching, indexes, hooks — what can wreck a database      |
-| Secondary confidence | **Unit** (mocks)                                   | Fast feedback on pure logic, errors, validation, dot notation                          |
-| Coverage gates       | **Dual, path-specific** per suite                  | Merged LCOV counts a line covered if _either_ suite hit it — overstates safety         |
-| Gate enforcement     | `scripts/check-coverage-gates.mjs`                 | Jest `coverageThreshold` cannot express per-suite ownership of the same files          |
-| Pre-push hook        | Secret scan + skippable Sonar precheck + unit gate | No Java/emulator required for everyday pushes; server scan skippable when unavailable  |
-| CI                   | Parallel coverage jobs, then Casadega Sonar scan   | Dual gates plus a new-code-only SonarQube quality gate on PRs and `main`               |
-| Type-level tests     | `*.type-test.ts` via `npm run test:types` (`tsc`)  | ts-jest runs `isolatedModules` (no type-checking); `tsc` verifies write-type contracts |
-| Shared test infra    | Factories + mocks under `src/tests/shared/`        | No barrel re-exports; import specific modules                                          |
-| File naming          | `*.unit.test.ts` / `*.integration.test.ts`         | Clear tier at a glance                                                                 |
+| Decision             | Choice                                             | Rationale                                                                                                    |
+| -------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Test runner          | **Jest** (not Vitest)                              | Matches existing suite, ts-jest ESM setup, Firebase emulator `exec` workflow                                 |
+| Primary confidence   | **Integration** (emulator)                         | Real Firestore reads/writes, batching, indexes, hooks — what can wreck a database                            |
+| Secondary confidence | **Unit** (mocks)                                   | Fast feedback on pure logic, errors, validation, dot notation                                                |
+| Coverage gates       | **Dual, path-specific** per suite                  | Merged LCOV counts a line covered if _either_ suite hit it — overstates safety                               |
+| Gate enforcement     | `scripts/check-coverage-gates.mjs`                 | Jest `coverageThreshold` cannot express per-suite ownership of the same files                                |
+| Pre-push hook        | Secret scan + skippable Sonar precheck + unit gate | No Java/emulator required for everyday pushes; server scan skippable when unavailable                        |
+| CI                   | Parallel coverage jobs, then Casadega Sonar scan   | Dual gates on every Tests run; Sonar new-code gate on `push` to `main` until a baseline exists, then PRs too |
+| Type-level tests     | `*.type-test.ts` via `npm run test:types` (`tsc`)  | ts-jest runs `isolatedModules` (no type-checking); `tsc` verifies write-type contracts                       |
+| Shared test infra    | Factories + mocks under `src/tests/shared/`        | No barrel re-exports; import specific modules                                                                |
+| File naming          | `*.unit.test.ts` / `*.integration.test.ts`         | Clear tier at a glance                                                                                       |
 
 ## Test pyramid
 
@@ -140,8 +140,10 @@ Java/emulator). See [sonarqube.md](./sonarqube.md).
 **CI** runs each suite with coverage, then its gate, in parallel matrix jobs, plus a `Type checks`
 job (`test:types`). After both coverage artifacts upload, the Tests workflow calls
 [`Casadega-Development/action-workflows`](https://github.com/Casadega-Development/action-workflows)
-to scan the PR head or `main`, wait on the official **new-code** quality gate, and (on pull
-requests) upsert a sticky Sonar comment. Combined LCOV in Sonar is informational only.
+to scan **`main` on push**, wait on the official **new-code** quality gate, and establish the branch
+baseline the Community plugin needs. Pull-request scans and the sticky Sonar comment are deferred
+until that baseline exists (see [sonarqube.md](./sonarqube.md)). Combined LCOV in Sonar is
+informational only.
 
 **Local full check:** `npm run test:coverage:all`
 

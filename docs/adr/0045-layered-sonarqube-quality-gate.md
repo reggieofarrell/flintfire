@@ -40,6 +40,9 @@ We will adopt the starter's layered SonarQube model with these adaptations:
    `black-flag-collective/action-workflows`. Pull-request scans upsert a sticky GitHub comment;
    pushes to `main` re-baseline without commenting.
 4. **Tests also run on pushes to `main`** so Sonar has a branch baseline for new-code comparison.
+   Until that first `main` analysis exists, CI skips pull-request scans (the Community branch plugin
+   cannot decorate a PR against an unanalyzed target). Restore same-repo PR scans in a follow-up
+   after the Sonar UI shows `main`.
 5. **Sonar's combined LCOV is informational.** Path-specific gates in
    `scripts/check-coverage-gates.mjs` remain the coverage authority.
 6. **Pre-push stays light:** secret scan + skippable `sonar:precheck` + the existing unit coverage
@@ -52,7 +55,7 @@ We will adopt the starter's layered SonarQube model with these adaptations:
 - Existing findings on unchanged code do not fail the server gate; they still fail local lint when
   production `src/` is analyzed.
 - Provisioning (Sonar project, GitHub `SONAR_TOKEN` / `SONAR_HOST_URL`) is required before the CI
-  Sonar job can pass on same-repo PRs.
+  Sonar job can pass. The first successful `main` upload is also required before PR decoration.
 - Combined coverage dashboards in Sonar must not be used to ratchet or relax the dual gates.
 
 ## Alternatives considered

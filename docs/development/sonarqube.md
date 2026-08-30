@@ -41,26 +41,32 @@ project and can be rotated without affecting developer logins.
 
 The Tests workflow:
 
-- runs on pull requests to `main` and on pushes to `main` (the latter establishes the new-code
-  baseline). `cancel-in-progress` applies only to pull requests so a `main` baseline upload is not
-  cancelled;
-- skips the Sonar job for pull requests from forks (GitHub does not expose repository secrets to
-  those runs);
+- runs on pull requests to `main` and on pushes to `main`. `cancel-in-progress` applies only to pull
+  requests so a `main` baseline upload is not cancelled;
+- **currently runs the Sonar job only on `push` to `main`.** The Community branch plugin
+  (`mc1arke/community-branch-plugin`) must analyze the target branch before it can decorate a pull
+  request. This repository has not had that `main` analysis yet; PR scans failed at “Load project
+  repositories” with an analyze/create authorization error. After merge, the first `main` Tests run
+  is the baseline. A follow-up PR restores same-repo pull-request scans, the sticky comment, and the
+  fork skip (`github.event.pull_request.head.repo.full_name == github.repository`);
 - calls `Casadega-Development/action-workflows/.github/workflows/sonar-scan.yml@main` and maps
   `SONAR_TOKEN` explicitly (`secrets: inherit` does not cross from this personal repository into the
   Casadega org; an inherited token arrives empty and the scanner returns HTTP 401);
 - restores `coverage/unit` and `coverage/integration` from the Tests matrix artifacts;
-- supplies explicit PR or branch parameters for the Community branch plugin;
+- supplies explicit PR or branch parameters for the Community branch plugin (unused until PR scans
+  return);
 - enforces `issue-gate-scope: new-code` plus the official quality-gate action
   (`sonarsource/sonarqube-quality-gate-action@v1.2.1`);
-- upserts a sticky pull-request comment (`<!-- casadega-sonarqube -->`) with gate status, unresolved
-  new-code issues, and the dashboard URL. Pushes to `main` do not comment.
+- will upsert a sticky pull-request comment (`<!-- casadega-sonarqube -->`) with gate status,
+  unresolved new-code issues, and the dashboard URL once PR scans are restored. Pushes to `main` do
+  not comment.
 
 The caller job grants `pull-requests: write` so that comment can be posted; missing permission fails
 the comment step closed. Turn the comment off with `post-pr-comment: false` on the reusable workflow
 inputs if a future caller does not want it.
 
-The full CI scan is authoritative. Fork PRs still run lint, types, and both coverage gates.
+The full CI scan on `main` is authoritative until PR scans return. Pull requests still run lint,
+types, and both coverage gates.
 
 ## Manual re-scan
 
