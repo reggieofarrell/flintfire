@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.2](https://github.com/reggieofarrell/flintfire/compare/v3.1.1...v3.1.2) (2026-08-30)
+
+### Changed
+
+- **repository / query / vector:** SonarJS complexity and style refactors with no intentional
+  behavior change (helper extraction in `findNearest` validation, staging callbacks, regex and sort
+  clarifications, overload documentation)
+  ([#121](https://github.com/reggieofarrell/flintfire/issues/121))
+  ([62b0c39](https://github.com/reggieofarrell/flintfire/commit/62b0c3975e123030f06f2e27c59b2b8d7407929c))
+
+### Fixed
+
+- **repository:** drop a redundant write-method array type assertion already narrowed by the Set
+  ([#121](https://github.com/reggieofarrell/flintfire/issues/121))
+  ([62b0c39](https://github.com/reggieofarrell/flintfire/commit/62b0c3975e123030f06f2e27c59b2b8d7407929c))
+
 ## [3.1.1](https://github.com/reggieofarrell/flintfire/compare/v3.1.0...v3.1.1) (2026-08-27)
 
 ### Added
