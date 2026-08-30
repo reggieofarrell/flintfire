@@ -166,7 +166,7 @@ function canonicalize(
     // preserves each document's written key order — so two semantically equal maps genuinely arrive
     // with different `Object.keys` order.
     const entries: CanonicalNode = Object.keys(record)
-      .sort()
+      .sort((left, right) => left.localeCompare(right))
       .map(key => [key, canonicalize(record[key], seen, ids, depth + 1)]);
     seen.delete(obj);
     return ['o', entries];

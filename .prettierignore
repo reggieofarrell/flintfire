@@ -33,9 +33,12 @@ website/**/*.mdx
 .cursor/rules/
 .cursor/commands/
 .cursor/skills/
+.cursor/hooks.json
 .claude/rules/
 .claude/commands/
 .claude/skills/
+.claude/settings.json
+.codex/hooks.json
 /AGENTS.md
 /CLAUDE.md
 

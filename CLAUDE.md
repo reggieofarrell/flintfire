@@ -62,6 +62,8 @@ Format" and configuration sections. The version in use is pinned in `package.jso
 
 Scoped rules currently defined:
 
+- **quality-gates** — always-on; Husky, commitlint, dual coverage ratchets, fail-closed
+  local SonarJS, fail-closed secret scans
 - **test-awareness** — always-on
 - **test-guardrails** — active for test files (`src/tests/**/*.test.ts`)
 - **testing-docs-sync** — active for test infrastructure (jest configs, coverage-gate script, husky

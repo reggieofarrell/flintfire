@@ -227,6 +227,12 @@ export interface QueryFilterFactoryBase<in out S extends object> {
   or(...filters: Filter[]): Filter;
 }
 
+/** Comparison operators for a single document-id operand on `whereId`. */
+type WhereIdComparisonOperator = '<' | '<=' | '==' | '!=' | '>=' | '>';
+
+/** Membership operators for a document-id list operand on `whereId`. */
+type WhereIdMembershipOperator = 'in' | 'not-in';
+
 /**
  * Schema-aware factory for composite query filters, handed to the callback of
  * {@link FirestoreQueryBuilder.whereFilter}. Mirrors the Admin SDK's `Filter` statics, but the field
@@ -252,8 +258,8 @@ export interface QueryFilterFactory<in out S extends object> extends QueryFilter
    * {@link FirestoreQueryBuilder.whereId}, with the same `InvalidDocumentIdError` boundary and the
    * same operator restrictions (array-contains operators are intentionally excluded).
    */
-  whereId(op: '<' | '<=' | '==' | '!=' | '>=' | '>', value: string): Filter;
-  whereId(op: 'in' | 'not-in', value: readonly string[]): Filter;
+  whereId(op: WhereIdComparisonOperator, value: string): Filter;
+  whereId(op: WhereIdMembershipOperator, value: readonly string[]): Filter;
 }
 
 /**
@@ -1273,6 +1279,26 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
     // Guards run OUTSIDE the try/catch so they stay plain Error (not parseFirestoreError-rewritten),
     // matching paginate()/distinctValues() local misuse guards.
     const aliases = Object.keys(spec);
+    this.assertAggregateSpec(spec, aliases);
+
+    try {
+      const sdkSpec = this.toSdkAggregateSpec(spec, aliases);
+      const raw = (await this.query.aggregate(sdkSpec).get()).data() as Record<string, unknown>;
+      return this.decodeAggregateResult(spec, aliases, raw);
+    } catch (error: any) {
+      throw parseFirestoreError(error);
+    }
+  }
+
+  /**
+   * Local misuse guards for {@link aggregate}: empty spec, `__proto__` alias, unknown kinds, and
+   * `select()` combined with field aggregations. Kept outside the SDK try/catch so they stay
+   * ordinary `Error`s (not `parseFirestoreError`-rewritten), matching paginate()/distinctValues().
+   */
+  private assertAggregateSpec<Spec extends AggregationSpec<OmitId<S>>>(
+    spec: Spec,
+    aliases: string[],
+  ): void {
     if (aliases.length === 0) {
       throw new Error(
         'aggregate() requires a non-empty spec. Pass at least one aliased aggregation ' +
@@ -1289,10 +1315,6 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
       );
     }
 
-    // Exhaustive kind check + kind-aware select guard. Runtime-built specs (JSON.parse / dashboards)
-    // are untyped by design (ADR-0027 D1); without this, an unknown kind used to fall through to
-    // AggregateField.average and silently return the wrong statistic. Missing/undefined entries
-    // are rejected here too so the build loop never reads `.kind` off undefined inside the try.
     let hasFieldAggregation = false;
     for (const alias of aliases) {
       const entry = (spec as AggregationSpec<OmitId<S>>)[alias];
@@ -1314,46 +1336,55 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
           'query, or use a count-only spec after select().',
       );
     }
+  }
 
-    try {
-      // Build the SDK AggregateSpec with safeAssign so caller-controlled alias keys never invoke
-      // inherited setters (defense in depth alongside the __proto__ guard above).
-      const sdkSpec: Record<string, AggregateField<number | null>> = {};
-      for (const alias of aliases) {
-        const entry = (spec as AggregationSpec<OmitId<S>>)[alias];
-        // Kinds were validated outside the try; keep the mapping exhaustive (no silent average
-        // fallthrough) so a future edit cannot reintroduce F1.
-        if (entry.kind === 'count') {
-          safeAssign(sdkSpec, alias, AggregateField.count());
-        } else if (entry.kind === 'sum') {
-          safeAssign(sdkSpec, alias, AggregateField.sum(entry.field as string | FieldPath));
-        } else if (entry.kind === 'average') {
-          // Public kind stays 'average' (matches average()); the SDK's internal wire kind is 'avg'.
-          safeAssign(sdkSpec, alias, AggregateField.average(entry.field as string | FieldPath));
-        }
+  /**
+   * Maps a validated {@link AggregationSpec} onto the Admin SDK AggregateSpec.
+   *
+   * Uses `safeAssign` so caller-controlled alias keys never invoke inherited setters.
+   */
+  private toSdkAggregateSpec<Spec extends AggregationSpec<OmitId<S>>>(
+    spec: Spec,
+    aliases: string[],
+  ): Record<string, AggregateField<number | null>> {
+    const sdkSpec: Record<string, AggregateField<number | null>> = {};
+    for (const alias of aliases) {
+      const entry = (spec as AggregationSpec<OmitId<S>>)[alias];
+      if (entry.kind === 'count') {
+        safeAssign(sdkSpec, alias, AggregateField.count());
+      } else if (entry.kind === 'sum') {
+        safeAssign(sdkSpec, alias, AggregateField.sum(entry.field as string | FieldPath));
+      } else if (entry.kind === 'average') {
+        // Public kind stays 'average' (matches average()); the SDK's internal wire kind is 'avg'.
+        safeAssign(sdkSpec, alias, AggregateField.average(entry.field as string | FieldPath));
       }
-
-      const raw = (await this.query.aggregate(sdkSpec).get()).data() as Record<string, unknown>;
-
-      // Rebuild with the caller's alias order; normalize sum with ?? 0, pass average null through.
-      const result: Record<string, unknown> = {};
-      for (const alias of aliases) {
-        const entry = (spec as AggregationSpec<OmitId<S>>)[alias];
-        const value = raw[alias];
-        if (entry.kind === 'sum') {
-          safeAssign(result, alias, (value as number | null | undefined) ?? 0);
-        } else if (entry.kind === 'average') {
-          // ADR-0020: keep null so "no values" stays distinct from an average of 0.
-          safeAssign(result, alias, value);
-        } else {
-          // count is always a number.
-          safeAssign(result, alias, value);
-        }
-      }
-      return result as AggregationResult<Spec>;
-    } catch (error: any) {
-      throw parseFirestoreError(error);
     }
+    return sdkSpec;
+  }
+
+  /**
+   * Rebuilds the aggregation result in the caller's alias order.
+   *
+   * Sum uses `?? 0`; average keeps null so "no values" stays distinct from 0 (ADR-0020).
+   */
+  private decodeAggregateResult<Spec extends AggregationSpec<OmitId<S>>>(
+    spec: Spec,
+    aliases: string[],
+    raw: Record<string, unknown>,
+  ): AggregationResult<Spec> {
+    const result: Record<string, unknown> = {};
+    for (const alias of aliases) {
+      const entry = (spec as AggregationSpec<OmitId<S>>)[alias];
+      const value = raw[alias];
+      if (entry.kind === 'sum') {
+        safeAssign(result, alias, (value as number | null | undefined) ?? 0);
+      } else if (entry.kind === 'average') {
+        safeAssign(result, alias, value);
+      } else {
+        safeAssign(result, alias, value);
+      }
+    }
+    return result as AggregationResult<Spec>;
   }
 
   /**
@@ -1784,9 +1815,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
         // Plan-only responses leave snapshot null/undefined → documents: null. An analyzed query
         // that matched nothing yields docs: [] → documents: [] (never coerce empty ↔ null).
         documents:
-          results.snapshot === null || results.snapshot === undefined
-            ? null
-            : results.snapshot.docs.map(doc => this.toResult(doc)),
+          results.snapshot == null ? null : results.snapshot.docs.map(doc => this.toResult(doc)),
       };
     } catch (error: unknown) {
       throw parseFirestoreError(error);
@@ -2108,8 +2137,8 @@ export class FirestoreQueryBuilder<
    * await userRepo.query().whereId('==', 'user-123').getOne();
    * await userRepo.query().whereId('in', ['a', 'b', 'c']).get();
    */
-  whereId(op: '<' | '<=' | '==' | '!=' | '>=' | '>', value: string): this;
-  whereId(op: 'in' | 'not-in', value: readonly string[]): this;
+  whereId(op: WhereIdComparisonOperator, value: string): this;
+  whereId(op: WhereIdMembershipOperator, value: readonly string[]): this;
   whereId(op: WhereFilterOp, value: string | readonly string[]): this {
     this.query = this.query.where(
       documentIdFilter(op, value, this.allowLegacyDatastoreIds, 'reject'),
@@ -2451,8 +2480,8 @@ export interface ReadOnlyQuery<
   ): ReadOnlyQuery<T, W, S, R>;
   // Spelled out rather than derived: `whereId` is overloaded, and `Parameters<…>` collapses it to
   // the last signature — which would leave only `in` / `not-in` and reject `whereId('==', id)`.
-  whereId(op: '<' | '<=' | '==' | '!=' | '>=' | '>', value: string): ReadOnlyQuery<T, W, S, R>;
-  whereId(op: 'in' | 'not-in', value: readonly string[]): ReadOnlyQuery<T, W, S, R>;
+  whereId(op: WhereIdComparisonOperator, value: string): ReadOnlyQuery<T, W, S, R>;
+  whereId(op: WhereIdMembershipOperator, value: readonly string[]): ReadOnlyQuery<T, W, S, R>;
   orderBy(
     ...a: Parameters<FirestoreQueryBuilder<T, W, S, R>['orderBy']>
   ): ReadOnlyQuery<T, W, S, R>;

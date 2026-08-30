@@ -260,7 +260,7 @@ function pathsEqual(pathA: Path, pathB: Path): boolean {
  * Returns true when every schema error sits exactly at a sentinel-backed path.
  * If any issue appears outside a sentinel path, validation should still fail.
  */
-function hasOnlySentinelScopedIssues(issues: z.ZodIssue[], sentinelPaths: Path[]): boolean {
+function hasOnlySentinelScopedIssues(issues: z.core.$ZodIssue[], sentinelPaths: Path[]): boolean {
   return issues.every(issue => {
     const issuePath = issue.path as Path;
     return sentinelPaths.some(sentinelPath => pathsEqual(issuePath, sentinelPath));

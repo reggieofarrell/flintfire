@@ -1,0 +1,86 @@
+name: SonarQube Re-scan
+
+# Reuse coverage from a completed Tests run without paying to rebuild and retest
+# the same commit. Useful after a transient SonarQube outage, a scanner engine
+# failure, or a repository-only Sonar configuration change.
+on:
+  workflow_dispatch:
+    inputs:
+      test-run-id:
+        description: Run ID of a completed Tests workflow from its Actions URL
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: sonar-rescan-${{ github.event.inputs.test-run-id }}
+  cancel-in-progress: true
+
+jobs:
+  sonarqube:
+    name: SonarQube
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Resolve source Tests run
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.inputs.test-run-id }}
+        run: |
+          META="$(gh run view "$RUN_ID" --json headSha,headBranch,event)"
+          SHA="$(printf '%s' "$META" | jq -r .headSha)"
+          BRANCH="$(printf '%s' "$META" | jq -r .headBranch)"
+          EVENT="$(printf '%s' "$META" | jq -r .event)"
+          PR="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq '.pull_requests[0].number // empty')"
+          {
+            echo "sha=${SHA}"
+            echo "branch=${BRANCH}"
+            echo "event=${EVENT}"
+            echo "pr=${PR}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout analyzed commit
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.source.outputs.sha }}
+
+      - name: Restore unit coverage
+        uses: actions/download-artifact@v7
+        with:
+          name: coverage-unit
+          path: coverage/unit
+          run-id: ${{ github.event.inputs.test-run-id }}
+          github-token: ${{ github.token }}
+
+      - name: Restore integration coverage
+        uses: actions/download-artifact@v7
+        with:
+          name: coverage-integration
+          path: coverage/integration
+          run-id: ${{ github.event.inputs.test-run-id }}
+          github-token: ${{ github.token }}
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+        with:
+          args: >-
+            -Dsonar.qualitygate.wait=false ${{ steps.source.outputs.pr != '' &&
+            format('-Dsonar.pullrequest.key={0} -Dsonar.pullrequest.branch={1}
+            -Dsonar.scm.revision={2}', steps.source.outputs.pr, steps.source.outputs.branch,
+            steps.source.outputs.sha) || format('-Dsonar.branch.name={0}',
+            steps.source.outputs.branch) }}
+
+      - name: SonarQube Quality Gate
+        uses: SonarSource/sonarqube-quality-gate-action@v1.3.1
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}

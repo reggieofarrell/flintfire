@@ -15,8 +15,8 @@ global percentage.
 | Secondary confidence | **Unit** (mocks)                                   | Fast feedback on pure logic, errors, validation, dot notation                          |
 | Coverage gates       | **Dual, path-specific** per suite                  | Merged LCOV counts a line covered if _either_ suite hit it — overstates safety         |
 | Gate enforcement     | `scripts/check-coverage-gates.mjs`                 | Jest `coverageThreshold` cannot express per-suite ownership of the same files          |
-| Pre-push hook        | Type check + doc links + unit coverage + unit gate | No Java/emulator required for everyday pushes                                          |
-| CI                   | Parallel unit + integration + type-check jobs      | Full ORM surface + type-level assertions checked on every PR                           |
+| Pre-push hook        | Secret scan + skippable Sonar precheck + unit gate | No Java/emulator required for everyday pushes; server scan skippable when unavailable  |
+| CI                   | Parallel coverage jobs, then inline Sonar scan     | Dual gates plus a new-code-only SonarQube quality gate on PRs and `main`               |
 | Type-level tests     | `*.type-test.ts` via `npm run test:types` (`tsc`)  | ts-jest runs `isolatedModules` (no type-checking); `tsc` verifies write-type contracts |
 | Shared test infra    | Factories + mocks under `src/tests/shared/`        | No barrel re-exports; import specific modules                                          |
 | File naming          | `*.unit.test.ts` / `*.integration.test.ts`         | Clear tier at a glance                                                                 |
@@ -61,6 +61,7 @@ src/tests/
 | `npm run test:coverage:gate:integration` | Enforce integration-suite path thresholds    |
 | `npm run test:coverage:all`              | Full local coverage run + both gates         |
 | `npm run test:types`                     | Type-check `src` + `*.type-test.ts` (`tsc`)  |
+| `npm run test:sonar-rules`               | SonarJS rule-sync helpers (no credentials)   |
 | `npm test`                               | Unit + integration (emulator auto-start)     |
 
 ### Local integration prerequisites
@@ -131,17 +132,22 @@ thresholds via `scripts/check-coverage-gates.mjs`.
 | Validation (emulator paths) | `Validation.ts`          | 90%   | 80%      | 95%       |
 | Vector extension (emulator) | `src/vector/**`          | 90%   | 75%      | 90%       |
 
-**Pre-push** runs `rules:check` + `test:types` + `check:docs` + `check:zod-idioms` +
-`test:unit:coverage` + `test:coverage:gate:unit` (no Java/emulator).
+**Pre-push** runs a fail-closed outgoing secret scan, then `npm run sonar:precheck` (exit 2 skips
+loudly when Scanner/credentials/server are unavailable), then `rules:check` + `test:types` +
+`check:docs` + `check:zod-idioms` + `test:unit:coverage` + `test:coverage:gate:unit` (no
+Java/emulator). See [sonarqube.md](./sonarqube.md).
 
 **CI** runs each suite with coverage, then its gate, in parallel matrix jobs, plus a `Type checks`
-job (`test:types`).
+job (`test:types`). After both coverage artifacts upload, an inline SonarQube job scans the PR head
+or `main` and waits on the official **new-code** quality gate. Combined LCOV in Sonar is
+informational only.
 
 **Local full check:** `npm run test:coverage:all`
 
 ### What we do not gate
 
-- **Merged LCOV** — report-only if you merge manually; never used as a CI/pre-push gate
+- **Merged LCOV** — report-only if you merge manually (including the combined report SonarQube
+  displays); never used as a CI/pre-push gate
 - **Global suite percentages** — a 60% unit run is expected; only path-specific gates matter
 - **FirestoreRepository / QueryBuilder / CollectionGroup on unit reports** — owned by integration
   gate
@@ -152,10 +158,10 @@ ratcheting.
 
 ## Git hooks
 
-| Hook           | Command                                                                                                             | Purpose                                                                                                    |
-| -------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **pre-commit** | `lint-staged`                                                                                                       | ESLint + Prettier on staged files                                                                          |
-| **pre-push**   | `rules:check` + `test:types` + `check:docs` + `check:zod-idioms` + `test:unit:coverage` + `test:coverage:gate:unit` | Agent-config drift + type check + doc links + deprecated-zod-idiom scan + path-specific gate (no emulator) |
+| Hook           | Command                                                                                                                         | Purpose                                                                                           |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **pre-commit** | `sonar hook git-pre-commit` then `lint-staged`                                                                                  | Fail-closed secret scan, then ESLint (including sonarjs) + Prettier on staged files               |
+| **pre-push**   | outgoing secret scan + `sonar:precheck` + `rules:check` + `test:types` + `check:docs` + `check:zod-idioms` + unit coverage gate | Secrets always block; changed-file Sonar skips only when unavailable; then the existing unit gate |
 
 ## Type-level tests
 
@@ -221,4 +227,5 @@ gone; the repo now commits no symlinks at all. Testing-related entries:
 
 - [rulesync.md](./rulesync.md) — agent-config source, generation contract, CLI upgrade workflow
   (`min-release-age=2` so bumps lag npm `latest` by up to two days)
+- [sonarqube.md](./sonarqube.md) — local SonarJS, Husky secret scans, changed-file precheck, CI
 - [test-coverage-followups.md](./test-coverage-followups.md) — backlog of future coverage work

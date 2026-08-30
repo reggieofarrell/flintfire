@@ -136,28 +136,8 @@ export function validateFindNearestOptions(
     throw new Error('findNearest() requires a non-empty string vectorField.');
   }
 
-  if (!Array.isArray(options.queryVector) || options.queryVector.length === 0) {
-    throw new TypeError('findNearest() requires queryVector to be a non-empty number array.');
-  }
-
-  if (options.queryVector.some(value => typeof value !== 'number' || !Number.isFinite(value))) {
-    // Number.isFinite rejects NaN AND +/-Infinity (Number.isNaN would let infinities through).
-    throw new TypeError('findNearest() requires queryVector to contain only finite numbers.');
-  }
-
-  if (options.queryVector.length > VECTOR_MAX_DIMENSIONS) {
-    throw new TypeError(
-      `findNearest() queryVector exceeds the maximum supported dimension of ${VECTOR_MAX_DIMENSIONS}.`,
-    );
-  }
-
-  if (!Number.isInteger(options.limit) || options.limit <= 0) {
-    throw new TypeError('findNearest() requires limit to be a positive integer.');
-  }
-
-  if (options.limit > VECTOR_MAX_LIMIT) {
-    throw new TypeError(`findNearest() limit cannot exceed ${VECTOR_MAX_LIMIT}.`);
-  }
+  assertFindNearestQueryVector(options.queryVector);
+  assertFindNearestLimit(options.limit);
 
   if (!VECTOR_DISTANCE_MEASURES.has(options.distanceMeasure)) {
     throw new Error(
@@ -165,9 +145,50 @@ export function validateFindNearestOptions(
     );
   }
 
+  assertFindNearestDistanceResultField(options.distanceResultField);
+  assertFindNearestDistanceThreshold(options.distanceMeasure, options.distanceThreshold);
+}
+
+/**
+ * Validates `queryVector` is a non-empty finite number array within Firestore's dimension cap.
+ */
+function assertFindNearestQueryVector(queryVector: ReadonlyArray<number> | undefined): void {
+  if (!Array.isArray(queryVector) || queryVector.length === 0) {
+    throw new TypeError('findNearest() requires queryVector to be a non-empty number array.');
+  }
+
+  if (queryVector.some(value => typeof value !== 'number' || !Number.isFinite(value))) {
+    // Number.isFinite rejects NaN AND +/-Infinity (Number.isNaN would let infinities through).
+    throw new TypeError('findNearest() requires queryVector to contain only finite numbers.');
+  }
+
+  if (queryVector.length > VECTOR_MAX_DIMENSIONS) {
+    throw new TypeError(
+      `findNearest() queryVector exceeds the maximum supported dimension of ${VECTOR_MAX_DIMENSIONS}.`,
+    );
+  }
+}
+
+/**
+ * Validates `limit` is a positive integer within Firestore's nearest-neighbor cap.
+ */
+function assertFindNearestLimit(limit: number): void {
+  if (!Number.isInteger(limit) || limit <= 0) {
+    throw new TypeError('findNearest() requires limit to be a positive integer.');
+  }
+
+  if (limit > VECTOR_MAX_LIMIT) {
+    throw new TypeError(`findNearest() limit cannot exceed ${VECTOR_MAX_LIMIT}.`);
+  }
+}
+
+/**
+ * Validates an optional distance result field: non-empty, and never `id` (the repository overlays it).
+ */
+function assertFindNearestDistanceResultField(distanceResultField: string | undefined): void {
   if (
-    options.distanceResultField !== undefined &&
-    (typeof options.distanceResultField !== 'string' || options.distanceResultField.trim() === '')
+    distanceResultField !== undefined &&
+    (typeof distanceResultField !== 'string' || distanceResultField.trim() === '')
   ) {
     throw new Error('findNearest() distanceResultField must be a non-empty string when provided.');
   }
@@ -175,47 +196,54 @@ export function validateFindNearestOptions(
   // `id` is reserved: the repository overlays `{ id: doc.id }` on every result, which would overwrite
   // the computed distance with the string document id (losing the distance entirely). Reject it so
   // the promised numeric distance field cannot silently disappear.
-  if (options.distanceResultField?.trim() === 'id') {
+  if (distanceResultField?.trim() === 'id') {
     throw new Error(
       'findNearest() distanceResultField cannot be "id": the repository overlays the document id on ' +
         'every result, which would overwrite the computed distance. Use a different field name.',
     );
   }
+}
 
-  if (options.distanceThreshold !== undefined) {
-    if (
-      typeof options.distanceThreshold !== 'number' ||
-      !Number.isFinite(options.distanceThreshold)
-    ) {
-      // Number.isFinite rejects NaN AND +/-Infinity.
-      throw new TypeError('findNearest() distanceThreshold must be a finite number when provided.');
-    }
+/**
+ * Validates an optional distance threshold against the chosen measure and SDK serializer quirks.
+ */
+function assertFindNearestDistanceThreshold(
+  distanceMeasure: VectorDistanceMeasureValue,
+  distanceThreshold: number | undefined,
+): void {
+  if (distanceThreshold === undefined) {
+    return;
+  }
 
-    // Reject 0: the installed @google-cloud/firestore serializer drops a zero distanceThreshold via a
-    // truthiness check (`threshold ? { value } : undefined`), so it would be silently omitted from
-    // the query and broaden the result to all nearest neighbors instead of applying the bound. Fail
-    // loudly rather than change the query behind the caller's back.
-    if (options.distanceThreshold === 0) {
-      throw new TypeError(
-        'findNearest() distanceThreshold cannot be 0: the installed Firestore SDK serializer drops a ' +
-          'zero threshold, which would silently broaden the query to all nearest neighbors. Use a ' +
-          'small positive epsilon for a near-exact match, or omit distanceThreshold.',
-      );
-    }
+  if (typeof distanceThreshold !== 'number' || !Number.isFinite(distanceThreshold)) {
+    // Number.isFinite rejects NaN AND +/-Infinity.
+    throw new TypeError('findNearest() distanceThreshold must be a finite number when provided.');
+  }
 
-    // EUCLIDEAN and COSINE distances are non-negative, so a negative threshold is meaningless and
-    // would match nothing (or behave unpredictably). Negative thresholds are only meaningful for
-    // DOT_PRODUCT, where the similarity score can be negative.
-    if (
-      (options.distanceMeasure === VectorDistanceMeasure.EUCLIDEAN ||
-        options.distanceMeasure === VectorDistanceMeasure.COSINE) &&
-      options.distanceThreshold < 0
-    ) {
-      throw new TypeError(
-        `findNearest() distanceThreshold cannot be negative for ${options.distanceMeasure} ` +
-          '(distances are non-negative). Negative thresholds are only meaningful for DOT_PRODUCT.',
-      );
-    }
+  // Reject 0: the installed @google-cloud/firestore serializer drops a zero distanceThreshold via a
+  // truthiness check (`threshold ? { value } : undefined`), so it would be silently omitted from
+  // the query and broaden the result to all nearest neighbors instead of applying the bound. Fail
+  // loudly rather than change the query behind the caller's back.
+  if (distanceThreshold === 0) {
+    throw new TypeError(
+      'findNearest() distanceThreshold cannot be 0: the installed Firestore SDK serializer drops a ' +
+        'zero threshold, which would silently broaden the query to all nearest neighbors. Use a ' +
+        'small positive epsilon for a near-exact match, or omit distanceThreshold.',
+    );
+  }
+
+  // EUCLIDEAN and COSINE distances are non-negative, so a negative threshold is meaningless and
+  // would match nothing (or behave unpredictably). Negative thresholds are only meaningful for
+  // DOT_PRODUCT, where the similarity score can be negative.
+  if (
+    (distanceMeasure === VectorDistanceMeasure.EUCLIDEAN ||
+      distanceMeasure === VectorDistanceMeasure.COSINE) &&
+    distanceThreshold < 0
+  ) {
+    throw new TypeError(
+      `findNearest() distanceThreshold cannot be negative for ${distanceMeasure} ` +
+        '(distances are non-negative). Negative thresholds are only meaningful for DOT_PRODUCT.',
+    );
   }
 }
 

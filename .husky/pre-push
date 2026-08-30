@@ -5,7 +5,39 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck disable=SC1091
 . "$REPO_ROOT/scripts/check-node-version.sh"
 
+# Git supplies every ref update on stdin. Capture it once because the Sonar hook
+# consumes the stream and later checks must still be able to run independently.
+PUSH_REFS_FILE="$(mktemp)"
+trap 'rm -f "$PUSH_REFS_FILE"' EXIT HUP INT TERM
+cat >"$PUSH_REFS_FILE"
+
+if ! command -v sonar >/dev/null 2>&1; then
+  echo "Error: SonarQube CLI is required to scan outgoing commits for secrets."
+  echo "Install it with the command documented in docs/development/sonarqube.md."
+  exit 1
+fi
+
+echo "[pre-push] scanning outgoing commits for secrets..."
+if ! sonar hook git-pre-push <"$PUSH_REFS_FILE"; then
+  echo "Error: the outgoing-commit Sonar secret scan failed."
+  exit 1
+fi
+
+# The changed-file precheck needs a reachable server, scanner, project, and user
+# token. Exit 2 means it could not run and is a loud soft skip; findings or a
+# failed analysis exit 1 and block. CI always runs the authoritative full scan.
+echo "[pre-push] running the server-backed SonarQube changed-file precheck..."
+SONAR_PRECHECK_STATUS=0
+npm run --silent sonar:precheck || SONAR_PRECHECK_STATUS=$?
+if [ "$SONAR_PRECHECK_STATUS" -eq 2 ]; then
+  echo "[pre-push] SonarQube precheck unavailable; CI will enforce the full scan."
+elif [ "$SONAR_PRECHECK_STATUS" -ne 0 ]; then
+  echo "Error: the SonarQube changed-file precheck failed."
+  exit 1
+fi
+
 # Fast local gate: rulesync drift + type checks + doc links + deprecated-zod-idiom scan + unit
 # path-specific thresholds (no Java/emulator). Integration gate runs in CI — see
 # docs/development/testing.md.
+echo "[pre-push] running unit coverage and local checks..."
 npm run rules:check && npm run test:types && npm run check:docs && npm run check:zod-idioms && npm run test:unit:coverage && npm run test:coverage:gate:unit

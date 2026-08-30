@@ -98,17 +98,19 @@ export function buildHookContext<E extends HookEvent>(
         `HookContext: transaction execution is only valid for before* events (got '${event}')`,
       );
     }
-    return {
+    const transactionContext = {
       event,
       execution: 'transaction',
       retryable: true,
       attempt: execution.attempt,
     } as HookContext<E>;
+    return transactionContext;
   }
 
-  return {
+  const directContext = {
     event,
     execution: 'direct',
     retryable: false,
-  };
+  } as HookContext<E>;
+  return directContext;
 }

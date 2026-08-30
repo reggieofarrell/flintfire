@@ -25,6 +25,8 @@ Other invariants the upgrade review encodes:
   `.claude/rules/`; inlining scoped rules there would double-load.
 - Commands: Cursor + Claude only. Skills (including extra files next to `SKILL.md`): Cursor, Claude,
   and `.agents/skills/`.
+- Hooks: authored in `.rulesync/hooks.jsonc` (`features` includes `"hooks"`). Generated post-edit
+  commands run `scripts/agent-hooks/scan-edited-file.mjs` for Cursor, Claude, and Codex.
 
 ## Keeping the CLI current
 

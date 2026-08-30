@@ -1,16 +1,23 @@
 name: Tests
 
 # Dual per-suite coverage gates — see docs/development/testing.md and
-# scripts/check-coverage-gates.mjs. Merged LCOV is not used as a gate.
+# scripts/check-coverage-gates.mjs. Merged LCOV is not used as a gate. SonarQube
+# consumes both LCOV reports for display only; path-specific gates remain the
+# coverage authority. See docs/development/sonarqube.md.
 
 on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
 
 concurrency:
   group: tests-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseded pull-request feedback may be cancelled. Main runs are serialized
+  # so cancelling one cannot interrupt an in-flight Sonar baseline upload.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -72,6 +79,64 @@ jobs:
           name: coverage-${{ matrix.key }}
           path: coverage/${{ matrix.key }}
           if-no-files-found: warn
+
+  sonarqube:
+    name: SonarQube
+    needs: test
+    # Secrets are unavailable to workflows triggered from forks. The rest of the
+    # Tests workflow still runs there; trusted pushes and same-repo PRs get the
+    # authoritative server analysis and quality gate.
+    if:
+      github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name ==
+      github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout analyzed commit
+        uses: actions/checkout@v7
+        with:
+          # SonarQube uses Git history to attribute changed/new code accurately.
+          fetch-depth: 0
+          # Analyze the PR head, not the ephemeral merge commit GitHub Actions checks out by default.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Restore unit coverage
+        uses: actions/download-artifact@v7
+        with:
+          name: coverage-unit
+          path: coverage/unit
+
+      - name: Restore integration coverage
+        uses: actions/download-artifact@v7
+        with:
+          name: coverage-integration
+          path: coverage/integration
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+        with:
+          # CI polls Compute Engine via the quality-gate action below. Local
+          # scanner runs still wait (sonar.qualitygate.wait=true in properties).
+          args: >-
+            -Dsonar.qualitygate.wait=false ${{ github.event_name == 'pull_request' &&
+            format('-Dsonar.pullrequest.key={0} -Dsonar.pullrequest.branch={1}
+            -Dsonar.pullrequest.base={2} -Dsonar.scm.revision={3}',
+            github.event.pull_request.number, github.head_ref, github.base_ref,
+            github.event.pull_request.head.sha) || format('-Dsonar.branch.name={0}',
+            github.ref_name) }}
+
+      - name: SonarQube Quality Gate
+        uses: SonarSource/sonarqube-quality-gate-action@v1.3.1
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
 
   docs-links:
     name: Doc checks
@@ -137,14 +202,18 @@ jobs:
         run: npm run check:format
       - name: Lint
         run: npm run lint
+      - name: SonarJS rule-sync helpers
+        # Pure parsing tests; no Scanner, CLI, or server credentials required.
+        run: npm run test:sonar-rules
       - name: Rules in sync (rulesync)
         # Fails if the generated agent-instruction files drift from the .rulesync/ source.
         run: npm run rules:check
 
   # NOTE: the union of the PR jobs below is kept definitionally equivalent to `npm run release:verify`
-  # (which the publish workflow runs as one command) — format, lint, types, manifest, audit, build,
-  # package, consumer (ESM/CJS/express, compile + runtime), coverage gates, doc links, and website
-  # build. If you change release:verify, mirror it here (and vice versa).
+  # (which the publish workflow runs as one command) — format, lint, SonarJS rule-sync helpers, types,
+  # manifest, audit, build, package, consumer (ESM/CJS/express, compile + runtime), coverage gates,
+  # doc links, and website build. If you change release:verify, mirror it here (and vice versa).
+  # The SonarQube job above is CI-only (needs a project token) and is not part of release:verify.
 
   # Exercises the exact artifact users install: builds, asserts the tarball allowlist + that the root
   # declaration graph is express-free, and checks manifest/lockfile metadata agreement. The isolated

@@ -4,8 +4,19 @@ import prettierConfig from 'eslint-config-prettier';
 // import-x is the ESLint 10–compatible fork of eslint-plugin-import; same
 // no-extraneous-dependencies rule the Starlight plan called for.
 import importX from 'eslint-plugin-import-x';
+import sonarjs from 'eslint-plugin-sonarjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { sonarRules } from './scripts/sonar-rules/load.mjs';
+
+/**
+ * Enforce every active server rule that eslint-plugin-sonarjs implements. The
+ * server remains authoritative for rules and analyzers unavailable locally,
+ * while the locally reproducible intersection is a hard gate from day one.
+ */
+const sonarEnforcedRules = Object.fromEntries(
+  sonarRules.all.map(rule => [`sonarjs/${rule}`, 'error']),
+);
 
 const rootDir = dirname(fileURLToPath(import.meta.url));
 // Nested docs site only — do NOT also list the repo root here. Passing both
@@ -33,6 +44,8 @@ export default [
       // Scratch notes/plans/probes/reviews (gitignored) — must not fail lint the way a
       // relative-looking link in tmp/ used to fail check:docs (issue #34 review O2).
       'tmp/**',
+      // Agent-hook ESLint config is loaded by a dedicated command, not `eslint .`.
+      'eslint.sonar-hook.config.mjs',
       // Committed implementation plans (docs/plans/<issue>/) and their probes. Probes are
       // throwaway evidence scripts, not library code: `.mjs` runners trip `no-undef` on Node
       // globals (the same reason `scripts/**` is ignored above) and `.ts` probes deliberately
@@ -77,6 +90,29 @@ export default [
         },
       ],
     },
+  },
+  // Locally implementable SonarJS profile on production library source only.
+  // Tests, scripts, and the website stay ignored (same as the rest of ESLint).
+  // Type-aware plugin rules need a program; do not enable typescript-eslint's
+  // type-checked configs globally just to satisfy this block.
+  {
+    files: ['src/**/*.ts'],
+    ignores: [
+      '**/*.test.ts',
+      '**/*.spec.ts',
+      '**/*.type-test.ts',
+      'src/tests/**',
+      'src/benchmarks/**',
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: './tsconfig.json',
+        tsconfigRootDir: rootDir,
+      },
+    },
+    plugins: sonarjs.configs.recommended.plugins,
+    settings: sonarjs.configs.recommended.settings,
+    rules: sonarEnforcedRules,
   },
   // Disable rules that conflict with Prettier (must be last)
   prettierConfig,

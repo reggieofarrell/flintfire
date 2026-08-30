@@ -1,0 +1,39 @@
+{
+  // Coding-agent hooks are generated from this file. They reject edited files
+  // that violate the low-latency SonarJS subset; the complete local profile is
+  // enforced by Git hooks and `npm run lint`. Secret scanning intentionally stays
+  // in Husky so agents do not pay its cost on every file operation.
+  "version": 1,
+  "hooks": {},
+  "cursor": {
+    "hooks": {
+      "afterFileEdit": [
+        {
+          "command": "./scripts/agent-hooks/scan-edited-file.mjs",
+          "timeout": 60,
+        },
+      ],
+    },
+  },
+  "claudecode": {
+    "hooks": {
+      "postToolUse": [
+        {
+          "matcher": "Write|Edit|MultiEdit",
+          "command": "./scripts/agent-hooks/scan-edited-file.mjs",
+          "timeout": 60,
+        },
+      ],
+    },
+  },
+  "codexcli": {
+    "hooks": {
+      "postToolUse": [
+        {
+          "command": "./scripts/agent-hooks/scan-edited-file.mjs",
+          "timeout": 60,
+        },
+      ],
+    },
+  },
+}

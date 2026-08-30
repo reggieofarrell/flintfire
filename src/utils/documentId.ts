@@ -23,7 +23,7 @@ const RESERVED_NAMESPACE = /^__.*__$/;
  * reserved. Addressing them is gated behind an explicit opt-in (see `allowLegacyDatastoreIds`) so the
  * default validator is not silently weakened. See https://firebase.google.com/docs/firestore/quotas.
  */
-const LEGACY_DATASTORE_ID = /^__id[0-9]+__$/;
+const LEGACY_DATASTORE_ID = /^__id\d+__$/;
 const MAX_SEGMENT_BYTES = 1500;
 
 /** Options accepted by the segment validators. */

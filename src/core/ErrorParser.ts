@@ -81,13 +81,16 @@ export function parseFirestoreError(error: unknown): Error {
   return error instanceof Error ? error : new Error(message || 'Unknown error');
 }
 
+const FIREBASE_CONSOLE_URL = /https:\/\/console\.firebase\.google\.com[^\s]+/;
+const INDEX_FIELDS_BRACKET = /on fields \[(.*?)\]/;
+
 function extractIndexUrl(details: string): string {
-  const match = details.match(/https:\/\/console\.firebase\.google\.com[^\s]+/);
+  const match = FIREBASE_CONSOLE_URL.exec(details);
   return match ? match[0] : '';
 }
 
 function extractFields(details: string): string[] {
-  const fieldMatches = details.match(/on fields \[(.*?)\]/);
+  const fieldMatches = INDEX_FIELDS_BRACKET.exec(details);
   if (fieldMatches) {
     return fieldMatches[1].split(',').map(f => f.trim());
   }
