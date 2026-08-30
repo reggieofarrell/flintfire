@@ -282,7 +282,7 @@ export function collectOverriddenWriteMethods(
     }
     proto = Object.getPrototypeOf(proto);
   }
-  return [...found].sort() as RepositoryWriteMethod[];
+  return [...found].sort((left, right) => left.localeCompare(right));
 }
 
 /**

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": "./scripts/agent-hooks/scan-edited-file.mjs",
+        "timeout": 60
+      }
+    ]
+  }
+}

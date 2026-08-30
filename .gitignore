@@ -15,7 +15,9 @@ package
 
 # Editors
 dist
-.vscode/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
 .idea/
 *.suo
 *.ntvs*
@@ -33,6 +35,9 @@ $RECYCLE.BIN/
 # Test
 coverage/
 .nyc_output/
+
+# SonarQube Scanner working directory (local and CI analysis cache)
+.scannerwork/
 
 # Firebase emulator logs
 firestore-debug.log
@@ -64,9 +69,10 @@ tmp/
 # blocked by the parent `.cursor/*` / `.claude/*` / `.agents/*` exclude.
 #
 # Keep trackable (rulesync):
-#   .cursor/{rules,commands,skills}/
-#   .claude/{rules,commands,skills}/
+#   .cursor/{rules,commands,skills,hooks.json}/
+#   .claude/{rules,commands,skills,settings.json}/
 #   .agents/{memories,skills}/
+#   .codex/hooks.json
 # Stay local (examples): .cursor/debug.log, .cursor/plans/, .cursor/mcp.json,
 #   .claude/settings.local.json, .claude/worktrees/, .claude/agent-memory-local/
 .cursor/*
@@ -87,12 +93,19 @@ tmp/
 !.claude/commands/**
 !.claude/skills/
 !.claude/skills/**
+!.claude/settings.json
+!.claude/hooks.json
+!.claude/hooks/
+!.claude/hooks/**
 
 .agents/*
 !.agents/memories/
 !.agents/memories/**
 !.agents/skills/
 !.agents/skills/**
+
+.codex/*
+!.codex/hooks.json
 
 # Root-level personal overrides (Claude Code + Codex) — never commit
 CLAUDE.local.md

@@ -10,7 +10,7 @@
   // rulesync docs (frontmatter fields, per-tool overrides, file formats, all options):
   // https://github.com/dyoshikawa/rulesync — see "Each File Format" and the configuration sections.
   //
-  // Features (all authored under .rulesync/): rules, commands, skills.
+  // Features (all authored under .rulesync/): rules, commands, skills, hooks.
   //
   // Generated per target (prettier-ignored, do not hand-edit):
   //   cursor     -> .cursor/rules/*.mdc, .cursor/commands/*.md, .cursor/skills/*/SKILL.md
@@ -35,5 +35,5 @@
   // - Commands are emitted for Cursor + Claude; the AGENTS.md/Codex family does not get project-mode
   //   commands (Codex commands are global-mode only), so they are intentionally absent there.
   "targets": ["cursor", "claudecode", "agentsmd", "codexcli"],
-  "features": ["rules", "commands", "skills"],
+  "features": ["rules", "commands", "skills", "hooks"],
 }

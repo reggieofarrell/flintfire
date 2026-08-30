@@ -1,16 +1,23 @@
 name: Tests
 
 # Dual per-suite coverage gates — see docs/development/testing.md and
-# scripts/check-coverage-gates.mjs. Merged LCOV is not used as a gate.
+# scripts/check-coverage-gates.mjs. Merged LCOV is not used as a gate. SonarQube
+# consumes both LCOV reports for display only; path-specific gates remain the
+# coverage authority. See docs/development/sonarqube.md.
 
 on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
 
 concurrency:
   group: tests-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseded pull-request feedback may be cancelled. Main runs are serialized
+  # so cancelling one cannot interrupt an in-flight Sonar baseline upload.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -72,6 +79,34 @@ jobs:
           name: coverage-${{ matrix.key }}
           path: coverage/${{ matrix.key }}
           if-no-files-found: warn
+
+  sonarqube:
+    name: SonarQube
+    needs: test
+    # Bootstrap: the Community branch plugin requires a successful analysis of
+    # the target branch (`main`) before pull-request decoration. Skip PR scans
+    # until that baseline exists. Restore the previous `if` (same-repo PRs plus
+    # push) in a follow-up once the Sonar UI shows a `main` analysis. Fork PRs
+    # never had secrets anyway; this skip is about baseline order, not forks.
+    if: github.event_name == 'push'
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    uses: Casadega-Development/action-workflows/.github/workflows/sonar-scan.yml@main
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    with:
+      coverage-artifacts-json: '[{"name":"coverage-unit","path":"coverage/unit"},{"name":"coverage-integration","path":"coverage/integration"}]'
+      issue-gate-scope: new-code
+      enforce-quality-gate: true
+      use-pull-request-scan: ${{ github.event_name == 'pull_request' }}
+      pull-request-key: ${{ github.event.pull_request.number || '' }}
+      pull-request-branch: ${{ github.head_ref || '' }}
+      pull-request-base: ${{ github.base_ref || '' }}
+      scm-revision: ${{ github.event.pull_request.head.sha || '' }}
+      checkout-ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      branch-name: ${{ github.ref_name }}
 
   docs-links:
     name: Doc checks
@@ -137,14 +172,18 @@ jobs:
         run: npm run check:format
       - name: Lint
         run: npm run lint
+      - name: SonarJS rule-sync helpers
+        # Pure parsing tests; no Scanner, CLI, or server credentials required.
+        run: npm run test:sonar-rules
       - name: Rules in sync (rulesync)
         # Fails if the generated agent-instruction files drift from the .rulesync/ source.
         run: npm run rules:check
 
   # NOTE: the union of the PR jobs below is kept definitionally equivalent to `npm run release:verify`
-  # (which the publish workflow runs as one command) — format, lint, types, manifest, audit, build,
-  # package, consumer (ESM/CJS/express, compile + runtime), coverage gates, doc links, and website
-  # build. If you change release:verify, mirror it here (and vice versa).
+  # (which the publish workflow runs as one command) — format, lint, SonarJS rule-sync helpers, types,
+  # manifest, audit, build, package, consumer (ESM/CJS/express, compile + runtime), coverage gates,
+  # doc links, and website build. If you change release:verify, mirror it here (and vice versa).
+  # The SonarQube job above is CI-only (needs a project token) and is not part of release:verify.
 
   # Exercises the exact artifact users install: builds, asserts the tarball allowlist + that the root
   # declaration graph is express-free, and checks manifest/lockfile metadata agreement. The isolated

@@ -263,7 +263,7 @@ export class VectorQueryBuilder<T extends object, S extends object = T, R = Fire
         metrics: results.metrics,
         // Same null vs [] contract as core explain() — plan-only → null; analyzed empty → [].
         documents:
-          results.snapshot === null || results.snapshot === undefined
+          results.snapshot == null
             ? null
             : (results.snapshot.docs.map((doc: QueryDocumentSnapshot<T>) => ({
                 ...(doc.data() as T),

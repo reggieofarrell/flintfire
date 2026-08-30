@@ -35,6 +35,14 @@ import {
 } from '../utils/documentId.js';
 import { warnIfWriteMethodsOverridden } from './writeOverrideWarning.js';
 
+/**
+ * Document-id string used throughout the public API (`getById`, write results, interceptors).
+ *
+ * This is intentionally a named alias of `string`, not a brand: consumers pass ordinary id
+ * strings, and the alias is the stable name in `.d.ts` and docs. SonarJS treats that as a
+ * redundant alias; renaming or inlining it would be a public-contract change.
+ */
+// eslint-disable-next-line sonarjs/redundant-type-aliases -- published domain name for document ids
 export type ID = string;
 
 /**
@@ -57,6 +65,14 @@ export type WriteMetadata = { readonly writeTime: FirebaseFirestore.Timestamp };
  * reading `.id` without unwrapping.
  */
 export type WriteResultWithMetadata<R> = R & WriteMetadata;
+
+/**
+ * Implementation-signature result of a single id-returning write whose public
+ * overloads distinguish `{ id }`, a read-back document, and a metadata receipt.
+ * Named so the union is not repeated on every overload implementation.
+ */
+type SingleWriteResult<T extends object> =
+  { id: ID } | FirestoreDocument<T> | WriteResultWithMetadata<{ id: ID }>;
 
 /**
  * Options bag for direct update/patch writes. `returnDoc` and `withMetadata` are mutually
@@ -174,7 +190,7 @@ export type BulkWriteOptions = {
    * Forwarded verbatim to `db.bulkWriter({ throttling })`. Omit for the SDK default (ramping 500
    * ops/second); `false` disables throttling.
    */
-  throttling?: FirebaseFirestore.BulkWriterOptions['throttling'];
+  throttling?: NonNullable<FirebaseFirestore.BulkWriterOptions['throttling']>;
 };
 
 /**
@@ -670,21 +686,26 @@ function recordStagedWrites(
 ): ((batch: StagingTarget) => void)[] {
   const staged: ((batch: StagingTarget) => void)[] = [];
   record({
-    create: (ref, data) => void staged.push(batch => batch.create(ref, data)),
-    set: (ref, data, options) =>
-      void staged.push(batch =>
+    create: (ref, data) => {
+      staged.push(batch => batch.create(ref, data));
+    },
+    set: (ref, data, options) => {
+      staged.push(batch =>
         options === undefined ? batch.set(ref, data) : batch.set(ref, data, options),
-      ),
-    update: (ref, data, precondition) =>
-      void staged.push(batch =>
+      );
+    },
+    update: (ref, data, precondition) => {
+      staged.push(batch =>
         precondition === undefined
           ? batch.update(ref, data)
           : batch.update(ref, data, precondition),
-      ),
-    delete: (ref, precondition) =>
-      void staged.push(batch =>
+      );
+    },
+    delete: (ref, precondition) => {
+      staged.push(batch =>
         precondition === undefined ? batch.delete(ref) : batch.delete(ref, precondition),
-      ),
+      );
+    },
   });
   return staged;
 }
@@ -803,7 +824,7 @@ export class FirestoreRepository<
    *   }
    * }
    */
-  static suppressWriteOverrideWarning = false;
+  static readonly suppressWriteOverrideWarning = false;
 
   constructor(...args: RepositoryConstructorArgs<T, W, WO, S>) {
     const [
@@ -1898,7 +1919,8 @@ export class FirestoreRepository<
    * from Firestore document references and method parameters.
    */
   private stripTopLevelId<TInput extends Record<string, any>>(data: TInput): Omit<TInput, 'id'> {
-    const { id: _ignoredId, ...payload } = data;
+    const payload = { ...data };
+    delete payload.id;
     return payload as Omit<TInput, 'id'>;
   }
 
@@ -1990,7 +2012,7 @@ export class FirestoreRepository<
   async create(
     data: CreateInput<W>,
     options?: { returnDoc?: boolean; withMetadata?: boolean },
-  ): Promise<{ id: ID } | FirestoreDocument<T> | WriteResultWithMetadata<{ id: ID }>> {
+  ): Promise<SingleWriteResult<T>> {
     // Guard JS callers before any I/O so an ambiguous combined shape is never invented (T4).
     this.assertExclusiveWriteResultOptions(options);
     try {
@@ -2104,7 +2126,7 @@ export class FirestoreRepository<
     id: ID,
     data: CreateInput<W>,
     options?: { returnDoc?: boolean; withMetadata?: boolean },
-  ): Promise<{ id: ID } | FirestoreDocument<T> | WriteResultWithMetadata<{ id: ID }>> {
+  ): Promise<SingleWriteResult<T>> {
     // Security boundary (review B1): a caller-supplied id is validated BEFORE any hook runs or any
     // I/O happens, because `CollectionReference.doc()` accepts a slash-separated path and would
     // otherwise let a malformed id address a document outside this collection.
@@ -2756,6 +2778,9 @@ export class FirestoreRepository<
    */
   validate(data: FirestoreDocument<T>): FirestoreDocument<T>;
   validate(data: FirestoreDocument<T>[]): FirestoreDocument<T>[];
+  // Overload implementation: array vs single is the public contract. SonarJS wants
+  // every `return` to share one type; splitting the methods would be an API break.
+  // eslint-disable-next-line sonarjs/function-return-type -- overload union of scalar and array
   validate(
     data: FirestoreDocument<T> | FirestoreDocument<T>[],
   ): FirestoreDocument<T> | FirestoreDocument<T>[] {
@@ -2798,6 +2823,7 @@ export class FirestoreRepository<
    */
   safeValidate(data: FirestoreDocument<T>): SafeResult<T>;
   safeValidate(data: FirestoreDocument<T>[]): SafeResult<T>[];
+  // eslint-disable-next-line sonarjs/function-return-type -- overload union of scalar and array
   safeValidate(
     data: FirestoreDocument<T> | FirestoreDocument<T>[],
   ): SafeResult<T> | SafeResult<T>[] {
@@ -2944,7 +2970,7 @@ export class FirestoreRepository<
     id: ID,
     data: UpdateInput<W>,
     options?: UpdateOptions,
-  ): Promise<{ id: ID } | FirestoreDocument<T> | WriteResultWithMetadata<{ id: ID }>> {
+  ): Promise<SingleWriteResult<T>> {
     // A direct update()/patch() legitimately permits FieldValue.delete() to clear a field.
     // `patch()` delegates to `update()`, so it reports as `update()` — which is exactly what its
     // documented contract says it is (`update(id, data, { merge: true })`).
@@ -2969,7 +2995,7 @@ export class FirestoreRepository<
     // error text does not depend on whether the document happened to exist — the create branch
     // would otherwise say `upsert()` and this branch `update()` for the same call.
     operation: string,
-  ): Promise<{ id: ID } | FirestoreDocument<T> | WriteResultWithMetadata<{ id: ID }>> {
+  ): Promise<SingleWriteResult<T>> {
     this.validateId(id);
     this.assertExclusiveWriteResultOptions(options);
     try {
@@ -3092,7 +3118,7 @@ export class FirestoreRepository<
       withMetadata?: boolean;
       lastUpdateTime?: FirebaseFirestore.Timestamp;
     },
-  ): Promise<{ id: ID } | FirestoreDocument<T> | WriteResultWithMetadata<{ id: ID }>> {
+  ): Promise<SingleWriteResult<T>> {
     // Reject the impossible flag pair BEFORE forwarding so returnDoc cannot silently win (F1 / T4).
     this.assertExclusiveWriteResultOptions(options);
     // Forward merge + returnDoc/withMetadata/lastUpdateTime. Passing `undefined` through this
@@ -3379,7 +3405,7 @@ export class FirestoreRepository<
     id: ID,
     data: CreateInput<W>,
     options?: { returnDoc?: boolean; withMetadata?: boolean },
-  ): Promise<{ id: ID } | FirestoreDocument<T> | WriteResultWithMetadata<{ id: ID }>> {
+  ): Promise<SingleWriteResult<T>> {
     this.validateId(id);
     this.assertExclusiveWriteResultOptions(options);
     try {
@@ -3859,9 +3885,9 @@ export class FirestoreRepository<
         : this.db.bulkWriter({ throttling: options.throttling });
 
     const results = new Array<BulkWriteResult>(operations.length);
-    // Every settlement is a `.then(onOk, onErr)` chain that always fulfills, so no per-op rejection
-    // ever escapes unhandled (the SDK's raw per-op promise DOES reject, and an unobserved one takes
-    // the process down under Node's default `--unhandled-rejections=throw`).
+    // Every settlement is an async IIFE that always fulfills, so no per-op rejection ever escapes
+    // unhandled (the SDK's raw per-op promise DOES reject, and an unobserved one takes the process
+    // down under Node's default `--unhandled-rejections=throw`).
     const settlements: Promise<void>[] = [];
 
     const fail = (index: number, id: ID, op: BulkWriteOperationKind, error: unknown): void => {
@@ -3874,21 +3900,16 @@ export class FirestoreRepository<
       op: BulkWriteOperationKind,
       run: () => Promise<FirebaseFirestore.WriteResult>,
     ): void => {
-      let pending: Promise<FirebaseFirestore.WriteResult>;
-      try {
-        // `writer.create/set/update` throw SYNCHRONOUSLY on data the SDK cannot serialize (and on a
-        // closed writer), so the call itself has to be guarded, not just its promise.
-        pending = run();
-      } catch (error) {
-        fail(index, id, op, error);
-        return;
-      }
+      // Start the settlement now so `run()` executes in this turn (BulkWriter must see the op
+      // before `writer.close()` in the `finally` below). `await run()` evaluates `run()`
+      // synchronously — catching both a sync throw (unserializable data, closed writer) and a
+      // later rejection from the write itself.
       settlements.push(
-        pending.then(
-          writeResult => {
+        (async () => {
+          try {
+            const writeResult = await run();
             results[index] = { index, id, op, ok: true, writeTime: writeResult.writeTime };
-          },
-          (error: unknown) => {
+          } catch (error: unknown) {
             const failedAttempts = (error as { failedAttempts?: unknown })?.failedAttempts;
             results[index] = {
               index,
@@ -3898,8 +3919,8 @@ export class FirestoreRepository<
               error: this.toBulkWriteItemError(error),
               ...(typeof failedAttempts === 'number' ? { failedAttempts } : {}),
             };
-          },
-        ),
+          }
+        })(),
       );
     };
 

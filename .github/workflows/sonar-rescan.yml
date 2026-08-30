@@ -1,0 +1,32 @@
+name: SonarQube Re-scan
+
+# Reuse coverage from a completed Tests run without paying to rebuild and retest
+# the same commit. Useful after a transient SonarQube outage, a scanner engine
+# failure, or a repository-only Sonar configuration change.
+on:
+  workflow_dispatch:
+    inputs:
+      test-run-id:
+        description: Run ID of a completed Tests workflow from its Actions URL
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: sonar-rescan-${{ github.event.inputs.test-run-id }}
+  cancel-in-progress: true
+
+jobs:
+  sonarqube:
+    name: SonarQube
+    uses: Casadega-Development/action-workflows/.github/workflows/sonar-scan-after-tests.yml@main
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    with:
+      test-run-id: ${{ github.event.inputs.test-run-id }}
+      coverage-artifacts-json: '[{"name":"coverage-unit","path":"coverage/unit"},{"name":"coverage-integration","path":"coverage/integration"}]'
+      issue-gate-scope: new-code

@@ -62,8 +62,8 @@ If the generated diff is empty, Verdict is `merge` with
 
 - `agentsmd` and `codexcli` both write `AGENTS.md`. The last one wins.
 - With **`codexcli` last**, `AGENTS.md` **inlines** every non-root rule body.
-  Cursor and Codex therefore always carry `test-awareness`, `test-guardrails`,
-  and the rest without opening those files.
+  Cursor and Codex therefore always carry `quality-gates`, `test-awareness`,
+  `test-guardrails`, and the rest without opening those files.
 - If a release effectively behaves as if `agentsmd` won, `AGENTS.md` becomes a
   pointer/TOON table into `.agents/memories/` and those always-on rules stop
   loading. `--check` still passes.
@@ -89,8 +89,8 @@ Copy the table from [`review-template.md`](review-template.md) and fill
    not belong on this PR → `block`.
 2. **`AGENTS.md` inlines scoped rules.** Fail if the file is only a short
    overview plus a reference table pointing at `.agents/memories/`, or if
-   bodies of `test-awareness` / `test-guardrails` / `testing-docs-sync` /
-   `docs-api-sync` / `rulesync-generated` disappeared. Spot-check by grepping
+   bodies of `quality-gates` / `test-awareness` / `test-guardrails` /
+   `testing-docs-sync` / `docs-api-sync` / `rulesync-generated` disappeared. Spot-check by grepping
    a distinctive sentence from each `.rulesync/rules/*.md` (except `overview.md`,
    which is the root) inside `AGENTS.md`.
 3. **`CLAUDE.md` is root-overview-only, a regular file.**

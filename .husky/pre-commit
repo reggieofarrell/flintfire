@@ -1,9 +1,24 @@
-# Ensure the repo's Node (via nvm/.nvmrc) is on PATH before lint-staged.
+# Ensure the repo's Node (via nvm/.nvmrc) is on PATH before scanners and lint-staged.
 # Sourced — not executed — so nvm's PATH changes persist in this shell.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck disable=SC1091
 . "$REPO_ROOT/scripts/check-node-version.sh"
+
+# SonarQube CLI secret detection is deliberately fail-closed. This scan is
+# local, requires no server token, and prevents staged credentials from becoming
+# permanent Git history. See docs/development/sonarqube.md.
+if ! command -v sonar >/dev/null 2>&1; then
+  echo "Error: SonarQube CLI is required to scan staged files for secrets."
+  echo "Install it with the command documented in docs/development/sonarqube.md."
+  exit 1
+fi
+
+echo "[pre-commit] scanning staged files for secrets..."
+if ! sonar hook git-pre-commit; then
+  echo "Error: the staged-file Sonar secret scan failed."
+  exit 1
+fi
 
 # Run lint-staged so only staged files are linted and formatted
 npx lint-staged

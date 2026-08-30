@@ -128,9 +128,16 @@ publish — it is not a live Codecov-style percentage.
 
 ### Hooks and CI
 
-- **Pre-push:** unit coverage + unit gate (no emulator)
-- **CI:** unit and integration jobs run in parallel; each enforces its own gate
+- **Pre-commit:** fail-closed Sonar secret scan, then lint-staged (ESLint including sonarjs)
+- **Pre-push:** outgoing secret scan, skippable `sonar:precheck`, then unit coverage + unit gate (no
+  emulator)
+- **CI:** unit and integration jobs run in parallel (each enforces its own gate). The Casadega
+  reusable SonarQube scan currently runs on **`push` to `main`** (new-code-only gate) so the first
+  merge can establish the branch baseline. Pull-request scans and the sticky comment return in a
+  follow-up. Combined LCOV in Sonar is informational.
 - **Publish:** `test:coverage:all` must pass before the package is published to npm
+
+**SonarQube setup:** [docs/development/sonarqube.md](docs/development/sonarqube.md)
 
 See [.github/workflows/tests.yml](.github/workflows/tests.yml) and
 [docs/development/releasing.md](docs/development/releasing.md).
@@ -148,9 +155,11 @@ Contributions are welcome! Please follow these guidelines:
    `git commit -m 'feat(query): add distinct filter'`) — a `commit-msg` hook validates the format,
    and the changelog is generated from these messages (see
    [docs/development/releasing.md](docs/development/releasing.md))
-7. Push to your branch (`git push origin feature/amazing-feature`) — pre-push runs unit coverage
-   gate
-8. Open a Pull Request — CI runs both suite gates
+7. Push to your branch (`git push origin feature/amazing-feature`) — pre-push runs a secret scan, a
+   skippable Sonar changed-file precheck, then the unit coverage gate
+8. Open a Pull Request — CI runs both suite gates. The SonarQube new-code quality gate currently
+   runs on `main` after merge; PR scans return once that baseline exists (see
+   [docs/development/sonarqube.md](docs/development/sonarqube.md))
 
 For significant architectural or contract-level changes, record the decision as an
 [Architecture Decision Record](docs/adr/README.md) (start from
