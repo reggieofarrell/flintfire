@@ -1,8 +1,9 @@
 # SonarQube development setup
 
-FlintFire uses the SonarQube server at <https://sonar.casadega.dev>. The project key is `flintfire`.
-Keep `sonar-project.properties` and `.sonarlint/connectedMode.json` in lockstep if that key ever
-changes.
+FlintFire uses the SonarQube server at <https://sonar.casadega.dev>. The project key is
+`reggieofarrell_flintfire_c1ad3ea7-e526-454b-a643-ba1d352f2d16` (GitHub-imported). Keep
+`sonar-project.properties`, `.sonarlint/connectedMode.json`, and the VS Code
+`sonarlint.connectedMode.project` binding in lockstep if that key ever changes.
 
 ## Layers
 
@@ -26,10 +27,10 @@ Neither the local plugin nor SonarQube for IDE replaces the server's complete an
 Create the project on the SonarQube server and configure these GitHub Actions values at the
 **repository** level (avoid inheriting a different organization default):
 
-| Name             | Kind     | Value                                                               |
-| ---------------- | -------- | ------------------------------------------------------------------- |
-| `SONAR_TOKEN`    | Secret   | **Project analysis token** for `flintfire` (not a user/login token) |
-| `SONAR_HOST_URL` | Variable | `https://sonar.casadega.dev`                                        |
+| Name             | Kind     | Value                                                                    |
+| ---------------- | -------- | ------------------------------------------------------------------------ |
+| `SONAR_TOKEN`    | Secret   | **Project analysis token** for this project key (not a user/login token) |
+| `SONAR_HOST_URL` | Variable | `https://sonar.casadega.dev`                                             |
 
 Attach a quality gate whose conditions are on **new code**, not “any open issue.”
 
@@ -146,4 +147,4 @@ Edit `.rulesync/hooks.jsonc` or `scripts/agent-hooks/scan-edited-file.mjs`, then
 
 The repository recommends the SonarQube for IDE extension and checks in the project binding. In VS
 Code or Cursor, create a SonarQube connection whose ID is `https-sonar-casadega-dev`, point it at
-<https://sonar.casadega.dev>, and bind using the `flintfire` key.
+<https://sonar.casadega.dev>, and bind using the project key in `.sonarlint/connectedMode.json`.
