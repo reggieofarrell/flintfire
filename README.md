@@ -131,10 +131,9 @@ publish — it is not a live Codecov-style percentage.
 - **Pre-commit:** fail-closed Sonar secret scan, then lint-staged (ESLint including sonarjs)
 - **Pre-push:** outgoing secret scan, skippable `sonar:precheck`, then unit coverage + unit gate (no
   emulator)
-- **CI:** unit and integration jobs run in parallel (each enforces its own gate). The Casadega
-  reusable SonarQube scan currently runs on **`push` to `main`** (new-code-only gate) so the first
-  merge can establish the branch baseline. Pull-request scans and the sticky comment return in a
-  follow-up. Combined LCOV in Sonar is informational.
+- **CI:** unit and integration jobs run in parallel (each enforces its own gate), then the Casadega
+  reusable SonarQube scan with a **new-code-only** quality gate and a sticky PR comment. Combined
+  LCOV in Sonar is informational.
 - **Publish:** `test:coverage:all` must pass before the package is published to npm
 
 **SonarQube setup:** [docs/development/sonarqube.md](docs/development/sonarqube.md)
@@ -157,9 +156,7 @@ Contributions are welcome! Please follow these guidelines:
    [docs/development/releasing.md](docs/development/releasing.md))
 7. Push to your branch (`git push origin feature/amazing-feature`) — pre-push runs a secret scan, a
    skippable Sonar changed-file precheck, then the unit coverage gate
-8. Open a Pull Request — CI runs both suite gates. The SonarQube new-code quality gate currently
-   runs on `main` after merge; PR scans return once that baseline exists (see
-   [docs/development/sonarqube.md](docs/development/sonarqube.md))
+8. Open a Pull Request — CI runs both suite gates and the SonarQube new-code quality gate
 
 For significant architectural or contract-level changes, record the decision as an
 [Architecture Decision Record](docs/adr/README.md) (start from
