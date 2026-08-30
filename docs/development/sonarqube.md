@@ -13,9 +13,10 @@ changes.
   Findings fail the hook.
 - **Pre-push precheck:** the real Scanner over files changed vs `origin/main`. Exit 2 (Scanner,
   credentials, or server unavailable) is a loud skip; findings and analysis failures still block.
-- **CI:** the Tests workflow uploads both Jest LCOV reports, then runs an inlined Sonar scan and the
-  official quality-gate action. The server gate is **new-code-only** because this is a mature
-  library, not a greenfield starter. Combined LCOV in Sonar is informational; path-specific gates in
+- **CI:** the Tests workflow uploads both Jest LCOV reports, then calls the public
+  [`Casadega-Development/action-workflows`](https://github.com/Casadega-Development/action-workflows)
+  reusable scan. The server gate is **new-code-only** because this is a mature library, not a
+  greenfield starter. Combined LCOV in Sonar is informational; path-specific gates in
   `scripts/check-coverage-gates.mjs` remain the coverage authority.
 
 Neither the local plugin nor SonarQube for IDE replaces the server's complete analysis.
@@ -35,13 +36,22 @@ Attach a quality gate whose conditions are on **new code**, not “any open issu
 The Tests workflow:
 
 - runs on pull requests to `main` and on pushes to `main` (the latter establishes the new-code
-  baseline);
+  baseline). `cancel-in-progress` applies only to pull requests so a `main` baseline upload is not
+  cancelled;
 - skips the Sonar job for pull requests from forks (GitHub does not expose repository secrets to
   those runs);
-- checks out complete history at the PR head SHA (not the merge commit);
-- restores `coverage/unit/lcov.info` and `coverage/integration/lcov.info`;
+- calls `Casadega-Development/action-workflows/.github/workflows/sonar-scan.yml@main` with
+  `secrets: inherit` (the token and host stay on this repository);
+- restores `coverage/unit` and `coverage/integration` from the Tests matrix artifacts;
 - supplies explicit PR or branch parameters for the Community branch plugin;
-- waits for Compute Engine processing via the official quality-gate action.
+- enforces `issue-gate-scope: new-code` plus the official quality-gate action
+  (`sonarsource/sonarqube-quality-gate-action@v1.2.1`);
+- upserts a sticky pull-request comment (`<!-- casadega-sonarqube -->`) with gate status, unresolved
+  new-code issues, and the dashboard URL. Pushes to `main` do not comment.
+
+The caller job grants `pull-requests: write` so that comment can be posted; missing permission fails
+the comment step closed. Turn the comment off with `post-pr-comment: false` on the reusable workflow
+inputs if a future caller does not want it.
 
 The full CI scan is authoritative. Fork PRs still run lint, types, and both coverage gates.
 
@@ -49,8 +59,10 @@ The full CI scan is authoritative. Fork PRs still run lint, types, and both cove
 
 The `SonarQube Re-scan` workflow can analyze an already tested commit without rerunning the entire
 quality pipeline. Open a completed `Tests` run, copy the numeric run ID from its Actions URL, and
-supply it to the manual workflow. It restores that run's coverage artifacts and derives the original
-PR or branch context before scanning.
+supply it to the manual workflow. It is a thin caller of
+`Casadega-Development/action-workflows/.github/workflows/sonar-scan-after-tests.yml@main`, which
+restores that run's coverage artifacts and derives the original PR or branch context before
+scanning.
 
 ## Local command-line setup
 

@@ -131,8 +131,9 @@ publish — it is not a live Codecov-style percentage.
 - **Pre-commit:** fail-closed Sonar secret scan, then lint-staged (ESLint including sonarjs)
 - **Pre-push:** outgoing secret scan, skippable `sonar:precheck`, then unit coverage + unit gate (no
   emulator)
-- **CI:** unit and integration jobs run in parallel (each enforces its own gate), then an inline
-  SonarQube scan with a **new-code-only** quality gate. Combined LCOV in Sonar is informational.
+- **CI:** unit and integration jobs run in parallel (each enforces its own gate), then the Casadega
+  reusable SonarQube scan with a **new-code-only** quality gate and a sticky PR comment. Combined
+  LCOV in Sonar is informational.
 - **Publish:** `test:coverage:all` must pass before the package is published to npm
 
 **SonarQube setup:** [docs/development/sonarqube.md](docs/development/sonarqube.md)

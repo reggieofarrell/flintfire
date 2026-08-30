@@ -89,54 +89,23 @@ jobs:
     if:
       github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name ==
       github.repository
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
     permissions:
       actions: read
       contents: read
-    steps:
-      - name: Checkout analyzed commit
-        uses: actions/checkout@v7
-        with:
-          # SonarQube uses Git history to attribute changed/new code accurately.
-          fetch-depth: 0
-          # Analyze the PR head, not the ephemeral merge commit GitHub Actions checks out by default.
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Restore unit coverage
-        uses: actions/download-artifact@v7
-        with:
-          name: coverage-unit
-          path: coverage/unit
-
-      - name: Restore integration coverage
-        uses: actions/download-artifact@v7
-        with:
-          name: coverage-integration
-          path: coverage/integration
-
-      - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v8.2.1
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
-        with:
-          # CI polls Compute Engine via the quality-gate action below. Local
-          # scanner runs still wait (sonar.qualitygate.wait=true in properties).
-          args: >-
-            -Dsonar.qualitygate.wait=false ${{ github.event_name == 'pull_request' &&
-            format('-Dsonar.pullrequest.key={0} -Dsonar.pullrequest.branch={1}
-            -Dsonar.pullrequest.base={2} -Dsonar.scm.revision={3}',
-            github.event.pull_request.number, github.head_ref, github.base_ref,
-            github.event.pull_request.head.sha) || format('-Dsonar.branch.name={0}',
-            github.ref_name) }}
-
-      - name: SonarQube Quality Gate
-        uses: SonarSource/sonarqube-quality-gate-action@v1.3.1
-        timeout-minutes: 5
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+      pull-requests: write
+    uses: Casadega-Development/action-workflows/.github/workflows/sonar-scan.yml@main
+    secrets: inherit
+    with:
+      coverage-artifacts-json: '[{"name":"coverage-unit","path":"coverage/unit"},{"name":"coverage-integration","path":"coverage/integration"}]'
+      issue-gate-scope: new-code
+      enforce-quality-gate: true
+      use-pull-request-scan: ${{ github.event_name == 'pull_request' }}
+      pull-request-key: ${{ github.event.pull_request.number || '' }}
+      pull-request-branch: ${{ github.head_ref || '' }}
+      pull-request-base: ${{ github.base_ref || '' }}
+      scm-revision: ${{ github.event.pull_request.head.sha || '' }}
+      checkout-ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      branch-name: ${{ github.ref_name }}
 
   docs-links:
     name: Doc checks
