@@ -83,12 +83,12 @@ jobs:
   sonarqube:
     name: SonarQube
     needs: test
-    # Bootstrap: the Community branch plugin requires a successful analysis of
-    # the target branch (`main`) before pull-request decoration. Skip PR scans
-    # until that baseline exists. Restore the previous `if` (same-repo PRs plus
-    # push) in a follow-up once the Sonar UI shows a `main` analysis. Fork PRs
-    # never had secrets anyway; this skip is about baseline order, not forks.
-    if: github.event_name == 'push'
+    # Secrets are unavailable to workflows triggered from forks. The rest of the
+    # Tests workflow still runs there; trusted pushes and same-repo PRs get the
+    # authoritative server analysis and quality gate.
+    if:
+      github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name ==
+      github.repository
     permissions:
       actions: read
       contents: read
