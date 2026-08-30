@@ -4,9 +4,9 @@
   },
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "editor.formatOnSave": true,
+  "typescript.tsdk": "node_modules/typescript/lib",
   "sonarlint.connectedMode.project": {
     "connectionId": "https-sonar-casadega-dev",
     "projectKey": "flintfire"
-  },
-  "typescript.tsdk": "node_modules/typescript/lib"
+  }
 }
