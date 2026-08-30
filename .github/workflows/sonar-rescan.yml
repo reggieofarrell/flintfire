@@ -24,7 +24,8 @@ jobs:
   sonarqube:
     name: SonarQube
     uses: Casadega-Development/action-workflows/.github/workflows/sonar-scan-after-tests.yml@main
-    secrets: inherit
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     with:
       test-run-id: ${{ github.event.inputs.test-run-id }}
       coverage-artifacts-json: '[{"name":"coverage-unit","path":"coverage/unit"},{"name":"coverage-integration","path":"coverage/integration"}]'

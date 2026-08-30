@@ -26,12 +26,18 @@ Neither the local plugin nor SonarQube for IDE replaces the server's complete an
 Create the project on the SonarQube server and configure these GitHub Actions values at the
 **repository** level (avoid inheriting a different organization default):
 
-| Name             | Kind     | Value                              |
-| ---------------- | -------- | ---------------------------------- |
-| `SONAR_TOKEN`    | Secret   | Project token with analysis access |
-| `SONAR_HOST_URL` | Variable | `https://sonar.casadega.dev`       |
+| Name             | Kind     | Value                                                               |
+| ---------------- | -------- | ------------------------------------------------------------------- |
+| `SONAR_TOKEN`    | Secret   | **Project analysis token** for `flintfire` (not a user/login token) |
+| `SONAR_HOST_URL` | Variable | `https://sonar.casadega.dev`                                        |
 
 Attach a quality gate whose conditions are on **new code**, not “any open issue.”
+
+CI must use a **project analysis token** stored as the `SONAR_TOKEN` Actions secret. A SonarQube
+**user** token (what `sonar auth login` puts in the macOS keychain for local `sonar:precheck`) is a
+different kind: it authenticates a person, not the `flintfire` project. Either kind can analyze if
+it has Execute Analysis, but the GitHub secret should be the project token so it is scoped to this
+project and can be rotated without affecting developer logins.
 
 The Tests workflow:
 
@@ -40,8 +46,9 @@ The Tests workflow:
   cancelled;
 - skips the Sonar job for pull requests from forks (GitHub does not expose repository secrets to
   those runs);
-- calls `Casadega-Development/action-workflows/.github/workflows/sonar-scan.yml@main` with
-  `secrets: inherit` (the token and host stay on this repository);
+- calls `Casadega-Development/action-workflows/.github/workflows/sonar-scan.yml@main` and maps
+  `SONAR_TOKEN` explicitly (`secrets: inherit` does not cross from this personal repository into the
+  Casadega org; an inherited token arrives empty and the scanner returns HTTP 401);
 - restores `coverage/unit` and `coverage/integration` from the Tests matrix artifacts;
 - supplies explicit PR or branch parameters for the Community branch plugin;
 - enforces `issue-gate-scope: new-code` plus the official quality-gate action

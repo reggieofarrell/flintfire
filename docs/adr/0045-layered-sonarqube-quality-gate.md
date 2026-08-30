@@ -35,9 +35,10 @@ We will adopt the starter's layered SonarQube model with these adaptations:
 3. **CI calls public reusable workflows** in
    [`Casadega-Development/action-workflows`](https://github.com/Casadega-Development/action-workflows).
    FlintFire stays under `reggieofarrell`. The org repo is public so a personal repository can
-   `uses:` it with `secrets: inherit`. It does not call `black-flag-collective/action-workflows`.
-   Pull-request scans upsert a sticky GitHub comment; pushes to `main` re-baseline without
-   commenting.
+   `uses:` it and maps `SONAR_TOKEN` explicitly (`secrets: inherit` does not cross from a personal
+   repository into another GitHub organization). It does not call
+   `black-flag-collective/action-workflows`. Pull-request scans upsert a sticky GitHub comment;
+   pushes to `main` re-baseline without commenting.
 4. **Tests also run on pushes to `main`** so Sonar has a branch baseline for new-code comparison.
 5. **Sonar's combined LCOV is informational.** Path-specific gates in
    `scripts/check-coverage-gates.mjs` remain the coverage authority.

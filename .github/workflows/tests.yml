@@ -94,7 +94,8 @@ jobs:
       contents: read
       pull-requests: write
     uses: Casadega-Development/action-workflows/.github/workflows/sonar-scan.yml@main
-    secrets: inherit
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     with:
       coverage-artifacts-json: '[{"name":"coverage-unit","path":"coverage/unit"},{"name":"coverage-integration","path":"coverage/integration"}]'
       issue-gate-scope: new-code
