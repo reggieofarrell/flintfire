@@ -1,5 +1,10 @@
 import { parseFirestoreError } from './ErrorParser.js';
-import { ID, type HookDataFor } from './FirestoreRepository.js';
+import {
+  ID,
+  type HookDataFor,
+  type StagingTarget,
+  type WriteGroup,
+} from './FirestoreRepository.js';
 import type { HookEvent, HookExecution } from './Hooks.js';
 import { FirestoreDocument, asFirestoreDocument } from './DocumentId.js';
 import { InvalidPaginationCursorError, ValidationError } from './Errors.js';
@@ -34,7 +39,6 @@ import {
   WhereFilterOp,
 } from 'firebase-admin/firestore';
 import { z } from 'zod';
-import type { StagingTarget, WriteGroup } from './FirestoreRepository.js';
 
 // Bound repository helpers. commitInChunks returns the Admin SDK WriteResult[] for each successfully
 // committed action (in enqueue order across 500-op chunks). Query update/delete ignore the array and
@@ -357,9 +361,7 @@ export function createFilterFactoryCore<S extends object>(
       // `f.where(FieldPath.documentId(), …)` addresses the document NAME, so it must clear the same
       // boundary as the factory's document-name helper rather than reaching the SDK unvalidated (the
       // SDK blocks path traversal but accepts the reserved `__…__` namespace the validators gate).
-      isDocumentIdPath(field)
-        ? nameFilter(op, value, 'allow')
-        : Filter.where(field as string | FieldPath, op, value),
+      isDocumentIdPath(field) ? nameFilter(op, value, 'allow') : Filter.where(field, op, value),
     and: (...filters) => {
       assertNonEmptyFilterGroup('and', filters);
       return Filter.and(...filters);
@@ -527,7 +529,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
     // neither whereFilter nor the factory. Only the value's TYPE is echoed — a filter carries caller
     // values that may be sensitive.
     if (!(filter instanceof Filter)) {
-      throw new Error(
+      throw new TypeError(
         'whereFilter() callback must return a filter built with the provided factory ' +
           `(${hints.factoryMethods}), or a firebase-admin \`Filter\`; received ` +
           `${filter === null ? 'null' : typeof filter}. If you built the filter from a direct ` +
@@ -691,7 +693,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
     // the whereFilter factory.
     this.query = isDocumentIdPath(field)
       ? this.query.where(this.documentNameFilter(op, value, 'allow'))
-      : this.query.where(field as string | FieldPath, op, value);
+      : this.query.where(field, op, value);
     return this;
   }
 
@@ -719,7 +721,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
    * @returns The query builder instance
    */
   orderBy(field: FieldPaths<OmitId<S>> | FieldPath, direction: 'asc' | 'desc' = 'asc'): this {
-    this.query = this.query.orderBy(field as string | FieldPath, direction);
+    this.query = this.query.orderBy(field, direction);
     // Cursor pagination depends on deterministic ordering across pages.
     // We track explicit ordering so paginate() can enforce this guarantee.
     this.hasOrderBy = true;
@@ -1180,9 +1182,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
     // INVALID_ARGUMENT). Guard locally so callers get a clear Error before the round trip.
     this.assertNoSelectWithFieldAggregation('sum()');
     try {
-      const snapshot = await this.query
-        .aggregate({ sum: AggregateField.sum(field as string | FieldPath) })
-        .get();
+      const snapshot = await this.query.aggregate({ sum: AggregateField.sum(field) }).get();
 
       // Firestore can return null when no matching numeric values exist.
       // Normalize to 0 to preserve expected numeric behavior for callers.
@@ -1215,9 +1215,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
     // Same select()+field-aggregation incompatibility as sum() — see assertNoSelectWithFieldAggregation.
     this.assertNoSelectWithFieldAggregation('average()');
     try {
-      const snapshot = await this.query
-        .aggregate({ average: AggregateField.average(field as string | FieldPath) })
-        .get();
+      const snapshot = await this.query.aggregate({ average: AggregateField.average(field) }).get();
 
       // Firestore (and the Admin SDK's AggregateField.average typing) returns null when there are
       // no numeric values to average. Return it verbatim so "no values" (null) stays distinct from
@@ -1353,10 +1351,10 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
       if (entry.kind === 'count') {
         safeAssign(sdkSpec, alias, AggregateField.count());
       } else if (entry.kind === 'sum') {
-        safeAssign(sdkSpec, alias, AggregateField.sum(entry.field as string | FieldPath));
+        safeAssign(sdkSpec, alias, AggregateField.sum(entry.field));
       } else if (entry.kind === 'average') {
         // Public kind stays 'average' (matches average()); the SDK's internal wire kind is 'avg'.
-        safeAssign(sdkSpec, alias, AggregateField.average(entry.field as string | FieldPath));
+        safeAssign(sdkSpec, alias, AggregateField.average(entry.field));
       }
     }
     return sdkSpec;
@@ -1800,7 +1798,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
     // <7.4 where Query.explain is absent — a plain Error with an upgrade hint beats a cryptic
     // "explain is not a function" from the call site.
     if (typeof this.query.explain !== 'function') {
-      throw new Error(
+      throw new TypeError(
         'explain() is not available: the installed Firestore SDK does not expose Query.explain(). ' +
           'Query Explain requires @google-cloud/firestore >= 7.4 (firebase-admin 12 only when the ' +
           'resolved @google-cloud/firestore is new enough; firebase-admin >= 13 typically bundles it). ' +
@@ -1871,7 +1869,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
     // <7.4 where Query.explainStream is absent — a plain Error with an upgrade hint beats a
     // cryptic "explainStream is not a function" from the call site.
     if (typeof this.query.explainStream !== 'function') {
-      throw new Error(
+      throw new TypeError(
         'explainStream() is not available: the installed Firestore SDK does not expose ' +
           'Query.explainStream(). Query Explain requires @google-cloud/firestore >= 7.4 ' +
           '(firebase-admin 12 only when the resolved @google-cloud/firestore is new enough; ' +
@@ -2112,7 +2110,7 @@ export class FirestoreQueryBuilder<
       this.collectInterceptorWrites,
       this.assertBatchWritesAllowed,
     );
-    next.query = this.query.select(...(fields as (string | FieldPath)[]));
+    next.query = this.query.select(...fields);
     next.hasOrderBy = this.hasOrderBy;
     // Carry limitToLast across the projection: select() builds a replacement builder, and dropping
     // the flag would let orderBy().limitToLast(n).select(...).stream() incorrectly stream.
@@ -2362,7 +2360,7 @@ export class FirestoreQueryBuilder<
           this.collectInterceptorWrites?.({
             kind: 'delete',
             id: ref.id,
-            document: docsData[index]!,
+            document: docsData[index],
           }) ?? [],
       }));
 
