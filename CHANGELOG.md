@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.3](https://github.com/reggieofarrell/flintfire/compare/v3.1.2...v3.1.3) (2026-08-31)
+
+### Fixed
+
+- **sonar:** clear open project SonarQube issues
+  ([#126](https://github.com/reggieofarrell/flintfire/issues/126))
+  ([d48a2e4](https://github.com/reggieofarrell/flintfire/commit/d48a2e4d7ecc200214a11dd06760234c8041d7d2)),
+  closes [#121](https://github.com/reggieofarrell/flintfire/issues/121)
+
 ## [3.1.2](https://github.com/reggieofarrell/flintfire/compare/v3.1.1...v3.1.2) (2026-08-30)
 
 ### Changed
