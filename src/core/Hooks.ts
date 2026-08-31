@@ -85,9 +85,12 @@ export type HookExecution =
  * only legal for `before*` events. Centralizing the construction keeps after-hook call sites from
  * accidentally admitting a transaction context at the type level.
  */
+/** Default execution mode when callers omit the optional argument (S7737). */
+const DEFAULT_HOOK_EXECUTION: HookExecution = { kind: 'direct' };
+
 export function buildHookContext<E extends HookEvent>(
   event: E,
-  execution: HookExecution = { kind: 'direct' },
+  execution: HookExecution = DEFAULT_HOOK_EXECUTION,
 ): HookContext<E> {
   if (execution.kind === 'transaction') {
     // Runtime guard (T10): transaction execution is only legal for before* events. Call sites
