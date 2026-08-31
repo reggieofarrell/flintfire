@@ -110,10 +110,11 @@ export function isVectorFieldValue(value: unknown): boolean {
   }
 
   // Defensive fallback for SDK shapes that model a vector as a `FieldValue` subclass whose
-  // serialization names it (rather than a standalone `VectorValue`).
+  // constructor name mentions vector (rather than a standalone `VectorValue`). Prefer the
+  // constructor name over Object#toString / String(object) so typescript:S6551 stays clear.
   if (value instanceof FieldValue) {
-    const serialized = value.toString().toLowerCase();
-    return serialized.includes('vector');
+    const ctorName = value.constructor?.name?.toLowerCase() ?? '';
+    return ctorName.includes('vector');
   }
 
   return false;
