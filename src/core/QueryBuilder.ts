@@ -1924,17 +1924,17 @@ export class FirestoreQueryBuilder<
 > extends FirestoreQueryBuilderBase<T, S, R> {
   constructor(
     baseQuery: Query<any>,
-    private collectionRef: CollectionReference<any>,
+    private readonly collectionRef: CollectionReference<any>,
     db: Firestore,
-    private commitInChunks: FirestoreWriteBatch,
-    private runHooks: RunHook<T, W>,
-    private validateUpdate?: ValidateUpdate<W>,
+    private readonly commitInChunks: FirestoreWriteBatch,
+    private readonly runHooks: RunHook<T, W>,
+    private readonly validateUpdate?: ValidateUpdate<W>,
     allowLegacyDatastoreIds = false,
     // Appended last so every existing positional construction keeps its meaning. Absent only for a
     // directly-constructed builder (`repo.query()` always supplies both), which then stages no
     // interceptor writes and refuses nothing — the same result as a repository with none registered.
-    private collectInterceptorWrites?: CollectInterceptorWrites<T, W>,
-    private assertBatchWritesAllowed?: AssertBatchWritesAllowed,
+    private readonly collectInterceptorWrites?: CollectInterceptorWrites<T, W>,
+    private readonly assertBatchWritesAllowed?: AssertBatchWritesAllowed,
   ) {
     super(baseQuery, db, allowLegacyDatastoreIds);
   }
