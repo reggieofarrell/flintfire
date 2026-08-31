@@ -86,7 +86,7 @@
     "test:coverage:gate:integration": "node scripts/check-coverage-gates.mjs --suite integration",
     "test:coverage:all": "npm run test:unit:coverage && npm run test:coverage:gate:unit && npm run test:integration:coverage && npm run test:coverage:gate:integration",
     "test:watch": "jest --config jest.config.unit.js --watch",
-    "test:performance": "ts-node-dev --respawn --transpile-only ./src/benchmarks/performance.test.ts"
+    "test:performance": "ts-node-dev --respawn --transpile-only ./src/benchmarks/performance.bench.ts"
   },
   "keywords": [
     "firestore",

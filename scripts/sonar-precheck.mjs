@@ -34,14 +34,14 @@ const analyzableExtension = /\.(?:ts|tsx|js|jsx|mjs|cjs|css|scss|less)$/;
 
 /**
  * Mirrors this repository's sonar.test.inclusions closely enough for a precheck.
- * Production `src/` and `scripts/` stay on the sources side; tests, type-tests,
- * and benchmarks go on the tests side so complexity/coverage metrics stay honest.
+ * Production `src/` and `scripts/` stay on the sources side; tests and type-tests
+ * go on the tests side so complexity/coverage metrics stay honest.
  */
 const testPath =
-  /(?:^|\/)tests\/|(?:^|\/)__tests__\/|(?:^|\/)benchmarks\/|\.test\.[jt]sx?$|\.spec\.[jt]sx?$|\.type-test\.ts$|\.test\.mjs$/;
+  /(?:^|\/)tests\/|(?:^|\/)__tests__\/|\.test\.[jt]sx?$|\.spec\.[jt]sx?$|\.type-test\.ts$|\.test\.mjs$/;
 
 /** Paths the committed sonar.exclusions already keep out of analysis. */
-const skippedPath = /(?:^|\/)(?:node_modules|dist|coverage|\.git|website)\//;
+const skippedPath = /(?:^|\/)(?:node_modules|dist|coverage|\.git|website|benchmarks)\//;
 
 /** A path that deliberately cannot match when one scanner side is empty. */
 const noMatch = '**/__sonar_precheck_no_match__';
