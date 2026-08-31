@@ -1,20 +1,45 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseAuthenticatedSonarHost, resolveSonarHost } from './sonar-rules/sync.mjs';
+import { resolveRepositorySonarHost } from './lib/sonar-host.mjs';
+import { parseAuthenticatedSonarHost } from './sonar-rules/sync.mjs';
 
-test('prefers the repository Sonar host over an inherited environment host', () => {
-  assert.equal(
-    resolveSonarHost('https://sonar.casadega.dev', 'https://sonarqube.blackflag.design'),
-    'https://sonar.casadega.dev',
+test('uses the repository Sonar host and reports a conflicting environment host', () => {
+  assert.deepEqual(
+    resolveRepositorySonarHost('https://sonar.casadega.dev', 'https://sonarqube.blackflag.design'),
+    {
+      host: 'https://sonar.casadega.dev',
+      ignoredEnvironmentHost: 'https://sonarqube.blackflag.design',
+    },
   );
 });
 
-test('uses the environment host only when the repository does not configure one', () => {
-  assert.equal(
-    resolveSonarHost(undefined, 'https://sonar.example.test'),
-    'https://sonar.example.test',
+test('treats blank and equivalent environment values as non-overrides', () => {
+  assert.deepEqual(resolveRepositorySonarHost('https://sonar.casadega.dev/', ''), {
+    host: 'https://sonar.casadega.dev',
+    ignoredEnvironmentHost: undefined,
+  });
+  assert.deepEqual(
+    resolveRepositorySonarHost('https://sonar.casadega.dev', 'https://sonar.casadega.dev/'),
+    {
+      host: 'https://sonar.casadega.dev',
+      ignoredEnvironmentHost: undefined,
+    },
   );
-  assert.equal(resolveSonarHost(undefined, undefined), undefined);
+  assert.deepEqual(resolveRepositorySonarHost('https://sonar.casadega.dev', undefined), {
+    host: 'https://sonar.casadega.dev',
+    ignoredEnvironmentHost: undefined,
+  });
+});
+
+test('blocks when sonar-project.properties does not pin a host', () => {
+  assert.throws(
+    () => resolveRepositorySonarHost(undefined, 'https://sonar.example.test'),
+    /must define a non-blank sonar\.host\.url/,
+  );
+  assert.throws(
+    () => resolveRepositorySonarHost('  ', undefined),
+    /must define a non-blank sonar\.host\.url/,
+  );
 });
 
 test('extracts the active host from SonarQube CLI status output', () => {

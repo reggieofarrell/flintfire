@@ -94,9 +94,12 @@ The CLI stores its user token in the macOS keychain. `sonar:precheck` reads that
 `SONAR_TOKEN` is not present, which also works when a GUI Git client does not inherit shell
 environment variables. Other platforms can export a SonarQube user token as `SONAR_TOKEN`.
 
-For profile synchronization, the committed `sonar.host.url` takes precedence over an inherited
-`SONAR_HOST_URL`. Web API calls go through the authenticated SonarQube CLI, and synchronization
-fails if the CLI's active server does not match the repository.
+For all repository-local Sonar tooling, the committed `sonar.host.url` is the only server authority.
+An inherited `SONAR_HOST_URL` is never used as an override or fallback; a conflicting non-blank
+value is reported and ignored. Missing committed host configuration blocks instead of becoming a
+skippable precheck prerequisite. Web API calls go through the authenticated SonarQube CLI, and
+synchronization fails if the CLI's active server does not match the repository. This prevents a
+shell configured for another server from silently publishing source or syncing the wrong profile.
 
 ```bash
 npm run sonar:rules

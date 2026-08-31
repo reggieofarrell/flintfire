@@ -26,6 +26,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { findExecutable, resolveExecutable } from './lib/resolve-executable.mjs';
+import { resolveRepositorySonarHost } from './lib/sonar-host.mjs';
 
 const gitExecutable = resolveExecutable('git');
 
@@ -118,17 +119,29 @@ function keychainUserToken(hostUrl) {
   return result.stdout.trim() || undefined;
 }
 
+let hostResolution;
+try {
+  hostResolution = resolveRepositorySonarHost(
+    fromProperties('sonar.host.url'),
+    process.env.SONAR_HOST_URL,
+  );
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error));
+}
+
+const { host, ignoredEnvironmentHost } = hostResolution;
+if (ignoredEnvironmentHost) {
+  console.log(
+    `[sonar-precheck] ignoring SONAR_HOST_URL=${ignoredEnvironmentHost} — sonar-project.properties pins ${host}.`,
+  );
+}
+
 const sonarScannerExecutable = findExecutable('sonar-scanner');
 if (
   !sonarScannerExecutable ||
   spawnSync(sonarScannerExecutable, ['--version'], { stdio: 'ignore' }).status !== 0
 ) {
   unavailable('sonar-scanner is not on PATH. See docs/development/sonarqube.md.');
-}
-
-const host = process.env.SONAR_HOST_URL ?? fromProperties('sonar.host.url');
-if (!host) {
-  unavailable('SONAR_HOST_URL is not set and sonar-project.properties has no sonar.host.url.');
 }
 
 const environmentToken = process.env.SONAR_TOKEN?.trim() || undefined;
@@ -236,7 +249,9 @@ const scan = spawnSync(
   ],
   {
     encoding: 'utf8',
-    env: { ...process.env, SONAR_TOKEN: token },
+    // Keep Scanner's environment aligned with the explicit `-D` property so
+    // it cannot reinterpret a conflicting inherited host at a lower layer.
+    env: { ...process.env, SONAR_HOST_URL: host, SONAR_TOKEN: token },
   },
 );
 
