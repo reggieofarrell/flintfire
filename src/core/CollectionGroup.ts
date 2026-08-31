@@ -307,7 +307,7 @@ export class FirestoreCollectionGroupQueryBuilder<
       S,
       CollectionGroupDocument<DeepPartial<T>>
     >(this.baseQuery, this.collectionIdValue, this.db, this.allowLegacyDatastoreIds);
-    next.query = this.query.select(...(fields as (string | FieldPath)[]));
+    next.query = this.query.select(...fields);
     next.hasOrderBy = this.hasOrderBy;
     // Carry limitToLast across the projection — same silent-drop hazard as the collection builder.
     next.hasLimitToLast = this.hasLimitToLast;
@@ -440,7 +440,7 @@ export class FirestoreCollectionGroup<T extends object, S extends object = T> {
     // docs), which TypeScript cannot relate to a concrete object literal under an unresolved `T`.
     // The overlay order below is the contract: identity is written last and wins.
     return {
-      ...(data as T),
+      ...data,
       id: snapshot.id,
       path: snapshot.ref.path,
       parentPath: snapshot.ref.parent.path,
