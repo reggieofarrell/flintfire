@@ -318,6 +318,23 @@ describe('VectorSearch utilities', () => {
       };
       expect(isVectorFieldValue(forgedSentinel)).toBe(false);
     });
+
+    it('should detect a vector-mentioning FieldValue subclass via methodName even under a mangled constructor.name (minification robustness)', () => {
+      // Simulates a minified bundle: constructor.name is unreadable, but methodName — like
+      // whichFieldValue in Validation.ts — survives minification because it is a plain string.
+      const fakeMinifiedVectorFieldValue = Object.create(FieldValue.prototype) as object;
+      Object.defineProperty(fakeMinifiedVectorFieldValue, 'methodName', {
+        value: 'FieldValue.vector',
+        enumerable: true,
+      });
+      expect(isVectorFieldValue(fakeMinifiedVectorFieldValue)).toBe(true);
+    });
+
+    it('should fall back to constructor.name when methodName is absent', () => {
+      class VectorFieldTransform extends FieldValue {}
+      const fake = Object.create(VectorFieldTransform.prototype) as object;
+      expect(isVectorFieldValue(fake)).toBe(true);
+    });
   });
 
   it('should accept an SDK whose object-form findNearest probe constructs (>= 7.10)', () => {
@@ -332,6 +349,17 @@ describe('VectorSearch utilities', () => {
       /@google-cloud\/firestore >= 7\.10/,
     );
     expect(() => assertVectorSearchSupported({} as never)).toThrow(/object-form findNearest/i);
+  });
+
+  it('should throw a plain Error, not TypeError, when findNearest is absent (ADR-0044: capability misuse stays on Error)', () => {
+    let caught: unknown;
+    try {
+      assertVectorSearchSupported({} as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught).not.toBeInstanceOf(TypeError);
   });
 
   it('should throw the object-form compatibility error when findNearest is positional-only (7.6-7.9) (R1)', () => {

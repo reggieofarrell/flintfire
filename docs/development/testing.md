@@ -62,6 +62,7 @@ src/tests/
 | `npm run test:coverage:all`              | Full local coverage run + both gates         |
 | `npm run test:types`                     | Type-check `src` + `*.type-test.ts` (`tsc`)  |
 | `npm run test:sonar-rules`               | SonarJS rule-sync helpers (no credentials)   |
+| `npm run test:hook-permissions`          | Bare-path hook-script executable-bit checker |
 | `npm test`                               | Unit + integration (emulator auto-start)     |
 
 ### Local integration prerequisites
@@ -133,9 +134,9 @@ thresholds via `scripts/check-coverage-gates.mjs`.
 | Vector extension (emulator) | `src/vector/**`          | 90%   | 75%      | 90%       |
 
 **Pre-push** runs a fail-closed outgoing secret scan, then `npm run sonar:precheck` (exit 2 skips
-loudly when Scanner/credentials/server are unavailable), then `rules:check` + `test:types` +
-`check:docs` + `check:zod-idioms` + `test:unit:coverage` + `test:coverage:gate:unit` (no
-Java/emulator). See [sonarqube.md](./sonarqube.md).
+loudly when Scanner/credentials/server are unavailable), then `rules:check` + `check:hooks` +
+`test:types` + `check:docs` + `check:zod-idioms` + `test:unit:coverage` + `test:coverage:gate:unit`
+(no Java/emulator). See [sonarqube.md](./sonarqube.md).
 
 **CI** runs each suite with coverage, then its gate, in parallel matrix jobs, plus a `Type checks`
 job (`test:types`). After both coverage artifacts upload, the Tests workflow calls
@@ -159,10 +160,10 @@ ratcheting.
 
 ## Git hooks
 
-| Hook           | Command                                                                                                                         | Purpose                                                                                           |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| **pre-commit** | `sonar hook git-pre-commit` then `lint-staged`                                                                                  | Fail-closed secret scan, then ESLint (including sonarjs) + Prettier on staged files               |
-| **pre-push**   | outgoing secret scan + `sonar:precheck` + `rules:check` + `test:types` + `check:docs` + `check:zod-idioms` + unit coverage gate | Secrets always block; changed-file Sonar skips only when unavailable; then the existing unit gate |
+| Hook           | Command                                                                                                                                         | Purpose                                                                                           |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **pre-commit** | `sonar hook git-pre-commit` then `lint-staged`                                                                                                  | Fail-closed secret scan, then ESLint (including sonarjs) + Prettier on staged files               |
+| **pre-push**   | outgoing secret scan + `sonar:precheck` + `rules:check` + `check:hooks` + `test:types` + `check:docs` + `check:zod-idioms` + unit coverage gate | Secrets always block; changed-file Sonar skips only when unavailable; then the existing unit gate |
 
 ## Type-level tests
 

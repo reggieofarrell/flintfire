@@ -13,10 +13,28 @@ import {
  * dereferenced.
  */
 export function parseFirestoreError(error: unknown): Error {
-  // Non-object inputs (null/undefined/primitives) cannot carry a Firestore code and are never Error
-  // instances — normalize to a plain Error without dereferencing.
-  if (!error || typeof error !== 'object') {
-    return new Error(String(error ?? 'Unknown error'));
+  // Nullish inputs cannot carry a Firestore code — normalize without String(object) (S6551).
+  if (error === null || error === undefined) {
+    return new Error('Unknown error');
+  }
+
+  // Narrow before building the message so we never String()/template an `object` (S6551) and
+  // never introduce a String-equivalent helper Sonar would collapse (S7770).
+  switch (typeof error) {
+    case 'string':
+      return new Error(error);
+    case 'number':
+    case 'boolean':
+    case 'bigint':
+      return new Error(`${error}`);
+    case 'symbol':
+      // `error` narrows to `symbol` here, not `object`, so this isn't the S6551 case — and a
+      // template literal can't coerce a symbol (throws), so this needs the explicit call.
+      return new Error(String(error));
+    case 'function':
+      return new Error(`${error}`);
+    default:
+      break;
   }
 
   // Preserve WriteOutcomeError unchanged before any SDK-code normalization. Nested repository /

@@ -254,6 +254,13 @@ describe('Query explain() — Core (issue #37)', () => {
 
     await expect(builder.explain()).rejects.toThrow(/explain\(\) is not available.*Upgrade/i);
   });
+
+  it('U-6a: missing query.explain → plain Error, not TypeError (ADR-0044: capability misuse stays on Error)', async () => {
+    const { builder } = makeCollectionBuilder({ omitExplain: true });
+
+    await expect(builder.explain()).rejects.toBeInstanceOf(Error);
+    await expect(builder.explain()).rejects.not.toBeInstanceOf(TypeError);
+  });
 });
 
 describe('Query explain() — Vector (issue #37)', () => {
@@ -334,6 +341,23 @@ describe('Query explain() — Vector (issue #37)', () => {
     );
   });
 
+  it('U-9a: explain missing on mocked findNearest result → plain Error, not TypeError (ADR-0044)', async () => {
+    const { builder } = createMockCoreBuilder(() => ({
+      get: jest.fn().mockResolvedValue({ docs: [] }),
+      // no explain property
+    }));
+    const vectorBuilder = new VectorQueryBuilder(builder);
+
+    let caught: unknown;
+    try {
+      await vectorBuilder.findNearest(findNearestOptions).explain();
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught).not.toBeInstanceOf(TypeError);
+  });
+
   it('U-5v: vector SDK throw → parseFirestoreError path (coded error becomes NotFoundError)', async () => {
     const { builder } = createMockCoreBuilder(() => ({
       get: jest.fn().mockResolvedValue({ docs: [] }),
@@ -412,6 +436,19 @@ describe('Query explainStream() — Core (issue #65)', () => {
     await expect(iterate()).rejects.toThrow(
       /explainStream\(\) is not available:.*@google-cloud\/firestore >= 7\.4.*Upgrade/i,
     );
+  });
+
+  it('U-3a-a: missing query.explainStream → plain Error, not TypeError (ADR-0044: capability misuse stays on Error)', async () => {
+    const { builder } = makeCollectionBuilder({ omitExplainStream: true });
+
+    const iterate = async () => {
+      for await (const _chunk of builder.explainStream()) {
+        // drain
+      }
+    };
+
+    await expect(iterate()).rejects.toBeInstanceOf(Error);
+    await expect(iterate()).rejects.not.toBeInstanceOf(TypeError);
   });
 
   it('U-3a-placement: capability guard does not call parseFirestoreError (outside try)', async () => {

@@ -65,4 +65,24 @@ describe('normalizeBreakingNoteText', () => {
       'Callers must stop importing the old path. The previous docs(website): archive note is historical.';
     expect(normalizeBreakingNoteText(prose)).toBe(prose);
   });
+
+  it('should cut a squashed bullet whose commit type is capitalized (case-insensitive match)', () => {
+    const text = [
+      'Some breaking change body.',
+      '* Feat(api): unrelated squash bullet',
+      'more contaminated text',
+    ].join('\n');
+
+    expect(normalizeBreakingNoteText(text)).toBe('Some breaking change body.');
+  });
+
+  it('should cut a squashed bullet with an empty scope (valid conventional-commit shape)', () => {
+    const text = [
+      'Some breaking change body.',
+      '* feat(): unrelated squash bullet',
+      'more contaminated text',
+    ].join('\n');
+
+    expect(normalizeBreakingNoteText(text)).toBe('Some breaking change body.');
+  });
 });

@@ -13,11 +13,17 @@
  * The generator — not a post-pass on CHANGELOG.md — must trim this. Regenerating
  * from git would restore any hand-deleted junk.
  *
- * Cut points (first match wins, always at a line start so a legitimate breaking
+ * Cut points (first matching line wins, always at a line start so a legitimate breaking
  * paragraph that mentions "docs(website)" in a sentence is left intact):
  * - `Co-authored-by:` / `Co-Authored-By:` (any common casing)
  * - a line of five or more hyphens (GitHub's squash `---------` separator)
- * - a nested conventional-commit bullet (`* feat(foo): ...`, `* docs(website): ...`)
+ * - a nested conventional-commit bullet (`* feat(foo): ...`, `* docs(website): ...`,
+ *   `* Feat(api): ...` — the commit type is matched case-insensitively, and an empty scope
+ *   (`* feat(): ...`, a valid conventional-commit shape per this repo's commitlint config) is
+ *   also treated as a bullet, not left intact)
+ *
+ * Implemented as a line scan (not a single multi-branch regex) so Sonar ReDoS hotspots
+ * on nested `\s*` / quantifier patterns stay clear.
  *
  * @param {string} text Parsed breaking-note body from conventional-commits
  * @returns {string} The same text with squash/co-author tails removed, trimmed
@@ -27,15 +33,27 @@ function normalizeBreakingNoteText(text) {
     return text;
   }
 
-  // Multiline so `^`/`$` match each line. The nested-commit arm requires a conventional
-  // type token after `* ` so a markdown bullet that is part of the breaking prose
-  // (`* removed the curry form`) is not treated as a second commit.
-  const delimiter = /(?:^|\n)(?:Co-authored-by:|\s*-{5,}\s*$|\*\s+[a-z]+(?:\([^)]+\))?!?:)/im;
-  const match = delimiter.exec(text);
-  if (!match) {
-    return text.trim();
+  const lines = text.split('\n');
+  const kept = [];
+  for (const line of lines) {
+    // Co-author trailer — stop before it.
+    if (/^Co-authored-by:/i.test(line)) break;
+
+    // GitHub squash separator: optional surrounding whitespace, then only hyphens (≥5).
+    // Trim first so we never nest `\s*` with `-{5,}` (ReDoS hotspot).
+    const trimmed = line.trim();
+    if (trimmed.length >= 5 && /^-+$/.test(trimmed)) break;
+
+    // Nested conventional-commit bullet. Scope `(...)` is scanned without nested quantifiers
+    // that backtrack against each other; a prose bullet like `* removed the curry form`
+    // lacks the `type:` shape and is kept. Case-insensitive so a squashed commit whose type
+    // was capitalized (e.g. `* Feat(api): ...`) is still recognized as a bullet, not kept.
+    if (/^\*\s+[a-z]+(\([^)]*\))?!?:/i.test(line)) break;
+
+    kept.push(line);
   }
-  return text.slice(0, match.index).trim();
+
+  return kept.join('\n').trim();
 }
 
 module.exports = { normalizeBreakingNoteText };

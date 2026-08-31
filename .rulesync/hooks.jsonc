@@ -3,6 +3,19 @@
   // that violate the low-latency SonarJS subset; the complete local profile is
   // enforced by Git hooks and `npm run lint`. Secret scanning intentionally stays
   // in Husky so agents do not pay its cost on every file operation.
+  //
+  // Every "command" below invokes scripts/agent-hooks/scan-edited-file.mjs BY BARE PATH (no
+  // node/bash/etc. in front of it) - this only works if its git-tracked executable bit is set.
+  // A shebang alone is not enough, and that bit is easy to lose silently (a fresh Write of the
+  // file, core.fileMode=false, some CI checkout actions) - a normal `git diff` never surfaces a
+  // mode-only change. `npm run check:hooks` (pre-push + CI) catches a recurrence automatically.
+  //
+  // Do NOT "fix" a lost bit by prefixing these commands with `node` instead of restoring it:
+  // rulesync auto-rewrites a *bare* relative command to "$CLAUDE_PROJECT_DIR"/... for the
+  // claudecode target specifically, and only when the command has no interpreter in front of it -
+  // an interpreter prefix silently suppresses that rewrite and breaks the hook when its cwd isn't
+  // the project root (MODULE_NOT_FOUND). Restore the bit instead:
+  // chmod +x scripts/agent-hooks/scan-edited-file.mjs
   "version": 1,
   "hooks": {},
   "cursor": {

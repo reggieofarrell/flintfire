@@ -191,12 +191,12 @@ export class VectorQueryBuilder<T extends object, S extends object = T, R = Fire
       queryVector: [...options.queryVector],
       limit: options.limit,
       distanceMeasure: options.distanceMeasure,
-      ...(options.distanceResultField !== undefined
-        ? { distanceResultField: options.distanceResultField }
-        : {}),
-      ...(options.distanceThreshold !== undefined
-        ? { distanceThreshold: options.distanceThreshold }
-        : {}),
+      ...(options.distanceResultField === undefined
+        ? {}
+        : { distanceResultField: options.distanceResultField }),
+      ...(options.distanceThreshold === undefined
+        ? {}
+        : { distanceThreshold: options.distanceThreshold }),
     }) as FirestoreVectorQuery<T>;
 
     // Runtime is unchanged; the return type carries the configured distanceResultField into the

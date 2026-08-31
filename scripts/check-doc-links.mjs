@@ -71,10 +71,10 @@ const SITE_CONTENT_ROOT = join(repoRoot, 'website', 'src', 'content', 'docs');
  * A link that resolves to a redirected *source* is valid: Astro serves it via the redirect, so a
  * cross-version pointer from the frozen v2 archive into a moved current-tree page still works.
  */
-/** Drop any trailing slashes without a backtracking-prone regex. */
+/** Drop any trailing path separators without a regex (avoids ReDoS hotspots). */
 const stripTrailingSlash = s => {
   let end = s.length;
-  while (end > 0 && s[end - 1] === '/') end--;
+  while (end > 0 && (s[end - 1] === '/' || s[end - 1] === '\\')) end--;
   return s.slice(0, end);
 };
 
@@ -152,7 +152,7 @@ function linkTargetExists(fromFile, relativeTarget) {
   if (existsSync(base)) return true;
 
   // Trailing slash / directory-style slug → sibling or nested .md file.
-  const trimmed = base.replace(/[/\\]+$/, '');
+  const trimmed = stripTrailingSlash(base);
   if (existsSync(`${trimmed}.md`)) return true;
   if (existsSync(join(trimmed, 'index.md'))) return true;
   if (existsSync(join(trimmed, 'README.md'))) return true;
@@ -167,6 +167,72 @@ function linkTargetExists(fromFile, relativeTarget) {
   return false;
 }
 
+/**
+ * Record a broken relative/site Markdown link for the final failure report.
+ *
+ * @param {string} file Absolute path of the doc that contains the link
+ * @param {number} lineNumber 1-based prose line index
+ * @param {string} target Raw href text from the Markdown link
+ */
+function recordBrokenLink(file, lineNumber, target) {
+  problems.push({ file, line: lineNumber, target, kind: 'link' });
+}
+
+/**
+ * Validate a site-absolute `/flintfire/...` href against the Starlight content tree.
+ */
+function checkSiteAbsoluteLink(file, lineNumber, target, pathOnly) {
+  if (!siteBaseLinkExists(pathOnly)) {
+    recordBrokenLink(file, lineNumber, target);
+  }
+}
+
+/**
+ * For links inside the Starlight content tree, also verify the browser-rendered route.
+ * A path can exist beside a Markdown source file while still becoming a nested 404 once
+ * Starlight emits the public directory URL.
+ *
+ * @returns {boolean} True when the rendered route is broken (caller should skip the disk check)
+ */
+function isBrokenRenderedContentLink(file, pathOnly) {
+  if (!isContentFile(file)) return false;
+  const diskTarget = stripTrailingSlash(resolve(dirname(file), pathOnly));
+  const pointsToPage = resolveContentMdFile(file, pathOnly) !== null || matchesRedirect(diskTarget);
+  if (!pointsToPage) return false;
+  const renderedPath = new URL(pathOnly, `https://docs.invalid${contentRouteFor(file)}`).pathname;
+  return !siteBaseLinkExists(renderedPath);
+}
+
+/**
+ * Validate one non-external Markdown link target (relative or site-absolute).
+ *
+ * Extracted from the scan loop so cognitive complexity stays within Sonar's budget while
+ * preserving the same three checks: site-absolute routes, rendered Starlight URLs, and
+ * on-disk relative targets.
+ */
+function validateMarkdownLinkTarget(file, lineNumber, target) {
+  const pathOnly = pathPart(target);
+  // Pure in-page `#anchor` — path checking has nothing to resolve.
+  if (!pathOnly) return;
+
+  // Site-absolute `/flintfire/...` links (splash CTAs) — resolve against Starlight content.
+  if (pathOnly.startsWith('/')) {
+    checkSiteAbsoluteLink(file, lineNumber, target, pathOnly);
+    return;
+  }
+
+  // Prefer the rendered URL failure when both the public route and the disk path are wrong;
+  // otherwise fall through to the filesystem-relative existence check.
+  if (isBrokenRenderedContentLink(file, pathOnly)) {
+    recordBrokenLink(file, lineNumber, target);
+    return;
+  }
+
+  if (!linkTargetExists(file, pathOnly)) {
+    recordBrokenLink(file, lineNumber, target);
+  }
+}
+
 function checkMarkdownLinks(file, text) {
   const linkRe = /\]\(([^)]+)\)/g;
   forEachProseLine(text, (line, index) => {
@@ -174,32 +240,7 @@ function checkMarkdownLinks(file, text) {
     while ((match = linkRe.exec(line))) {
       const target = match[1].trim();
       if (isExternal(target)) continue;
-      const p = pathPart(target);
-      if (!p) continue; // pure anchor
-      // Site-absolute `/flintfire/...` links (splash CTAs) — resolve against Starlight content.
-      if (p.startsWith('/')) {
-        if (!siteBaseLinkExists(p)) {
-          problems.push({ file, line: index + 1, target, kind: 'link' });
-        }
-        continue;
-      }
-      // Starlight emits Markdown hrefs as written. A filesystem-relative page link can therefore
-      // exist on disk but resolve relative to the public directory URL in the browser. Validate
-      // that rendered URL whenever the source target is another doc page (or an Astro redirect).
-      if (isContentFile(file)) {
-        const diskTarget = resolve(dirname(file), p).replace(/[/\\]+$/, '');
-        const pointsToPage = resolveContentMdFile(file, p) !== null || matchesRedirect(diskTarget);
-        if (pointsToPage) {
-          const renderedPath = new URL(p, `https://docs.invalid${contentRouteFor(file)}`).pathname;
-          if (!siteBaseLinkExists(renderedPath)) {
-            problems.push({ file, line: index + 1, target, kind: 'link' });
-            continue;
-          }
-        }
-      }
-      if (!linkTargetExists(file, p)) {
-        problems.push({ file, line: index + 1, target, kind: 'link' });
-      }
+      validateMarkdownLinkTarget(file, index + 1, target);
     }
   });
 }
@@ -264,7 +305,9 @@ function contentRouteFor(file) {
     .replace(/\.mdc?$/, '');
   if (slug === 'index') slug = '';
   else if (slug.endsWith('/index')) slug = slug.slice(0, -'/index'.length);
-  return `${SITE_BASE}/${slug ? `${slug}/` : ''}`;
+  // Build the public route without nesting template literals (javascript:S4624).
+  if (slug) return `${SITE_BASE}/${slug}/`;
+  return `${SITE_BASE}/`;
 }
 
 /** Resolve a link's path part to the target .md file within the content tree, or null. */

@@ -36,8 +36,8 @@ elif [ "$SONAR_PRECHECK_STATUS" -ne 0 ]; then
   exit 1
 fi
 
-# Fast local gate: rulesync drift + type checks + doc links + deprecated-zod-idiom scan + unit
-# path-specific thresholds (no Java/emulator). Integration gate runs in CI — see
-# docs/development/testing.md.
+# Fast local gate: rulesync drift + hook-permission check + type checks + doc links +
+# deprecated-zod-idiom scan + unit path-specific thresholds (no Java/emulator). Integration gate
+# runs in CI — see docs/development/testing.md.
 echo "[pre-push] running unit coverage and local checks..."
-npm run rules:check && npm run test:types && npm run check:docs && npm run check:zod-idioms && npm run test:unit:coverage && npm run test:coverage:gate:unit
+npm run rules:check && npm run check:hooks && npm run test:types && npm run check:docs && npm run check:zod-idioms && npm run test:unit:coverage && npm run test:coverage:gate:unit

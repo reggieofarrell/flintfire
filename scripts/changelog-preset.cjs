@@ -22,8 +22,10 @@ const { normalizeBreakingNoteText } = require('./normalize-breaking-notes.cjs');
 
 module.exports = async function createFlintfireChangelogPreset(config = {}) {
   // `name` is only the loader key; forwarding it into conventionalcommits would
-  // be ignored at best and confusing at worst.
-  const { name: _name, ...presetConfig } = config;
+  // be ignored at best and confusing at worst. Copy-then-delete avoids an unused
+  // binding (javascript:S1481) while still stripping the loader key.
+  const presetConfig = { ...config };
+  delete presetConfig.name;
   const preset = await conventionalcommits(presetConfig);
   const innerTransform = preset.writerOpts.transform;
 

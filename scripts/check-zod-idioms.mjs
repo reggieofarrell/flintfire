@@ -70,8 +70,9 @@ const REPLACEMENTS = {
 // `.string()` followed by a chain of simple calls, ending in a deprecated format method.
 // The intermediate `[^()]*` keeps this to non-nested arguments, which is every real-world case
 // (`z.string().min(1, 'Name is required').email()`) and avoids false positives on nested calls.
+// String.raw avoids double-escaping backslashes in the RegExp source (javascript:S7780).
 const IDIOM_RE = new RegExp(
-  `\\.string\\(\\s*\\)((?:\\s*\\.\\w+\\([^()]*\\))*?)\\s*\\.(${Object.keys(REPLACEMENTS).join('|')})\\s*\\(`,
+  String.raw`\.string\(\s*\)((?:\s*\.\w+\([^()]*\))*?)\s*\.(${Object.keys(REPLACEMENTS).join('|')})\s*\(`,
   'g',
 );
 

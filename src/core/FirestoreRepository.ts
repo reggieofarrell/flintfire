@@ -242,7 +242,7 @@ export interface ReadOnlyTransactionalRepository<T extends object, S extends obj
   getManyInTransaction(
     tx: FirebaseFirestore.Transaction,
     ids: ID[],
-    options?: { fieldMask?: undefined },
+    options?: { fieldMask?: never },
   ): Promise<(FirestoreDocument<T> | null)[]>;
 
   /**
@@ -602,7 +602,7 @@ export type InterceptedWrite<T extends object, W extends object, WO extends obje
  */
 export interface WriteOnlyInterceptor<T extends object, W extends object, WO extends object> {
   readonly name: string;
-  readonly read?: undefined;
+  readonly read?: never;
   readonly write: (ctx: {
     readonly write: InterceptedWrite<T, W, WO>;
     readonly writer: InterceptorWriter;
@@ -781,6 +781,9 @@ export type RepositoryConstructorArgs<
         allowLegacyDatastoreIds?: boolean,
       ];
 
+/** Shared default for runHooks when callers omit execution (typescript:S7737). */
+const DEFAULT_RUN_HOOKS_EXECUTION: HookExecution = { kind: 'direct' };
+
 export class FirestoreRepository<
   T extends object,
   W extends object = T,
@@ -795,13 +798,13 @@ export class FirestoreRepository<
    * field pass `attempt: null` to before-hooks.
    */
   private transactionAttempt?: number | null;
-  private db: Firestore;
-  private collectionPath: string;
-  private validator?: Validator<W, WO>;
-  private parentPath?: string;
-  private readConverter?: ReadConverter<T>;
-  private schemasInternal?: RepositorySchemaSetFor<S>;
-  private allowLegacyDatastoreIds: boolean;
+  private readonly db: Firestore;
+  private readonly collectionPath: string;
+  private readonly validator?: Validator<W, WO>;
+  private readonly parentPath?: string;
+  private readonly readConverter?: ReadConverter<T>;
+  private readonly schemasInternal?: RepositorySchemaSetFor<S>;
+  private readonly allowLegacyDatastoreIds: boolean;
 
   /**
    * Set to `true` on a **subclass** to silence the once-per-class write-override warning.
@@ -1182,7 +1185,7 @@ export class FirestoreRepository<
       sentinelPolicy?: SentinelPolicy;
       allowLegacyDatastoreIds?: boolean;
       parentPath?: string;
-      readConverter?: undefined;
+      readConverter?: never;
     },
   ): RepositoryConstructorArgs<z.output<RS>, z.input<WS>, z.output<WS>, z.output<SS>>;
   // Overload 2 — `readConverter` present: `storedSchema` REQUIRED (review A3 / ADR-0018).
@@ -1304,7 +1307,7 @@ export class FirestoreRepository<
       storedSchema?: SS;
       sentinelPolicy?: SentinelPolicy;
       allowLegacyDatastoreIds?: boolean;
-      readConverter?: undefined;
+      readConverter?: never;
     },
   ): FirestoreRepository<z.output<RS>, z.input<WS>, z.output<SS>, z.output<WS>>;
   // Overload 2 — `readConverter` present: `storedSchema` is REQUIRED (review A3 / ADR-0018). A
@@ -1453,7 +1456,7 @@ export class FirestoreRepository<
       storedSchema?: SS;
       sentinelPolicy?: SentinelPolicy;
       allowLegacyDatastoreIds?: boolean;
-      readConverter?: undefined;
+      readConverter?: never;
     },
   ): FirestoreRepository<z.output<RS>, z.input<WS>, z.output<SS>, z.output<WS>>;
   // Overload 2 — `readConverter` present: `storedSchema` REQUIRED (review A3 / ADR-0018).
@@ -1616,8 +1619,9 @@ export class FirestoreRepository<
   on(event: 'beforeBulkDelete', fn: BeforeBulkDeleteHookFn<T>): void;
   on(event: 'afterBulkDelete', fn: AfterBulkDeleteHookFn<T>): void;
   on(event: HookEvent, fn: AnyHookFn<T, W, WO>): void {
-    if (!this.hooks[event]) this.hooks[event] = [];
-    this.hooks[event]!.push(fn);
+    // ??= both initializes and yields the list, so the non-null assertion is unnecessary.
+    const hooksForEvent = (this.hooks[event] ??= []);
+    hooksForEvent.push(fn);
   }
 
   /**
@@ -1629,7 +1633,7 @@ export class FirestoreRepository<
   private async runHooks<E extends HookEvent>(
     event: E,
     data: HookDataFor<E, T, W, WO>,
-    execution: HookExecution = { kind: 'direct' },
+    execution: HookExecution = DEFAULT_RUN_HOOKS_EXECUTION,
   ): Promise<void> {
     const context = buildHookContext(event, execution);
 
@@ -1909,9 +1913,13 @@ export class FirestoreRepository<
    */
   private validateUpdateData(data: UpdateInput<W>): UpdateInput<W> {
     const updatePayload = this.stripTopLevelId(data as Record<string, any>) as UpdateInput<W>;
-    return (
-      this.validator ? this.validator.parseUpdate(updatePayload) : updatePayload
-    ) as UpdateInput<W>;
+    if (!this.validator) {
+      return updatePayload;
+    }
+    // parseUpdate is typed against the write-output schema (WO). Repository update APIs still
+    // expose UpdateInput<W>; the double cast documents that bridge without a no-op assertion
+    // Sonar would flag as unnecessary on the ternary form (typescript:S4325).
+    return this.validator.parseUpdate(updatePayload) as unknown as UpdateInput<W>;
   }
 
   /**
@@ -2655,7 +2663,7 @@ export class FirestoreRepository<
   ): Promise<(WithMetadata<FirestoreDocument<DeepPartial<T>>> | null)[]>;
   async getMany(
     ids: ID[],
-    options: { fieldMask?: undefined; withMetadata: true },
+    options: { fieldMask?: never; withMetadata: true },
   ): Promise<(WithMetadata<FirestoreDocument<T>> | null)[]>;
   async getMany(
     ids: ID[],
@@ -2663,7 +2671,7 @@ export class FirestoreRepository<
   ): Promise<(FirestoreDocument<DeepPartial<T>> | null)[]>;
   async getMany(
     ids: ID[],
-    options?: { fieldMask?: undefined; withMetadata?: false },
+    options?: { fieldMask?: never; withMetadata?: false },
   ): Promise<(FirestoreDocument<T> | null)[]>;
   async getMany(
     ids: ID[],
@@ -2688,11 +2696,10 @@ export class FirestoreRepository<
     try {
       const refs = ids.map(id => this.readCol().doc(id));
       // The SDK's ReadOptions.fieldMask is `(string | FieldPath)[]`. FieldPaths<OmitId<S>> is a
-      // string-literal union that does not widen through the rest-argument position, so the cast
-      // is required to satisfy the Admin SDK typings without losing our path-literal checking on
-      // the public overloads.
+      // string-literal union — a subtype of `string` — so it is directly assignable here with no
+      // cast, while the public overloads above still narrow `fieldMask` to path literals of `S`.
       const snapshots = options?.fieldMask
-        ? await this.db.getAll(...refs, { fieldMask: options.fieldMask as (string | FieldPath)[] })
+        ? await this.db.getAll(...refs, { fieldMask: options.fieldMask })
         : await this.db.getAll(...refs);
       return options?.withMetadata
         ? this.mapManySnapshotsWithMetadata(snapshots)
@@ -2734,7 +2741,7 @@ export class FirestoreRepository<
     const data = this.readConverter
       ? this.readConverter(snapshot as FirebaseFirestore.QueryDocumentSnapshot)
       : (snapshot.data() as T);
-    return asFirestoreDocument<T>({ ...(data as T), id: snapshot.id });
+    return asFirestoreDocument<T>({ ...data, id: snapshot.id });
   }
 
   /**
@@ -3722,7 +3729,7 @@ export class FirestoreRepository<
             }
           },
           interceptor: this.collectInterceptorWrites(
-            { kind: 'delete', id: ref.id, document: docsData[index]! },
+            { kind: 'delete', id: ref.id, document: docsData[index] },
             EMPTY_INTERCEPTOR_READS,
           ),
         };
@@ -4146,9 +4153,7 @@ export class FirestoreRepository<
     options?: { withMetadata?: boolean },
   ): Promise<FirestoreDocument<T>[] | WithMetadata<FirestoreDocument<T>>[]> {
     try {
-      const snapshot = await this.readCol()
-        .where(field as string | FieldPath, '==', value)
-        .get();
+      const snapshot = await this.readCol().where(field, '==', value).get();
       return options?.withMetadata
         ? snapshot.docs.map(doc => ({
             doc: asFirestoreDocument<T>({ ...(doc.data() as T), id: doc.id }),
@@ -4202,10 +4207,7 @@ export class FirestoreRepository<
     try {
       // We add `limit(1)` so Firestore only returns one document even if multiple matches exist.
       // This keeps reads/costs low and makes the method intentionally "first-match" oriented.
-      const snapshot = await this.readCol()
-        .where(field as string | FieldPath, '==', value)
-        .limit(1)
-        .get();
+      const snapshot = await this.readCol().where(field, '==', value).limit(1).get();
 
       // Returning null for "not found" keeps this method aligned with getBy-style nullable semantics.
       if (snapshot.empty) return null;
@@ -4247,10 +4249,7 @@ export class FirestoreRepository<
     try {
       // We query with limit(2) so we can efficiently detect duplicate matches
       // without paying for an unbounded query read.
-      const snapshot = await this.readCol()
-        .where(field as string | FieldPath, '==', value)
-        .limit(2)
-        .get();
+      const snapshot = await this.readCol().where(field, '==', value).limit(2).get();
 
       if (snapshot.empty) {
         throw new NotFoundError(`No document found with ${String(field)} = ${String(value)}`);
@@ -5364,7 +5363,7 @@ export class FirestoreRepository<
   async getManyInTransaction(
     tx: FirebaseFirestore.Transaction,
     ids: ID[],
-    options?: { fieldMask?: undefined },
+    options?: { fieldMask?: never },
   ): Promise<(FirestoreDocument<T> | null)[]>;
   async getManyInTransaction(
     tx: FirebaseFirestore.Transaction,
@@ -5376,9 +5375,9 @@ export class FirestoreRepository<
     // Mandatory: tx.getAll() with zero refs throws the same way as db.getAll().
     if (ids.length === 0) return [];
     const refs = ids.map(id => this.readCol().doc(id));
-    // Same FieldPaths→(string|FieldPath)[] cast as getMany — see comment there.
+    // Same FieldPaths→(string|FieldPath)[] assignability as getMany (no cast needed) — see comment there.
     const snapshots = options?.fieldMask
-      ? await tx.getAll(...refs, { fieldMask: options.fieldMask as (string | FieldPath)[] })
+      ? await tx.getAll(...refs, { fieldMask: options.fieldMask })
       : await tx.getAll(...refs);
     return this.mapManySnapshots(snapshots);
   }

@@ -110,10 +110,18 @@ export function isVectorFieldValue(value: unknown): boolean {
   }
 
   // Defensive fallback for SDK shapes that model a vector as a `FieldValue` subclass whose
-  // serialization names it (rather than a standalone `VectorValue`).
+  // `methodName` or constructor name mentions vector (rather than a standalone `VectorValue`).
+  // `methodName` is checked first because — like `whichFieldValue` in Validation.ts — it survives
+  // minification, unlike `constructor.name`; the constructor-name check remains as a fallback for
+  // SDK builds that do not expose `methodName`. Neither reads Object#toString / String(object), so
+  // typescript:S6551 stays clear.
   if (value instanceof FieldValue) {
-    const serialized = String(value.toString()).toLowerCase();
-    return serialized.includes('vector');
+    const methodName = (value as { methodName?: unknown }).methodName;
+    if (typeof methodName === 'string' && methodName.toLowerCase().includes('vector')) {
+      return true;
+    }
+    const ctorName = value.constructor?.name?.toLowerCase() ?? '';
+    return ctorName.includes('vector');
   }
 
   return false;
