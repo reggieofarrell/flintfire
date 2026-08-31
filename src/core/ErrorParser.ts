@@ -7,21 +7,40 @@ import {
 } from './Errors.js';
 
 /**
+ * Stringify a thrown primitive for the plain-Error fallback path.
+ *
+ * Kept as its own helper so `String(...)` is only ever called with a type that excludes
+ * `object` — Sonar typescript:S6551 flags `String(unknown)` even after a typeof guard.
+ */
+function stringifyThrownPrimitive(value: string | number | boolean | bigint | symbol): string {
+  return String(value);
+}
+/**
  * Classifies a thrown value into a library error, normalizing Firestore status codes across their
  * numeric gRPC form and their string status-name form. Accepts `unknown` and never throws while
  * classifying — `null`, `undefined`, and primitives are wrapped in a plain `Error` rather than
  * dereferenced.
  */
 export function parseFirestoreError(error: unknown): Error {
-  // Non-object inputs (null/undefined/primitives) cannot carry a Firestore code and are never Error
-  // instances — normalize to a plain Error without dereferencing.
+  // Nullish inputs cannot carry a Firestore code — normalize without String(object) (S6551).
   if (error === null || error === undefined) {
     return new Error('Unknown error');
   }
-  // Primitives cannot carry a Firestore code — stringify without Object's default
-  // `[object Object]` path (typescript:S6551).
-  if (typeof error !== 'object') {
-    return new Error(String(error));
+
+  // Primitives are stringified via an explicitly typed helper so Sonar never sees String(unknown)
+  // / String(object). Functions get a stable label without invoking Object#toString.
+  switch (typeof error) {
+    case 'string':
+      return new Error(error);
+    case 'number':
+    case 'boolean':
+    case 'bigint':
+    case 'symbol':
+      return new Error(stringifyThrownPrimitive(error));
+    case 'function':
+      return new Error(error.name ? `Function ${error.name}` : 'Function');
+    default:
+      break;
   }
 
   // Preserve WriteOutcomeError unchanged before any SDK-code normalization. Nested repository /
