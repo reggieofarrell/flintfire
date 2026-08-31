@@ -83,9 +83,7 @@ for (const full of emitted) {
 }
 
 const indexHtmlPath = join(distDir, 'index.html');
-if (!existsSync(indexHtmlPath)) {
-  fail('missing built index.html');
-} else {
+if (existsSync(indexHtmlPath)) {
   const html = readFileSync(indexHtmlPath, 'utf8');
 
   // Starlight's fallback favicon option plus the Head override must both survive the build.
@@ -131,6 +129,8 @@ if (!existsSync(indexHtmlPath)) {
       fail(`index.html references unsuffixed brand path: ${name}`);
     }
   }
+} else {
+  fail('missing built index.html');
 }
 
 if (errors.length > 0) {
