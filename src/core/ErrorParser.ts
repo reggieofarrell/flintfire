@@ -28,9 +28,11 @@ export function parseFirestoreError(error: unknown): Error {
     case 'bigint':
       return new Error(`${error}`);
     case 'symbol':
-      return new Error(error.description ?? 'Symbol()');
+      // `error` narrows to `symbol` here, not `object`, so this isn't the S6551 case — and a
+      // template literal can't coerce a symbol (throws), so this needs the explicit call.
+      return new Error(String(error));
     case 'function':
-      return new Error(error.name ? `Function ${error.name}` : 'Function');
+      return new Error(`${error}`);
     default:
       break;
   }

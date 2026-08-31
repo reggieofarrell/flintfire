@@ -180,14 +180,11 @@ function recordBrokenLink(file, lineNumber, target) {
 
 /**
  * Validate a site-absolute `/flintfire/...` href against the Starlight content tree.
- *
- * @returns {boolean} Always true so callers can `continue` the scan loop after handling
  */
 function checkSiteAbsoluteLink(file, lineNumber, target, pathOnly) {
   if (!siteBaseLinkExists(pathOnly)) {
     recordBrokenLink(file, lineNumber, target);
   }
-  return true;
 }
 
 /**

@@ -118,6 +118,18 @@ describe('FirestoreQueryBuilder whereFilter guards', () => {
     );
   });
 
+  it('throws a plain Error, not TypeError, for callback misuse (ADR-0044: composition misuse stays on Error)', () => {
+    const { builder } = makeBuilder();
+    let caught: unknown;
+    try {
+      builder.whereFilter(() => undefined as any);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught).not.toBeInstanceOf(TypeError);
+  });
+
   it('rejects a prebuilt filter the SDK would silently drop', () => {
     // noopWhere models the SDK returning the query UNCHANGED for a zero-condition filter.
     const { builder } = makeBuilder({ noopWhere: true });

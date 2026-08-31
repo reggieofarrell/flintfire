@@ -165,6 +165,28 @@ describe('parseFirestoreError', () => {
     expect(parsed!).toBeInstanceOf(Error);
   });
 
+  it('normalizes a raw Symbol into an Error preserving the Symbol(...) wrapper', () => {
+    const parsed = parseFirestoreError(Symbol('boom'));
+    expect(parsed).toBeInstanceOf(Error);
+    expect(parsed.message).toBe('Symbol(boom)');
+  });
+
+  it('normalizes a Symbol with no description into an Error', () => {
+    const parsed = parseFirestoreError(Symbol());
+    expect(parsed).toBeInstanceOf(Error);
+    expect(parsed.message).toBe('Symbol()');
+  });
+
+  it('normalizes a raw Function into an Error preserving its stringified source', () => {
+    function namedFn(a: number, b: number) {
+      return a + b;
+    }
+    const parsed = parseFirestoreError(namedFn);
+    expect(parsed).toBeInstanceOf(Error);
+    expect(parsed.message).toContain('function namedFn');
+    expect(parsed.message).toContain('return a + b');
+  });
+
   it('preserves the original Error instance for a plain object that is an Error', () => {
     const original = new Error('boom');
     expect(parseFirestoreError(original)).toBe(original);

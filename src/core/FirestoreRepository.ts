@@ -2696,9 +2696,8 @@ export class FirestoreRepository<
     try {
       const refs = ids.map(id => this.readCol().doc(id));
       // The SDK's ReadOptions.fieldMask is `(string | FieldPath)[]`. FieldPaths<OmitId<S>> is a
-      // string-literal union that does not widen through the rest-argument position, so the cast
-      // is required to satisfy the Admin SDK typings without losing our path-literal checking on
-      // the public overloads.
+      // string-literal union — a subtype of `string` — so it is directly assignable here with no
+      // cast, while the public overloads above still narrow `fieldMask` to path literals of `S`.
       const snapshots = options?.fieldMask
         ? await this.db.getAll(...refs, { fieldMask: options.fieldMask })
         : await this.db.getAll(...refs);
@@ -5376,7 +5375,7 @@ export class FirestoreRepository<
     // Mandatory: tx.getAll() with zero refs throws the same way as db.getAll().
     if (ids.length === 0) return [];
     const refs = ids.map(id => this.readCol().doc(id));
-    // Same FieldPaths→(string|FieldPath)[] cast as getMany — see comment there.
+    // Same FieldPaths→(string|FieldPath)[] assignability as getMany (no cast needed) — see comment there.
     const snapshots = options?.fieldMask
       ? await tx.getAll(...refs, { fieldMask: options.fieldMask })
       : await tx.getAll(...refs);

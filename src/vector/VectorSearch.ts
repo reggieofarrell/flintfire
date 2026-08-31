@@ -110,9 +110,16 @@ export function isVectorFieldValue(value: unknown): boolean {
   }
 
   // Defensive fallback for SDK shapes that model a vector as a `FieldValue` subclass whose
-  // constructor name mentions vector (rather than a standalone `VectorValue`). Prefer the
-  // constructor name over Object#toString / String(object) so typescript:S6551 stays clear.
+  // `methodName` or constructor name mentions vector (rather than a standalone `VectorValue`).
+  // `methodName` is checked first because — like `whichFieldValue` in Validation.ts — it survives
+  // minification, unlike `constructor.name`; the constructor-name check remains as a fallback for
+  // SDK builds that do not expose `methodName`. Neither reads Object#toString / String(object), so
+  // typescript:S6551 stays clear.
   if (value instanceof FieldValue) {
+    const methodName = (value as { methodName?: unknown }).methodName;
+    if (typeof methodName === 'string' && methodName.toLowerCase().includes('vector')) {
+      return true;
+    }
     const ctorName = value.constructor?.name?.toLowerCase() ?? '';
     return ctorName.includes('vector');
   }
@@ -267,7 +274,7 @@ function assertFindNearestDistanceThreshold(
 export function assertVectorSearchSupported(query: Query<unknown>): void {
   const findNearest = (query as Query<unknown> & { findNearest?: unknown }).findNearest;
   if (typeof findNearest !== 'function') {
-    throw new TypeError(
+    throw new Error(
       'Vector search is not available: the installed Firestore SDK does not expose findNearest(). ' +
         'The object-form findNearest() this library uses requires @google-cloud/firestore >= 7.10 ' +
         '(guaranteed by firebase-admin >= 13; on firebase-admin 12 only when the resolved ' +

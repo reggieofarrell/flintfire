@@ -17,7 +17,10 @@
  * paragraph that mentions "docs(website)" in a sentence is left intact):
  * - `Co-authored-by:` / `Co-Authored-By:` (any common casing)
  * - a line of five or more hyphens (GitHub's squash `---------` separator)
- * - a nested conventional-commit bullet (`* feat(foo): ...`, `* docs(website): ...`)
+ * - a nested conventional-commit bullet (`* feat(foo): ...`, `* docs(website): ...`,
+ *   `* Feat(api): ...` — the commit type is matched case-insensitively, and an empty scope
+ *   (`* feat(): ...`, a valid conventional-commit shape per this repo's commitlint config) is
+ *   also treated as a bullet, not left intact)
  *
  * Implemented as a line scan (not a single multi-branch regex) so Sonar ReDoS hotspots
  * on nested `\s*` / quantifier patterns stay clear.
@@ -43,8 +46,9 @@ function normalizeBreakingNoteText(text) {
 
     // Nested conventional-commit bullet. Scope `(...)` is scanned without nested quantifiers
     // that backtrack against each other; a prose bullet like `* removed the curry form`
-    // lacks the `type:` shape and is kept.
-    if (/^\*\s+[a-z]+(\([^)]*\))?!?:/.test(line)) break;
+    // lacks the `type:` shape and is kept. Case-insensitive so a squashed commit whose type
+    // was capitalized (e.g. `* Feat(api): ...`) is still recognized as a bullet, not kept.
+    if (/^\*\s+[a-z]+(\([^)]*\))?!?:/i.test(line)) break;
 
     kept.push(line);
   }

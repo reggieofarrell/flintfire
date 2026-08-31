@@ -529,7 +529,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
     // neither whereFilter nor the factory. Only the value's TYPE is echoed — a filter carries caller
     // values that may be sensitive.
     if (!(filter instanceof Filter)) {
-      throw new TypeError(
+      throw new Error(
         'whereFilter() callback must return a filter built with the provided factory ' +
           `(${hints.factoryMethods}), or a firebase-admin \`Filter\`; received ` +
           `${filter === null ? 'null' : typeof filter}. If you built the filter from a direct ` +
@@ -1798,7 +1798,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
     // <7.4 where Query.explain is absent — a plain Error with an upgrade hint beats a cryptic
     // "explain is not a function" from the call site.
     if (typeof this.query.explain !== 'function') {
-      throw new TypeError(
+      throw new Error(
         'explain() is not available: the installed Firestore SDK does not expose Query.explain(). ' +
           'Query Explain requires @google-cloud/firestore >= 7.4 (firebase-admin 12 only when the ' +
           'resolved @google-cloud/firestore is new enough; firebase-admin >= 13 typically bundles it). ' +
@@ -1869,7 +1869,7 @@ export abstract class FirestoreQueryBuilderBase<T extends object, S extends obje
     // <7.4 where Query.explainStream is absent — a plain Error with an upgrade hint beats a
     // cryptic "explainStream is not a function" from the call site.
     if (typeof this.query.explainStream !== 'function') {
-      throw new TypeError(
+      throw new Error(
         'explainStream() is not available: the installed Firestore SDK does not expose ' +
           'Query.explainStream(). Query Explain requires @google-cloud/firestore >= 7.4 ' +
           '(firebase-admin 12 only when the resolved @google-cloud/firestore is new enough; ' +

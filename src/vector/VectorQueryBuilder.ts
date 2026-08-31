@@ -250,7 +250,7 @@ export class VectorQueryBuilder<T extends object, S extends object = T, R = Fire
     // Defense-in-depth: public findNearest already requires firestore >= 7.10 (explain since 7.8),
     // but a stub VectorQuery without explain (tests / future SDK quirks) should fail clearly.
     if (typeof this.vectorQuery.explain !== 'function') {
-      throw new TypeError(
+      throw new Error(
         'explain() is not available on this VectorQuery: the installed Firestore SDK does not ' +
           'expose VectorQuery.explain() (added in @google-cloud/firestore >= 7.8). Upgrade ' +
           'firebase-admin (or @google-cloud/firestore).',
