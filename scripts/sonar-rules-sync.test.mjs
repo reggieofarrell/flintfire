@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { resolveRepositorySonarHost } from './lib/sonar-host.mjs';
+import { resolveLocalSonarToken } from './lib/sonar-token.mjs';
 import { parseAuthenticatedSonarHost } from './sonar-rules/sync.mjs';
 
 test('uses the repository Sonar host and reports a conflicting environment host', () => {
@@ -40,6 +41,40 @@ test('blocks when sonar-project.properties does not pin a host', () => {
     () => resolveRepositorySonarHost('  ', undefined),
     /must define a non-blank sonar\.host\.url/,
   );
+});
+
+test('prefers the host-scoped macOS keychain token over an inherited token', () => {
+  assert.deepEqual(resolveLocalSonarToken('darwin', 'other-server-token', 'pinned-token'), {
+    token: 'pinned-token',
+    source: 'macos-keychain',
+    ignoredEnvironmentToken: true,
+  });
+  assert.deepEqual(resolveLocalSonarToken('darwin', 'pinned-token', 'pinned-token'), {
+    token: 'pinned-token',
+    source: 'macos-keychain',
+    ignoredEnvironmentToken: false,
+  });
+});
+
+test('falls back to SONAR_TOKEN when no macOS keychain token exists', () => {
+  assert.deepEqual(resolveLocalSonarToken('darwin', ' environment-token ', undefined), {
+    token: 'environment-token',
+    source: 'environment',
+    ignoredEnvironmentToken: false,
+  });
+});
+
+test('uses only SONAR_TOKEN on platforms without a supported credential adapter', () => {
+  assert.deepEqual(resolveLocalSonarToken('linux', 'environment-token', 'unused-token'), {
+    token: 'environment-token',
+    source: 'environment',
+    ignoredEnvironmentToken: false,
+  });
+  assert.deepEqual(resolveLocalSonarToken('win32', '', undefined), {
+    token: undefined,
+    source: undefined,
+    ignoredEnvironmentToken: false,
+  });
 });
 
 test('extracts the active host from SonarQube CLI status output', () => {
