@@ -781,6 +781,9 @@ export type RepositoryConstructorArgs<
         allowLegacyDatastoreIds?: boolean,
       ];
 
+/** Shared default for runHooks when callers omit execution (typescript:S7737). */
+const DEFAULT_RUN_HOOKS_EXECUTION: HookExecution = { kind: 'direct' };
+
 export class FirestoreRepository<
   T extends object,
   W extends object = T,
@@ -1616,8 +1619,9 @@ export class FirestoreRepository<
   on(event: 'beforeBulkDelete', fn: BeforeBulkDeleteHookFn<T>): void;
   on(event: 'afterBulkDelete', fn: AfterBulkDeleteHookFn<T>): void;
   on(event: HookEvent, fn: AnyHookFn<T, W, WO>): void {
-    if (!this.hooks[event]) this.hooks[event] = [];
-    this.hooks[event]!.push(fn);
+    // ??= both initializes and yields the list, so the non-null assertion is unnecessary.
+    const hooksForEvent = (this.hooks[event] ??= []);
+    hooksForEvent.push(fn);
   }
 
   /**
@@ -1629,7 +1633,7 @@ export class FirestoreRepository<
   private async runHooks<E extends HookEvent>(
     event: E,
     data: HookDataFor<E, T, W, WO>,
-    execution: HookExecution = { kind: 'direct' },
+    execution: HookExecution = DEFAULT_RUN_HOOKS_EXECUTION,
   ): Promise<void> {
     const context = buildHookContext(event, execution);
 
@@ -1909,9 +1913,13 @@ export class FirestoreRepository<
    */
   private validateUpdateData(data: UpdateInput<W>): UpdateInput<W> {
     const updatePayload = this.stripTopLevelId(data as Record<string, any>) as UpdateInput<W>;
-    return (
-      this.validator ? this.validator.parseUpdate(updatePayload) : updatePayload
-    ) as UpdateInput<W>;
+    if (!this.validator) {
+      return updatePayload;
+    }
+    // parseUpdate is typed against the write-output schema (WO). Repository update APIs still
+    // expose UpdateInput<W>; the double cast documents that bridge without a no-op assertion
+    // Sonar would flag as unnecessary on the ternary form (typescript:S4325).
+    return this.validator.parseUpdate(updatePayload) as unknown as UpdateInput<W>;
   }
 
   /**
@@ -2692,7 +2700,7 @@ export class FirestoreRepository<
       // is required to satisfy the Admin SDK typings without losing our path-literal checking on
       // the public overloads.
       const snapshots = options?.fieldMask
-        ? await this.db.getAll(...refs, { fieldMask: options.fieldMask as (string | FieldPath)[] })
+        ? await this.db.getAll(...refs, { fieldMask: options.fieldMask })
         : await this.db.getAll(...refs);
       return options?.withMetadata
         ? this.mapManySnapshotsWithMetadata(snapshots)
@@ -2734,7 +2742,7 @@ export class FirestoreRepository<
     const data = this.readConverter
       ? this.readConverter(snapshot as FirebaseFirestore.QueryDocumentSnapshot)
       : (snapshot.data() as T);
-    return asFirestoreDocument<T>({ ...(data as T), id: snapshot.id });
+    return asFirestoreDocument<T>({ ...data, id: snapshot.id });
   }
 
   /**
@@ -3722,7 +3730,7 @@ export class FirestoreRepository<
             }
           },
           interceptor: this.collectInterceptorWrites(
-            { kind: 'delete', id: ref.id, document: docsData[index]! },
+            { kind: 'delete', id: ref.id, document: docsData[index] },
             EMPTY_INTERCEPTOR_READS,
           ),
         };
@@ -4146,9 +4154,7 @@ export class FirestoreRepository<
     options?: { withMetadata?: boolean },
   ): Promise<FirestoreDocument<T>[] | WithMetadata<FirestoreDocument<T>>[]> {
     try {
-      const snapshot = await this.readCol()
-        .where(field as string | FieldPath, '==', value)
-        .get();
+      const snapshot = await this.readCol().where(field, '==', value).get();
       return options?.withMetadata
         ? snapshot.docs.map(doc => ({
             doc: asFirestoreDocument<T>({ ...(doc.data() as T), id: doc.id }),
@@ -4202,10 +4208,7 @@ export class FirestoreRepository<
     try {
       // We add `limit(1)` so Firestore only returns one document even if multiple matches exist.
       // This keeps reads/costs low and makes the method intentionally "first-match" oriented.
-      const snapshot = await this.readCol()
-        .where(field as string | FieldPath, '==', value)
-        .limit(1)
-        .get();
+      const snapshot = await this.readCol().where(field, '==', value).limit(1).get();
 
       // Returning null for "not found" keeps this method aligned with getBy-style nullable semantics.
       if (snapshot.empty) return null;
@@ -4247,10 +4250,7 @@ export class FirestoreRepository<
     try {
       // We query with limit(2) so we can efficiently detect duplicate matches
       // without paying for an unbounded query read.
-      const snapshot = await this.readCol()
-        .where(field as string | FieldPath, '==', value)
-        .limit(2)
-        .get();
+      const snapshot = await this.readCol().where(field, '==', value).limit(2).get();
 
       if (snapshot.empty) {
         throw new NotFoundError(`No document found with ${String(field)} = ${String(value)}`);
@@ -5378,7 +5378,7 @@ export class FirestoreRepository<
     const refs = ids.map(id => this.readCol().doc(id));
     // Same FieldPaths→(string|FieldPath)[] cast as getMany — see comment there.
     const snapshots = options?.fieldMask
-      ? await tx.getAll(...refs, { fieldMask: options.fieldMask as (string | FieldPath)[] })
+      ? await tx.getAll(...refs, { fieldMask: options.fieldMask })
       : await tx.getAll(...refs);
     return this.mapManySnapshots(snapshots);
   }
