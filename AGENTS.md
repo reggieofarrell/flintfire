@@ -204,6 +204,13 @@ emulator.
   `sonar.host.url`. Never allow inherited `SONAR_HOST_URL` values to override or
   replace that identity; report conflicts, and block when the property is
   missing rather than treating deterministic configuration as a soft skip.
+- On macOS, prefer the Sonar token stored for the committed host over an
+  inherited `SONAR_TOKEN`; use the environment only as a fallback. On other
+  platforms, explicitly treat `SONAR_TOKEN` as the only supported local source.
+  Never print tokens or place them in command arguments or shell history.
+- Before trusting `sonar api`, `sonar list issues`, or another CLI query with no
+  host option, verify that `sonar auth status` names the committed host. An
+  empty response is not evidence of a clean project until that check succeeds.
 - Preserve the pre-commit, pre-push, and CI gates when changing quality tooling.
   Do not narrow their coverage or downgrade blocking checks to warnings.
 

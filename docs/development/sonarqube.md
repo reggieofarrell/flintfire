@@ -83,23 +83,55 @@ Install both SonarQube Scanner and SonarQube CLI. On macOS, Scanner is available
 brew install sonar-scanner
 ```
 
-Install SonarQube CLI with SonarSource's installer, then authenticate once to the configured server:
+Install SonarQube CLI with SonarSource's installer, then authenticate once to the configured server.
+Always include `--server`; omitting it selects SonarQube Cloud EU rather than this repository's
+server:
 
 ```bash
 curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
 sonar auth login --server https://sonar.casadega.dev
 ```
 
-The CLI stores its user token in the macOS keychain. `sonar:precheck` reads that entry when
-`SONAR_TOKEN` is not present, which also works when a GUI Git client does not inherit shell
-environment variables. Other platforms can export a SonarQube user token as `SONAR_TOKEN`.
+On macOS, the CLI stores credentials in the keychain under service `sonarqube-cli`, keyed by host.
+The precheck prefers the entry for `sonar.casadega.dev` over an inherited `SONAR_TOKEN` because the
+keychain entry has a verifiable server identity. If a credential for another Sonar server is already
+active, add or update this host without exposing the token in process arguments or shell history:
+
+```bash
+security add-generic-password -U -s sonarqube-cli -a sonar.casadega.dev -w
+```
+
+The value-less `-w` prompts without echo, and `-U` makes the command safe to repeat. Do not append
+the token to that command. `sonar auth status` shows the CLI's one active connection; stored host
+entries can coexist even though only one connection is active. The host-scoped entry is sufficient
+for `sonar:precheck`. When `sonar:rules` needs live profile data, deliberately activate this server
+with the login command above and verify `sonar auth status`; changing servers changes the CLI's
+active connection. The sync checks that active server against the committed host before issuing any
+hostless `sonar api` query, so an empty result from the wrong server is never accepted as clean.
+
+On non-macOS platforms, the local precheck has no verified credential-store adapter and uses
+`SONAR_TOKEN` only. Supply a SonarQube **user token** without putting it in shell history, then
+remove it when the session ends:
+
+```bash
+read -rs SONAR_TOKEN
+export SONAR_TOKEN
+printf '\n'
+# Run the required command, then remove the session credential.
+unset SONAR_TOKEN
+```
+
+Do not reuse the CI project-analysis token locally: the precheck also calls user-facing issues and
+branch APIs. Never print a keychain token with `security find-generic-password ... -w`; the precheck
+captures that command's output internally without writing the secret to the terminal.
 
 For all repository-local Sonar tooling, the committed `sonar.host.url` is the only server authority.
 An inherited `SONAR_HOST_URL` is never used as an override or fallback; a conflicting non-blank
 value is reported and ignored. Missing committed host configuration blocks instead of becoming a
-skippable precheck prerequisite. Web API calls go through the authenticated SonarQube CLI, and
-synchronization fails if the CLI's active server does not match the repository. This prevents a
-shell configured for another server from silently publishing source or syncing the wrong profile.
+skippable precheck prerequisite. Profile-synchronization Web API calls go through the authenticated
+SonarQube CLI, and synchronization fails if the CLI's active server does not match the repository.
+This prevents a shell configured for another server from silently publishing source or syncing the
+wrong profile.
 
 ```bash
 npm run sonar:rules
@@ -117,7 +149,8 @@ The normal precheck reports issues introduced compared with `origin/main`. `--al
 pre-existing issues in every changed file. The script uses a short-lived server branch and removes
 it after reading the findings.
 
-Never put Sonar tokens in source files, committed environment files, command arguments, or logs.
+Never put Sonar tokens in source files, committed environment files, command arguments, shell
+history, or logs.
 
 ## Git hook behavior
 

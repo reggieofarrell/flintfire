@@ -27,6 +27,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { findExecutable, resolveExecutable } from './lib/resolve-executable.mjs';
 import { resolveRepositorySonarHost } from './lib/sonar-host.mjs';
+import { resolveLocalSonarToken } from './lib/sonar-token.mjs';
 
 const gitExecutable = resolveExecutable('git');
 
@@ -89,9 +90,10 @@ function fromProperties(key) {
  * Reads the user token written to the macOS keychain by `sonar auth login`.
  *
  * Husky uses POSIX sh and GUI Git clients often do not inherit a shell's
- * SONAR_TOKEN. The keychain lookup makes one interactive login sufficient on a
- * Mac. Other platforms simply use SONAR_TOKEN. A timeout prevents a locked
- * keychain or permissions prompt from hanging a push indefinitely.
+ * SONAR_TOKEN. More importantly, this entry is keyed by the pinned host and is
+ * therefore preferred over an ambiguous inherited token on macOS. Other
+ * platforms use SONAR_TOKEN. A timeout prevents a locked keychain or
+ * permissions prompt from hanging a push indefinitely.
  *
  * @param {string} hostUrl Configured SonarQube host.
  * @returns {string | undefined} Token string, or undefined when unavailable.
@@ -144,16 +146,41 @@ if (
   unavailable('sonar-scanner is not on PATH. See docs/development/sonarqube.md.');
 }
 
-const environmentToken = process.env.SONAR_TOKEN?.trim() || undefined;
-const token = environmentToken ?? keychainUserToken(host);
-const tokenSource = environmentToken ? 'SONAR_TOKEN' : 'the token from `sonar auth login`';
-
-if (!token) {
-  unavailable(
-    `no SonarQube user token was found. Run \`sonar auth login --server ${host}\` ` +
-      'once, or export SONAR_TOKEN.',
+const tokenResolution = resolveLocalSonarToken(
+  process.platform,
+  process.env.SONAR_TOKEN,
+  keychainUserToken(host),
+);
+const { token } = tokenResolution;
+if (tokenResolution.ignoredEnvironmentToken) {
+  console.log(
+    `[sonar-precheck] ignoring SONAR_TOKEN because a host-scoped macOS keychain token exists for ${host}.`,
   );
 }
+
+if (!token) {
+  if (process.platform === 'darwin') {
+    unavailable(
+      `no host-scoped macOS keychain token was found for ${host}. ` +
+        'Check `sonar auth status`, then follow the secure multi-server keychain setup in docs/development/sonarqube.md. ' +
+        'SONAR_TOKEN remains a fallback when no matching keychain entry exists.',
+    );
+  }
+
+  unavailable(
+    `SONAR_TOKEN is not set for ${host}. This platform has no supported local credential-store adapter; ` +
+      'provide a SonarQube user token through the environment without placing it in shell history.',
+  );
+}
+
+const tokenSource =
+  tokenResolution.source === 'macos-keychain'
+    ? 'the host-scoped macOS keychain token'
+    : 'SONAR_TOKEN';
+const rejectedTokenAdvice =
+  tokenResolution.source === 'macos-keychain'
+    ? 'Update that host-specific entry using the secure keychain command in docs/development/sonarqube.md.'
+    : 'Ensure it is a user token for this server and not a globally exported token for another SonarQube host.';
 
 const projectKey = fromProperties('sonar.projectKey');
 if (!projectKey) fail('sonar.projectKey is missing from sonar-project.properties.');
@@ -223,11 +250,13 @@ async function deleteBranch() {
 try {
   const probe = await api('/api/authentication/validate', 'GET', 5_000);
   if (!probe.ok) {
-    fail(`${apiBase} answered HTTP ${probe.status} while validating ${tokenSource}.`);
+    fail(
+      `${apiBase} answered HTTP ${probe.status} while validating ${tokenSource}. ${rejectedTokenAdvice}`,
+    );
   }
 
   if ((await probe.json()).valid === false) {
-    fail(`${tokenSource} was rejected by ${apiBase}.`);
+    fail(`${tokenSource} was rejected by ${apiBase}. ${rejectedTokenAdvice}`);
   }
 } catch (error) {
   const reason = error instanceof Error ? error.message : String(error);
