@@ -27,15 +27,28 @@ function normalizeBreakingNoteText(text) {
     return text;
   }
 
-  // Multiline so `^`/`$` match each line. The nested-commit arm requires a conventional
-  // type token after `* ` so a markdown bullet that is part of the breaking prose
-  // (`* removed the curry form`) is not treated as a second commit.
-  const delimiter = /(?:^|\n)(?:Co-authored-by:|\s*-{5,}\s*$|\*\s+[a-z]+(?:\([^)]+\))?!?:)/im;
-  const match = delimiter.exec(text);
-  if (!match) {
+  // Split into three simpler patterns so javascript:S5843 stays under the complexity
+  // budget. Multiline so `^`/`$` match each line. The nested-commit arm requires a
+  // conventional type token after `* ` so a markdown bullet that is part of the
+  // breaking prose (`* removed the curry form`) is not treated as a second commit.
+  const cutPatterns = [
+    /(?:^|\n)Co-authored-by:/im,
+    /(?:^|\n)\s*-{5,}\s*$/im,
+    /(?:^|\n)\*\s+[a-z]+(?:\([^)]+\))?!?:/im,
+  ];
+
+  let earliest = -1;
+  for (const pattern of cutPatterns) {
+    const match = pattern.exec(text);
+    if (match && (earliest < 0 || match.index < earliest)) {
+      earliest = match.index;
+    }
+  }
+
+  if (earliest < 0) {
     return text.trim();
   }
-  return text.slice(0, match.index).trim();
+  return text.slice(0, earliest).trim();
 }
 
 module.exports = { normalizeBreakingNoteText };
