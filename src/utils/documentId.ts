@@ -42,15 +42,18 @@ export type ValidateSegmentOptions = {
  */
 function isWellFormed(value: string): boolean {
   for (let i = 0; i < value.length; i += 1) {
-    const code = value.charCodeAt(i);
-    if (code >= 0xd800 && code <= 0xdbff) {
-      // High surrogate — must be followed by a low surrogate.
-      const next = value.charCodeAt(i + 1);
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
-      i += 1;
-    } else if (code >= 0xdc00 && code <= 0xdfff) {
-      // Lone low surrogate.
+    // codePointAt returns the full scalar for a valid surrogate pair, or the lone
+    // surrogate code unit itself when the pair is incomplete — so a single range
+    // check catches every malformed UTF-16 sequence (typescript:S7758).
+    const code = value.codePointAt(i);
+    if (code === undefined) return false;
+    if (code >= 0xd800 && code <= 0xdfff) {
+      // Lone high or low surrogate.
       return false;
+    }
+    // Supplementary-plane scalars occupy two UTF-16 code units; skip the trail.
+    if (code > 0xffff) {
+      i += 1;
     }
   }
   return true;
