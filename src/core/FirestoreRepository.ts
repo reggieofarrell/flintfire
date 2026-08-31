@@ -242,7 +242,7 @@ export interface ReadOnlyTransactionalRepository<T extends object, S extends obj
   getManyInTransaction(
     tx: FirebaseFirestore.Transaction,
     ids: ID[],
-    options?: { fieldMask?: undefined },
+    options?: { fieldMask?: never },
   ): Promise<(FirestoreDocument<T> | null)[]>;
 
   /**
@@ -602,7 +602,7 @@ export type InterceptedWrite<T extends object, W extends object, WO extends obje
  */
 export interface WriteOnlyInterceptor<T extends object, W extends object, WO extends object> {
   readonly name: string;
-  readonly read?: undefined;
+  readonly read?: never;
   readonly write: (ctx: {
     readonly write: InterceptedWrite<T, W, WO>;
     readonly writer: InterceptorWriter;
@@ -795,13 +795,13 @@ export class FirestoreRepository<
    * field pass `attempt: null` to before-hooks.
    */
   private transactionAttempt?: number | null;
-  private db: Firestore;
-  private collectionPath: string;
-  private validator?: Validator<W, WO>;
-  private parentPath?: string;
-  private readConverter?: ReadConverter<T>;
-  private schemasInternal?: RepositorySchemaSetFor<S>;
-  private allowLegacyDatastoreIds: boolean;
+  private readonly db: Firestore;
+  private readonly collectionPath: string;
+  private readonly validator?: Validator<W, WO>;
+  private readonly parentPath?: string;
+  private readonly readConverter?: ReadConverter<T>;
+  private readonly schemasInternal?: RepositorySchemaSetFor<S>;
+  private readonly allowLegacyDatastoreIds: boolean;
 
   /**
    * Set to `true` on a **subclass** to silence the once-per-class write-override warning.
@@ -1182,7 +1182,7 @@ export class FirestoreRepository<
       sentinelPolicy?: SentinelPolicy;
       allowLegacyDatastoreIds?: boolean;
       parentPath?: string;
-      readConverter?: undefined;
+      readConverter?: never;
     },
   ): RepositoryConstructorArgs<z.output<RS>, z.input<WS>, z.output<WS>, z.output<SS>>;
   // Overload 2 — `readConverter` present: `storedSchema` REQUIRED (review A3 / ADR-0018).
@@ -1304,7 +1304,7 @@ export class FirestoreRepository<
       storedSchema?: SS;
       sentinelPolicy?: SentinelPolicy;
       allowLegacyDatastoreIds?: boolean;
-      readConverter?: undefined;
+      readConverter?: never;
     },
   ): FirestoreRepository<z.output<RS>, z.input<WS>, z.output<SS>, z.output<WS>>;
   // Overload 2 — `readConverter` present: `storedSchema` is REQUIRED (review A3 / ADR-0018). A
@@ -1453,7 +1453,7 @@ export class FirestoreRepository<
       storedSchema?: SS;
       sentinelPolicy?: SentinelPolicy;
       allowLegacyDatastoreIds?: boolean;
-      readConverter?: undefined;
+      readConverter?: never;
     },
   ): FirestoreRepository<z.output<RS>, z.input<WS>, z.output<SS>, z.output<WS>>;
   // Overload 2 — `readConverter` present: `storedSchema` REQUIRED (review A3 / ADR-0018).
@@ -2655,7 +2655,7 @@ export class FirestoreRepository<
   ): Promise<(WithMetadata<FirestoreDocument<DeepPartial<T>>> | null)[]>;
   async getMany(
     ids: ID[],
-    options: { fieldMask?: undefined; withMetadata: true },
+    options: { fieldMask?: never; withMetadata: true },
   ): Promise<(WithMetadata<FirestoreDocument<T>> | null)[]>;
   async getMany(
     ids: ID[],
@@ -2663,7 +2663,7 @@ export class FirestoreRepository<
   ): Promise<(FirestoreDocument<DeepPartial<T>> | null)[]>;
   async getMany(
     ids: ID[],
-    options?: { fieldMask?: undefined; withMetadata?: false },
+    options?: { fieldMask?: never; withMetadata?: false },
   ): Promise<(FirestoreDocument<T> | null)[]>;
   async getMany(
     ids: ID[],
@@ -5364,7 +5364,7 @@ export class FirestoreRepository<
   async getManyInTransaction(
     tx: FirebaseFirestore.Transaction,
     ids: ID[],
-    options?: { fieldMask?: undefined },
+    options?: { fieldMask?: never },
   ): Promise<(FirestoreDocument<T> | null)[]>;
   async getManyInTransaction(
     tx: FirebaseFirestore.Transaction,
