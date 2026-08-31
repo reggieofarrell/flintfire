@@ -15,8 +15,13 @@ import {
 export function parseFirestoreError(error: unknown): Error {
   // Non-object inputs (null/undefined/primitives) cannot carry a Firestore code and are never Error
   // instances — normalize to a plain Error without dereferencing.
-  if (!error || typeof error !== 'object') {
-    return new Error(String(error ?? 'Unknown error'));
+  if (error === null || error === undefined) {
+    return new Error('Unknown error');
+  }
+  // Primitives cannot carry a Firestore code — stringify without Object's default
+  // `[object Object]` path (typescript:S6551).
+  if (typeof error !== 'object') {
+    return new Error(String(error));
   }
 
   // Preserve WriteOutcomeError unchanged before any SDK-code normalization. Nested repository /
