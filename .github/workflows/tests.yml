@@ -178,11 +178,19 @@ jobs:
       - name: Rules in sync (rulesync)
         # Fails if the generated agent-instruction files drift from the .rulesync/ source.
         run: npm run rules:check
+      - name: Hook-permission unit tests
+        run: npm run test:hook-permissions
+      - name: Hook scripts are executable
+        # A bare-path hook command (see .rulesync/hooks.jsonc) only works if its target's
+        # executable bit survives — a shebang alone is not enough, and a normal git diff never
+        # surfaces a lost bit. See scripts/check-hook-permissions.mjs.
+        run: npm run check:hooks
 
   # NOTE: the union of the PR jobs below is kept definitionally equivalent to `npm run release:verify`
-  # (which the publish workflow runs as one command) — format, lint, SonarJS rule-sync helpers, types,
-  # manifest, audit, build, package, consumer (ESM/CJS/express, compile + runtime), coverage gates,
-  # doc links, and website build. If you change release:verify, mirror it here (and vice versa).
+  # (which the publish workflow runs as one command) — format, lint, SonarJS rule-sync helpers,
+  # hook-permission checks, types, manifest, audit, build, package, consumer (ESM/CJS/express,
+  # compile + runtime), coverage gates, doc links, and website build. If you change release:verify,
+  # mirror it here (and vice versa).
   # The SonarQube job above is CI-only (needs a project token) and is not part of release:verify.
 
   # Exercises the exact artifact users install: builds, asserts the tarball allowlist + that the root
