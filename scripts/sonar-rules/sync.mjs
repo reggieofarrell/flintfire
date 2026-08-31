@@ -28,6 +28,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import sonarjs from 'eslint-plugin-sonarjs';
 import { resolveExecutable } from '../lib/resolve-executable.mjs';
+import { resolveRepositorySonarHost } from '../lib/sonar-host.mjs';
 
 const repositoryRoot = resolve(import.meta.dirname, '../..');
 const outputPath = resolve(import.meta.dirname, 'rules.json');
@@ -37,9 +38,9 @@ const languages = ['ts', 'js'];
 /**
  * Resolves the SonarQube CLI only when a live API call is about to run.
  *
- * Importing this module for unit tests of `resolveSonarHost` /
- * `parseAuthenticatedSonarHost` must not require the CLI to be installed;
- * CI runs those tests without Scanner or CLI on PATH.
+ * Importing this module for unit tests of `parseAuthenticatedSonarHost` must
+ * not require the CLI to be installed; CI runs those tests without Scanner or
+ * CLI on PATH.
  *
  * @returns {string} Absolute path to the `sonar` executable.
  */
@@ -58,20 +59,6 @@ function property(name) {
     .split('\n')
     .find(candidate => candidate.trim().startsWith(`${name}=`));
   return line?.split('=').slice(1).join('=').trim() || undefined;
-}
-
-/**
- * Prefer the repository's committed host over an inherited shell value. A
- * developer commonly works across projects backed by different SonarQube
- * servers, so a global SONAR_HOST_URL must not silently redirect profile sync.
- * The environment remains a fallback for consumers that remove the property.
- *
- * @param {string | undefined} configuredHost Value from sonar-project.properties.
- * @param {string | undefined} environmentHost Value from SONAR_HOST_URL.
- * @returns {string | undefined} Host URL to use for this sync.
- */
-export function resolveSonarHost(configuredHost, environmentHost) {
-  return configuredHost?.trim() || environmentHost?.trim() || undefined;
 }
 
 /**
@@ -285,9 +272,17 @@ async function run() {
     throw new Error(`Unknown option(s): ${[...arguments_].join(', ')}`);
   }
 
-  const host = resolveSonarHost(property('sonar.host.url'), process.env.SONAR_HOST_URL);
+  const { host, ignoredEnvironmentHost } = resolveRepositorySonarHost(
+    property('sonar.host.url'),
+    process.env.SONAR_HOST_URL,
+  );
+  if (ignoredEnvironmentHost) {
+    console.log(
+      `[sonar-rules] ignoring SONAR_HOST_URL=${ignoredEnvironmentHost} — sonar-project.properties pins ${host}.`,
+    );
+  }
   const projectKey = property('sonar.projectKey');
-  if (!host || !projectKey) throw new Error('Sonar host and project key are required.');
+  if (!projectKey) throw new Error('sonar.projectKey is required in sonar-project.properties.');
 
   let activeRuleIds = new Set();
   let profileScope = 'offline-bootstrap';

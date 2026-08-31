@@ -41,6 +41,10 @@ emulator.
   the Git operation. The server-backed pre-push check may skip only when its
   explicit status says prerequisites are unavailable; findings and analysis
   failures still block.
+- Repository-local Sonar tooling must take its server only from the committed
+  `sonar.host.url`. Never allow inherited `SONAR_HOST_URL` values to override or
+  replace that identity; report conflicts, and block when the property is
+  missing rather than treating deterministic configuration as a soft skip.
 - Preserve the pre-commit, pre-push, and CI gates when changing quality tooling.
   Do not narrow their coverage or downgrade blocking checks to warnings.
 
