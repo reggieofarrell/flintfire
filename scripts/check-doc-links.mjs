@@ -71,10 +71,10 @@ const SITE_CONTENT_ROOT = join(repoRoot, 'website', 'src', 'content', 'docs');
  * A link that resolves to a redirected *source* is valid: Astro serves it via the redirect, so a
  * cross-version pointer from the frozen v2 archive into a moved current-tree page still works.
  */
-/** Drop any trailing slashes without a backtracking-prone regex. */
+/** Drop any trailing path separators without a regex (avoids ReDoS hotspots). */
 const stripTrailingSlash = s => {
   let end = s.length;
-  while (end > 0 && s[end - 1] === '/') end--;
+  while (end > 0 && (s[end - 1] === '/' || s[end - 1] === '\\')) end--;
   return s.slice(0, end);
 };
 
@@ -152,7 +152,7 @@ function linkTargetExists(fromFile, relativeTarget) {
   if (existsSync(base)) return true;
 
   // Trailing slash / directory-style slug → sibling or nested .md file.
-  const trimmed = base.replace(/[/\\]+$/, '');
+  const trimmed = stripTrailingSlash(base);
   if (existsSync(`${trimmed}.md`)) return true;
   if (existsSync(join(trimmed, 'index.md'))) return true;
   if (existsSync(join(trimmed, 'README.md'))) return true;
@@ -199,7 +199,7 @@ function checkSiteAbsoluteLink(file, lineNumber, target, pathOnly) {
  */
 function isBrokenRenderedContentLink(file, pathOnly) {
   if (!isContentFile(file)) return false;
-  const diskTarget = resolve(dirname(file), pathOnly).replace(/[/\\]+$/, '');
+  const diskTarget = stripTrailingSlash(resolve(dirname(file), pathOnly));
   const pointsToPage = resolveContentMdFile(file, pathOnly) !== null || matchesRedirect(diskTarget);
   if (!pointsToPage) return false;
   const renderedPath = new URL(pathOnly, `https://docs.invalid${contentRouteFor(file)}`).pathname;
