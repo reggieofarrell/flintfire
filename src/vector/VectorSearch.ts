@@ -112,7 +112,7 @@ export function isVectorFieldValue(value: unknown): boolean {
   // Defensive fallback for SDK shapes that model a vector as a `FieldValue` subclass whose
   // serialization names it (rather than a standalone `VectorValue`).
   if (value instanceof FieldValue) {
-    const serialized = String(value.toString()).toLowerCase();
+    const serialized = value.toString().toLowerCase();
     return serialized.includes('vector');
   }
 
@@ -266,7 +266,7 @@ function assertFindNearestDistanceThreshold(
 export function assertVectorSearchSupported(query: Query<unknown>): void {
   const findNearest = (query as Query<unknown> & { findNearest?: unknown }).findNearest;
   if (typeof findNearest !== 'function') {
-    throw new Error(
+    throw new TypeError(
       'Vector search is not available: the installed Firestore SDK does not expose findNearest(). ' +
         'The object-form findNearest() this library uses requires @google-cloud/firestore >= 7.10 ' +
         '(guaranteed by firebase-admin >= 13; on firebase-admin 12 only when the resolved ' +
