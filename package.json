@@ -78,7 +78,7 @@
     "check:manifest": "node scripts/check-manifest-lockfile.mjs",
     "check:consumer": "node scripts/check-packed-consumer.mjs",
     "check:audit": "npm audit --omit=dev --audit-level=high",
-    "release:verify": "npm run check:format && npm run lint && npm run sonar:check && npm run rules:check && npm run check:hooks && npm run test:hook-permissions && npm run test:types && npm run check:manifest && npm run check:audit && npm run build && npm run check:package && npm run check:consumer && npm run test:coverage:all && npm run check:docs && npm run check:zod-idioms && npm run docs:build",
+    "release:verify": "npm run check:format && npm run lint && npm run sonar:check && npm run rules:check && npm run agent-config:check && npm run check:hooks && npm run test:hook-permissions && npm run test:agent-hook && npm run test:types && npm run check:manifest && npm run check:audit && npm run build && npm run check:package && npm run check:consumer && npm run test:coverage:all && npm run check:docs && npm run check:zod-idioms && npm run docs:build",
     "test:types": "tsc --noEmit -p tsconfig.typecheck.json",
     "test": "npm run test:unit && npm run test:integration:emulator",
     "test:unit": "jest --config jest.config.unit.js",
@@ -90,7 +90,9 @@
     "test:coverage:gate:integration": "node scripts/check-coverage-gates.mjs --suite integration",
     "test:coverage:all": "npm run test:unit:coverage && npm run test:coverage:gate:unit && npm run test:integration:coverage && npm run test:coverage:gate:integration",
     "test:watch": "jest --config jest.config.unit.js --watch",
-    "test:performance": "ts-node-dev --respawn --transpile-only ./src/benchmarks/performance.bench.ts"
+    "test:performance": "ts-node-dev --respawn --transpile-only ./src/benchmarks/performance.bench.ts",
+    "agent-config:check": "casadega-repo-tooling agent-config check",
+    "test:agent-hook": "node --test scripts/agent-hook-adapter.test.mjs"
   },
   "keywords": [
     "firestore",
@@ -154,7 +156,7 @@
     }
   },
   "devDependencies": {
-    "@casadega-development/ts-repo-tooling": "0.8.0",
+    "@casadega-development/ts-repo-tooling": "0.9.0",
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
     "@eslint/js": "^10.0.1",

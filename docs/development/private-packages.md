@@ -111,3 +111,10 @@ Adopt shared releases explicitly. Keep these identities synchronized in one revi
 
 Run `npm run rules:sync` with package credentials after updating the version, then run the complete
 release verification gate. Do not edit `.rulesync/**/.curated/` or generated agent files.
+
+The root `.npmrc` retains `min-release-age=2` for public packages and exempts only the exact private
+`@casadega-development/ts-repo-tooling` package with
+`min-release-age-exclude[]=@casadega-development/ts-repo-tooling`. npm's exclusion matches package
+names; it does not exempt that package's dependencies. This permits explicitly reviewed internal
+releases to be adopted immediately without weakening the public-dependency cooldown. The website
+keeps its existing two-day policy and has no private-package exemption.

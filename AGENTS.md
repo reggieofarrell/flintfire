@@ -70,6 +70,8 @@ Scoped rules currently defined:
 - **docs-api-sync** — active for the public API surface (`src/index.ts`, `src/core/**`,
   `src/vector/**`); keep README + examples in sync when the exported contract changes
 - **rulesync-generated** — guardrail that fires when a generated agent-config file is opened
+- **casadega-testing-quality** — shared test policy; derive expectations independently of the
+  implementation and demonstrate that regression assertions reject the broken behavior
 
 ## Tooling
 
@@ -81,6 +83,11 @@ Scoped rules currently defined:
   two days old (`.npmrc` `min-release-age=2`) and, when generated files change, the Cursor Agent
   CLI (Grok 4.5) reviews the diff — see `docs/development/rulesync.md`. Do not float the CLI with
   `npx rulesync@latest`, and do not pass `--min-release-age=0` to bypass the cooldown.
+  The exact private `@casadega-development/ts-repo-tooling` package is exempt so reviewed internal
+  releases can be adopted immediately; its dependencies retain the two-day cooldown.
+- **Agent configuration:** `npm run agent-config:check` rejects symbolic links in owned agent
+  configuration and GitHub files, checking the filesystem and Git index independently. It runs
+  in pre-push, PR CI, and `release:verify` alongside the existing RuleSync drift check.
 - **Architecture decisions:** record significant/contract-level changes as an ADR in `docs/adr/`
   (use the `adr` skill; start from `docs/adr/0000-template.md`).
 - **Commits:** Conventional Commits (enforced by commitlint on the `commit-msg` hook).
@@ -185,7 +192,7 @@ problem, and rerun it. A deliberate emergency bypass is an accountable human
 decision, not a routine agent shortcut.
 
 Run `npm run release:verify` before handing off a change that should match CI
-(format, lint, shared Sonar baseline, RuleSync, types, manifest, audit, build,
+(format, lint, shared Sonar baseline, RuleSync, portable agent config, adapter tests, types, manifest, audit, build,
 package, consumer, dual coverage gates, docs, zod idioms, website build).
 Everyday pre-push still runs the lighter unit-coverage gate without the
 emulator.
@@ -199,6 +206,8 @@ emulator.
   failures still block.
 - Preserve the pre-commit, pre-push, and CI gates when changing quality tooling.
   Do not narrow their coverage or downgrade blocking checks to warnings.
+- Agent post-edit feedback formats explicit edits before fast SonarJS feedback and is advisory.
+  Findings still require investigation; the complete blocking Git and CI gates remain authoritative.
 
 Never put Sonar tokens in source files, committed environment files, command
 arguments, or logs. Follow `docs/development/sonarqube.md` for scanner setup,
@@ -372,3 +381,35 @@ Examples:
   services, credentials, shared infrastructure, or committed history.
 - Report the mutation and narrow command used to observe the expected failure. Do not leave the
   temporary mutation in the working tree.
+
+# Testing quality
+
+- Derive expected values from an independent source: the requested behavior, an API contract,
+  documented policy, an existing caller, or a domain rule. Work out literal expectations from that
+  source; do not copy the implementation's output, compute expectations by calling it, snapshot
+  unverified output, or reimplement the same algorithm in the test. Label intentional legacy
+  characterization tests as descriptions of current behavior rather than proof of correctness.
+- Run relevant existing tests before changing their expectations. Presume an existing failure is a
+  regression until a requested behavior change justifies the new expectation. Report each changed
+  expectation with its old and new values and the request or contract authorizing the change.
+- For bug fixes, first observe the narrow regression test fail against the unfixed behavior. For new
+  behavior, falsify the important assertions with a reversible local source mutation as required by
+  casadega-test-falsification. A green test derived only from newly written code is not an oracle.
+
+- Test observable behavior, public contracts, failure modes, boundary values, and cleanup. A test
+  that merely executes code, snapshots implementation detail, or calls a private helper cannot prove
+  the production path is wired correctly.
+- Keep the unit real and replace only external or lower-layer boundaries. Mock factories expose
+  typed spies or preserve real exports; never reimplement production behavior inside a mock.
+- Prefer exact public values and structural assertions. Prefix, substring, and negated-substring
+  assertions can remain green for truncated, malformed, or partially leaked output.
+- Isolate the behavior under examination by holding unrelated result-affecting inputs constant. Use
+  deterministic clocks, randomness, identifiers, factories, and per-test state.
+- Use a real local boundary when the mock framework cannot exercise the integration being claimed.
+  Do not infer retry, transport, database, or serialization behavior from an incompatible double.
+- Restore globals, timers, spies, subscriptions, listeners, servers, and temporary resources in the
+  test that owns them. Do not use arbitrary sleeps, production services, or order-dependent state.
+- Do not delete, skip, weaken, or broadly mock meaningful tests merely to make the suite pass.
+  Resolve ambiguous competing contracts with the user.
+- Preserve coverage ratchets and follow the shared casadega-test-falsification rule for regression,
+  guard, rejection, and behavior-preserving-refactor tests.

@@ -10,7 +10,7 @@ problem, and rerun it. A deliberate emergency bypass is an accountable human
 decision, not a routine agent shortcut.
 
 Run `npm run release:verify` before handing off a change that should match CI
-(format, lint, shared Sonar baseline, RuleSync, types, manifest, audit, build,
+(format, lint, shared Sonar baseline, RuleSync, portable agent config, adapter tests, types, manifest, audit, build,
 package, consumer, dual coverage gates, docs, zod idioms, website build).
 Everyday pre-push still runs the lighter unit-coverage gate without the
 emulator.
@@ -24,6 +24,8 @@ emulator.
   failures still block.
 - Preserve the pre-commit, pre-push, and CI gates when changing quality tooling.
   Do not narrow their coverage or downgrade blocking checks to warnings.
+- Agent post-edit feedback formats explicit edits before fast SonarJS feedback and is advisory.
+  Findings still require investigation; the complete blocking Git and CI gates remain authoritative.
 
 Never put Sonar tokens in source files, committed environment files, command
 arguments, or logs. Follow `docs/development/sonarqube.md` for scanner setup,

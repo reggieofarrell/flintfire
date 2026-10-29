@@ -100,18 +100,20 @@ jobs:
     # Secrets are unavailable to workflows triggered from forks. External fork
     # CI is intentionally unsupported now that the development toolchain uses a
     # private package; this guard keeps the authoritative scan on trusted refs.
-    if:
-      github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name ==
-      github.repository
+    if: >-
+      ${{ !cancelled() && (github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository) }}
     permissions:
       actions: read
       contents: read
       packages: read
-    uses: Casadega-Development/action-workflows/.github/workflows/sonar-scan.yml@main
+    uses: Casadega-Development/action-workflows/.github/workflows/sonar-scan.yml@4779d64bef299ba4bee7b6dc4b829cf05d617d37 # v1.0.1
     secrets:
       NODE_AUTH_TOKEN: ${{ secrets.CASADEGA_PACKAGES_TOKEN }}
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     with:
+      # A failed test matrix must produce an explicit scan failure instead of a skipped check.
+      prerequisite-result: ${{ needs.test.result }}
       coverage-artifacts-json: '[{"name":"coverage-unit","path":"coverage/unit"},{"name":"coverage-integration","path":"coverage/integration"}]'
       issue-gate-scope: new-code
       enforce-quality-gate: true
@@ -202,8 +204,13 @@ jobs:
       - name: Rules in sync (rulesync)
         # Fails if the generated agent-instruction files drift from the .rulesync/ source.
         run: npm run rules:check
+      - name: Agent configuration is portable
+        # Compare both filesystem and Git-index entries so generated-byte equality cannot hide links.
+        run: npm run agent-config:check
       - name: Hook-permission unit tests
         run: npm run test:hook-permissions
+      - name: Shared agent-hook adapter tests
+        run: npm run test:agent-hook
       - name: Hook scripts are executable
         # A bare-path hook command (see .rulesync/hooks.jsonc) only works if its target's
         # executable bit survives — a shebang alone is not enough, and a normal git diff never
@@ -212,7 +219,7 @@ jobs:
 
   # NOTE: the union of the PR jobs below is kept definitionally equivalent to `npm run release:verify`
   # (which the publish workflow runs as one command) — format, lint, shared Sonar baseline,
-  # hook-permission checks, types, manifest, audit, build, package, consumer (ESM/CJS/express,
+  # portable agent config, hook-permission and adapter checks, types, manifest, audit, build, package, consumer (ESM/CJS/express,
   # compile + runtime), coverage gates, doc links, and website build. If you change release:verify,
   # mirror it here (and vice versa).
   # The SonarQube job above is CI-only (needs a project token) and is not part of release:verify.
@@ -372,3 +379,60 @@ jobs:
         run: npm run build
       - name: Unit tests
         run: npm run test:unit
+
+  quality-gate:
+    name: Quality gate
+    # Evaluate every prerequisite after failures or cancellations as well as on the happy path.
+    # Existing individual check names remain intact; this is an additional combined verdict.
+    if: ${{ always() }}
+    needs:
+      - test
+      - sonarqube
+      - docs-links
+      - types
+      - lint
+      - package
+      - admin-compat
+      - firestore-floor-compat
+      - audit
+      - docs-build
+      - node22
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require successful quality checks
+        env:
+          SONAR_RESULT: ${{ needs.sonarqube.result }}
+          ALLOW_SKIPPED_SONAR:
+            ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name
+            != github.repository }}
+        run: |
+          # Every existing non-Sonar job must succeed; skipped or cancelled gates are not proof
+          # of quality. Keep names with results so a failure identifies the owning check.
+          results=(
+            'test=${{ needs.test.result }}'
+            'docs-links=${{ needs.docs-links.result }}'
+            'types=${{ needs.types.result }}'
+            'lint=${{ needs.lint.result }}'
+            'package=${{ needs.package.result }}'
+            'admin-compat=${{ needs.admin-compat.result }}'
+            'firestore-floor-compat=${{ needs.firestore-floor-compat.result }}'
+            'audit=${{ needs.audit.result }}'
+            'docs-build=${{ needs.docs-build.result }}'
+            'node22=${{ needs.node22.result }}'
+          )
+          for job in "${results[@]}"; do
+            if [ "${job#*=}" != 'success' ]; then
+              echo "::error::Quality prerequisite did not succeed: $job"
+              exit 1
+            fi
+          done
+
+          # Preserve the existing fork guard: only the intentionally unsupported fork Sonar
+          # scan may be skipped. Trusted scans must succeed, and every other gate still runs.
+          if [ "$SONAR_RESULT" != 'success' ]; then
+            if [ "$SONAR_RESULT" != 'skipped' ] || [ "$ALLOW_SKIPPED_SONAR" != 'true' ]; then
+              echo "::error::SonarQube prerequisite did not succeed: $SONAR_RESULT"
+              exit 1
+            fi
+          fi

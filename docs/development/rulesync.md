@@ -1,11 +1,12 @@
 # Agent config (rulesync)
 
 Project-specific agent **rules and skills** are authored once under `.rulesync/`. The
-`casadega-sonarqube-safety` and `casadega-test-falsification` cross-repository rules are restored
-from the exact shared tooling release recorded in `rulesync-npm.lock.json`. Edit local RuleSync
-sources, never generated files or `.curated/` imports. `npm run rules:sync` refreshes locked inputs
-and generates every target; `npm run rules:check` (`rulesync generate --check`) fails on drift and
-runs in the pre-push hook, PR CI, and `release:verify`.
+`casadega-sonarqube-safety`, `casadega-test-falsification`, and `casadega-testing-quality`
+cross-repository rules are restored from the exact shared tooling release recorded in
+`rulesync-npm.lock.json`. Edit local RuleSync sources, never generated files or `.curated/` imports.
+`npm run rules:sync` refreshes locked inputs and generates every target; `npm run rules:check`
+(`rulesync generate --check`) fails on drift and runs in the pre-push hook, PR CI, and
+`release:verify`.
 
 After a clean dependency installation, run `npm run rules:install` with private-package credentials
 to restore the exact shared inputs from `rulesync-npm.lock.json`. CI performs this explicitly before
@@ -14,7 +15,8 @@ checking generated output; `.curated/` caches are never committed.
 The CLI versions are **devDependencies** pinned in `package-lock.json`. CI installs with `npm ci`,
 so a caret range in `package.json` does **not** float to new releases. Root and `website/.npmrc` set
 `min-release-age=2` (npm 11.10+): new resolves skip versions published in the last two days. Do not
-install an exact too-new version to bypass that — see the root `.npmrc` comments.
+install an exact too-new public version to bypass that — see the root `.npmrc` comments. Only the
+exact private shared tooling package has a reviewed exception; its dependencies retain the cooldown.
 
 The shared package and RuleSync npm transport require private GitHub Packages access. Follow
 [private-packages.md](./private-packages.md); CI maps `CASADEGA_PACKAGES_TOKEN` to `NODE_AUTH_TOKEN`
@@ -37,7 +39,14 @@ Other invariants the upgrade review encodes:
   `.agents/skills/`. The repository does not author commands; reusable workflows stay in skills so
   Codex receives them too.
 - Hooks: authored in `.rulesync/hooks.jsonc` (`features` includes `"hooks"`). Generated post-edit
-  commands run `scripts/agent-hooks/scan-edited-file.mjs` for Cursor, Claude, and Codex.
+  commands run the executable `scripts/agent-hooks/scan-edited-file.mjs` adapter for Cursor, Claude,
+  and Codex. It resolves the installed shared CLI from its own location, forwards stdin unchanged,
+  and passes the repository root explicitly even when invoked from another directory. The CLI
+  formats explicit edits before advisory fast SonarJS feedback; complete Git and CI checks block.
+- `npm run agent-config:check` complements generated-output drift detection by rejecting filesystem
+  and Git-index symlinks in owned agent configuration, including `.github` and nested `AGENTS.md` or
+  `CLAUDE.md` entry files. Existing unreadable Git metadata blocks; snapshots without Git receive an
+  explicit filesystem-only result. Dependency and generated build directories are excluded.
 
 ## Keeping the CLI current
 

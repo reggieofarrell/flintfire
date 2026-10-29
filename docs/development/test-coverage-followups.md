@@ -26,6 +26,8 @@ Tracked gaps beyond the current test suite. Remove items when covered.
 ## Infrastructure
 
 - Dual per-suite coverage gates (`scripts/check-coverage-gates.mjs`) — integration owns ORM core
+- [x] Coding-agent CLI adapter behavior from another directory, including literal formatting,
+      explicit advisory outcomes, content-path exclusion, and missing-installation feedback
 - [ ] ESLint rules for test files (optional)
 - [ ] SonarQube upload (only if org adopts it)
 

@@ -85,6 +85,8 @@ Scoped rules currently defined:
 - **docs-api-sync** — active for the public API surface (`src/index.ts`, `src/core/**`,
   `src/vector/**`); keep README + examples in sync when the exported contract changes
 - **rulesync-generated** — guardrail that fires when a generated agent-config file is opened
+- **casadega-testing-quality** — shared test policy; derive expectations independently of the
+  implementation and demonstrate that regression assertions reject the broken behavior
 
 ## Tooling
 
@@ -96,6 +98,11 @@ Scoped rules currently defined:
   two days old (`.npmrc` `min-release-age=2`) and, when generated files change, the Cursor Agent
   CLI (Grok 4.5) reviews the diff — see `docs/development/rulesync.md`. Do not float the CLI with
   `npx rulesync@latest`, and do not pass `--min-release-age=0` to bypass the cooldown.
+  The exact private `@casadega-development/ts-repo-tooling` package is exempt so reviewed internal
+  releases can be adopted immediately; its dependencies retain the two-day cooldown.
+- **Agent configuration:** `npm run agent-config:check` rejects symbolic links in owned agent
+  configuration and GitHub files, checking the filesystem and Git index independently. It runs
+  in pre-push, PR CI, and `release:verify` alongside the existing RuleSync drift check.
 - **Architecture decisions:** record significant/contract-level changes as an ADR in `docs/adr/`
   (use the `adr` skill; start from `docs/adr/0000-template.md`).
 - **Commits:** Conventional Commits (enforced by commitlint on the `commit-msg` hook).

@@ -23,7 +23,7 @@ concurrency:
 jobs:
   sonarqube:
     name: SonarQube
-    uses: Casadega-Development/action-workflows/.github/workflows/sonar-scan-after-tests.yml@main
+    uses: Casadega-Development/action-workflows/.github/workflows/sonar-scan-after-tests.yml@4779d64bef299ba4bee7b6dc4b829cf05d617d37 # v1.0.1
     secrets:
       NODE_AUTH_TOKEN: ${{ secrets.CASADEGA_PACKAGES_TOKEN }}
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
