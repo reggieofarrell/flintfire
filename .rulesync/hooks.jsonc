@@ -1,8 +1,8 @@
 {
-  // Coding-agent hooks are generated from this file. They reject edited files
-  // that violate the low-latency SonarJS subset; the complete local profile is
-  // enforced by Git hooks and `npm run lint`. Secret scanning intentionally stays
-  // in Husky so agents do not pay its cost on every file operation.
+  // Coding-agent hooks are generated from this file. The shared CLI formats
+  // explicit edited files before obtaining advisory low-latency SonarJS feedback.
+  // Complete local lint, secret scanning, and existing Git/CI checks remain
+  // blocking; immediate feedback never replaces or weakens those gates.
   //
   // Every "command" below invokes scripts/agent-hooks/scan-edited-file.mjs BY BARE PATH (no
   // node/bash/etc. in front of it) - this only works if its git-tracked executable bit is set.

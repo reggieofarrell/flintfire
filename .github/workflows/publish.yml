@@ -90,7 +90,8 @@ jobs:
         run: npm --prefix website ci
 
       # Single canonical release gate — the SAME command PR CI is definitionally equivalent to
-      # (see tests.yml). Runs: lint, type tests, manifest/lockfile agreement, runtime-only audit,
+      # (see tests.yml). Runs: format, lint, Sonar baseline, RuleSync drift, agent-config portability,
+      # hook permissions and adapter tests, type tests, manifest/lockfile agreement, runtime-only audit,
       # build, tarball allowlist + express-free root graph, packed ESM/CJS/express consumer
       # (compile + runtime load), dual-suite coverage gates, doc-link check, and website build.
       # See package.json `release:verify` and docs/development/testing.md.

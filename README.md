@@ -130,7 +130,9 @@ publish — it is not a live Codecov-style percentage.
 
 - **Pre-commit:** fail-closed Sonar secret scan, then lint-staged (ESLint including sonarjs)
 - **Pre-push:** outgoing secret scan, skippable `sonar:precheck`, then unit coverage + unit gate (no
-  emulator)
+  emulator), including RuleSync drift and agent-configuration portability checks
+- **Agent edits:** local Prettier formats explicit edits before advisory fast SonarJS feedback;
+  staged, pre-push, and CI gates continue to block failures
 - **CI:** unit and integration jobs run in parallel (each enforces its own gate), then the Casadega
   reusable SonarQube scan with a **new-code-only** quality gate. SonarQube's GitHub integration owns
   PR decoration; combined LCOV in Sonar is informational.

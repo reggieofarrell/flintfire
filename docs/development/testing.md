@@ -50,20 +50,22 @@ src/tests/
 
 ## Commands
 
-| Command                                  | Description                                  |
-| ---------------------------------------- | -------------------------------------------- |
-| `npm run test:unit`                      | Unit tests only                              |
-| `npm run test:unit:coverage`             | Unit tests + `coverage/unit/`                |
-| `npm run test:integration`               | Integration tests (emulator must be running) |
-| `npm run test:integration:emulator`      | Start emulator, run integration tests, stop  |
-| `npm run test:integration:coverage`      | Integration tests + `coverage/integration/`  |
-| `npm run test:coverage:gate:unit`        | Enforce unit-suite path thresholds           |
-| `npm run test:coverage:gate:integration` | Enforce integration-suite path thresholds    |
-| `npm run test:coverage:all`              | Full local coverage run + both gates         |
-| `npm run test:types`                     | Type-check `src` + `*.type-test.ts` (`tsc`)  |
-| `npm run sonar:check`                    | Shared offline Sonar baseline validation     |
-| `npm run test:hook-permissions`          | Bare-path hook-script executable-bit checker |
-| `npm test`                               | Unit + integration (emulator auto-start)     |
+| Command                                  | Description                                       |
+| ---------------------------------------- | ------------------------------------------------- |
+| `npm run test:unit`                      | Unit tests only                                   |
+| `npm run test:unit:coverage`             | Unit tests + `coverage/unit/`                     |
+| `npm run test:integration`               | Integration tests (emulator must be running)      |
+| `npm run test:integration:emulator`      | Start emulator, run integration tests, stop       |
+| `npm run test:integration:coverage`      | Integration tests + `coverage/integration/`       |
+| `npm run test:coverage:gate:unit`        | Enforce unit-suite path thresholds                |
+| `npm run test:coverage:gate:integration` | Enforce integration-suite path thresholds         |
+| `npm run test:coverage:all`              | Full local coverage run + both gates              |
+| `npm run test:types`                     | Type-check `src` + `*.type-test.ts` (`tsc`)       |
+| `npm run sonar:check`                    | Shared offline Sonar baseline validation          |
+| `npm run test:hook-permissions`          | Bare-path hook-script executable-bit checker      |
+| `npm run test:agent-hook`                | Actual shared CLI adapter boundary tests          |
+| `npm run agent-config:check`             | Agent-config filesystem and Git-index portability |
+| `npm test`                               | Unit + integration (emulator auto-start)          |
 
 ### Local integration prerequisites
 
@@ -134,9 +136,9 @@ thresholds via `scripts/check-coverage-gates.mjs`.
 | Vector extension (emulator) | `src/vector/**`          | 90%   | 75%      | 90%       |
 
 **Pre-push** runs a fail-closed outgoing secret scan, then `npm run sonar:precheck` (exit 2 skips
-loudly when Scanner/credentials/server are unavailable), then `rules:check` + `check:hooks` +
-`test:types` + `check:docs` + `check:zod-idioms` + `test:unit:coverage` + `test:coverage:gate:unit`
-(no Java/emulator). See [sonarqube.md](./sonarqube.md).
+loudly when Scanner/credentials/server are unavailable), then `rules:check` + `agent-config:check` +
+`check:hooks` + `test:types` + `check:docs` + `check:zod-idioms` + `test:unit:coverage` +
+`test:coverage:gate:unit` (no Java/emulator). See [sonarqube.md](./sonarqube.md).
 
 **CI** runs each suite with coverage, then its gate, in parallel matrix jobs, plus a `Type checks`
 job (`test:types`). After both coverage artifacts upload, the Tests workflow calls
@@ -161,10 +163,10 @@ ratcheting.
 
 ## Git hooks
 
-| Hook           | Command                                                                                                                                         | Purpose                                                                                           |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| **pre-commit** | `sonar hook git-pre-commit` then `lint-staged`                                                                                                  | Fail-closed secret scan, then ESLint (including sonarjs) + Prettier on staged files               |
-| **pre-push**   | outgoing secret scan + `sonar:precheck` + `rules:check` + `check:hooks` + `test:types` + `check:docs` + `check:zod-idioms` + unit coverage gate | Secrets always block; changed-file Sonar skips only when unavailable; then the existing unit gate |
+| Hook           | Command                                                                                                                                                                | Purpose                                                                                           |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **pre-commit** | `sonar hook git-pre-commit` then `lint-staged`                                                                                                                         | Fail-closed secret scan, then ESLint (including sonarjs) + Prettier on staged files               |
+| **pre-push**   | outgoing secret scan + `sonar:precheck` + `rules:check` + `agent-config:check` + `check:hooks` + `test:types` + `check:docs` + `check:zod-idioms` + unit coverage gate | Secrets always block; changed-file Sonar skips only when unavailable; then the existing unit gate |
 
 ## Type-level tests
 
@@ -196,6 +198,13 @@ generated files drift from the source, and runs in the `pre-push` hook and CI (a
 - `test-guardrails` — scoped guardrails for `src/tests/**`
 - `testing-docs-sync` — scoped to test infrastructure (this file, jest configs, coverage-gate
   script, husky hooks, shared mocks/factories, integration helpers)
+- `casadega-testing-quality` — shared independent test-oracle and boundary-testing policy
+
+Development-tool adapters use Node's built-in test runner rather than the library's Jest suites.
+`npm run test:agent-hook` executes the real adapter and installed shared CLI from outside the
+checkout, asserting literal formatted bytes, explicit advisory states, content-path exclusion, and
+visible missing-installation feedback. These tests run in lint CI and `release:verify`; the
+library's unit and emulator integration coverage ownership and thresholds are unchanged.
 
 Generated per tool: Cursor (`.cursor/rules/*.mdc`), Claude Code (`.claude/rules/*.md`), and the
 cross-tool `AGENTS.md` standard (root `AGENTS.md` + `.agents/memories/*.md`, read by Codex and
